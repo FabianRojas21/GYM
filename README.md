@@ -1,4 +1,4 @@
-# GYM
+  # GYM
 
 App de gimnasio para PC y móvil.
 
@@ -50,16 +50,19 @@ objetivo. En el historial cada ronda muestra ambos lados juntos.
 El temporizador comienza al añadir el primer ejercicio o al iniciar una rutina.
 Sigue corriendo si recargas la página y se guarda la duración al terminar el
 entreno. El resumen muestra duración, ejercicios, series efectivas, repeticiones
-registradas, volumen (kg × reps), el detalle de cada ejercicio y las sugerencias
-para la próxima sesión.
+registradas, volumen (kg × reps, sin aproximaciones), el detalle de cada
+ejercicio y las sugerencias para la próxima sesión. El volumen sí incluye las
+series normales, back-off, drop set y rest-pause.
 
 ## Descansos, récords y respaldos
 
-En **Ajustes** puedes elegir el descanso predeterminado (1 a 5 minutos). Durante
-un entreno el contador se inicia al completar las repeticiones de una serie; en
-ejercicios unilaterales, al completar ambos lados. También puedes iniciarlo,
+En **Ajustes** puedes configurar el descanso de las series efectivas/back-off
+(1 a 5 minutos) y el de aproximación (sin temporizador o 15 a 120 segundos).
+Durante un entreno, el contador se inicia al completar una serie normal,
+back-off o aproximación; en ejercicios unilaterales, al completar ambos lados.
+Drop sets y rest-pause no lo inician automáticamente. También puedes iniciarlo,
 sumar 30 segundos o detenerlo manualmente. El contador sigue activo al recargar
-la página.
+la página y se cancela al descartar o terminar el entreno.
 
 En **Ejercicios**, abre un ejercicio para ver sus récords de peso, repeticiones
 por serie y mejor serie estimada, con la fecha de cada marca. Solo cuentan las
