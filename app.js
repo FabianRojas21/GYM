@@ -38,13 +38,14 @@ var DK = 'sobrecarga:draft:v1';
 var LK = 'sobrecarga:data:v1';
 var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90}, exercises:{}, routines:{}, programs:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45}, exercises:{}, routines:{}, programs:{}}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
   p = clone(p);
   d.settings = Object.assign(d.settings, p.settings || {});
   if(![60,90,120,180,300].includes(Number(d.settings.restSeconds))) d.settings.restSeconds = 90;
+  if(![0,15,30,45,60,90,120].includes(Number(d.settings.warmupRestSeconds))) d.settings.warmupRestSeconds = 45;
   d.exercises = p.exercises || {};
   d.routines = p.routines || {};
   d.programs = p.programs || {};
@@ -182,15 +183,17 @@ var Store = {
       S.profile = profile; S.sessions = sessions;
       return Promise.resolve();
     }
-    var oldIds = S.sessions.map(function(session){ return session.id; });
+    var incomingIds = {};
+    sessions.forEach(function(session){ incomingIds[session.id] = true; });
+    var oldIds = S.sessions.map(function(session){ return session.id; }).filter(function(id){ return !incomingIds[id]; });
     profDirty = false; clearTimeout(profTimer);
-    return Store.ref.set(clone(profile)).then(function(){
+    return sessions.reduce(function(p, session){
+      return p.then(function(){ return Store.col.doc(session.id).set(clone(session)); });
+    }, Promise.resolve()).then(function(){
+      return Store.ref.set(clone(profile));
+    }).then(function(){
       return oldIds.reduce(function(p, id){
         return p.then(function(){ return Store.col.doc(id).delete(); });
-      }, Promise.resolve());
-    }).then(function(){
-      return sessions.reduce(function(p, session){
-        return p.then(function(){ return Store.col.doc(session.id).set(clone(session)); });
       }, Promise.resolve());
     }).then(function(){
       S.profile = profile; S.sessions = sessions;
@@ -213,6 +216,19 @@ function setType(s){
   return s && Object.prototype.hasOwnProperty.call(SET_TYPES, s.type) ? s.type : (s && s.warm ? 'warmup' : 'normal');
 }
 function countsForProgress(s){ return setType(s) === 'normal'; }
+function restSecondsFor(row){
+  return setType(row) === 'warmup'
+    ? Number(S.profile.settings.warmupRestSeconds) || 0
+    : Number(S.profile.settings.restSeconds) || 90;
+}
+function autoRestEligible(row){ return ['normal','warmup','backoff'].includes(setType(row)); }
+function rowComplete(row, unilateral){
+  if(unilateral){
+    var sides = ensureRowMode(row, true);
+    return ['right','left'].every(function(side){ return num(sides[side].w) > 0 && num(sides[side].r) > 0; });
+  }
+  return num(row.w) > 0 && num(row.r) > 0;
+}
 /* ejercicio efectivo: ajustes base + ajustes propios de la rutina (solo en esa rutina) */
 function effEx(en){ return Object.assign({}, exById(en.exId), en.cfg || {}); }
 function effortTarget(ex, i){
@@ -511,7 +527,9 @@ function barHtml(a, ex){
 function ensureRowMode(row, unilateral){
   var type = setType(row);
   if(unilateral){
-    if(!row.right || !row.left){
+    if(row.savedSides){
+      row.right = row.savedSides.right; row.left = row.savedSides.left; delete row.savedSides;
+    } else if(!row.right || !row.left){
       var side = function(){ return {w:row.w || '', r:row.r || '', rir:row.rir || ''}; };
       row.right = side(); row.left = side();
     }
@@ -519,6 +537,7 @@ function ensureRowMode(row, unilateral){
   } else if(row.right || row.left){
     var right = row.right || {}, left = row.left || {};
     row.w = right.w || left.w || ''; row.r = right.r || left.r || ''; row.rir = right.rir || left.rir || '';
+    row.savedSides = {right:clone(right), left:clone(left)};
     delete row.right; delete row.left;
   }
   return row;
@@ -619,18 +638,21 @@ function entryHtml(en, ei){
   var mode = S.profile.settings.mode;
   var effLab = mode === 'rpe' ? 'RPE' : 'RIR';
   var p = planFor(ex);
+  var workIndex = 0;
   var rows = en.rows.map(function(r, ri){
     ensureRowMode(r, ex.unilateral);
-    var effPh = fmt(mode === 'rpe' ? 10 - effortTarget(ex, ri) : effortTarget(ex, ri));
-    var tgt = (p.target && p.target[ri] !== undefined) ? String(p.target[ri]) : 'reps';
     var type = setType(r);
+    var wi = workIndex;
+    if(type !== 'warmup') workIndex++;
+    var effPh = type === 'normal' ? fmt(mode === 'rpe' ? 10 - effortTarget(ex, wi) : effortTarget(ex, wi)) : '';
+    var tgt = type === 'normal' && p.target && p.target[wi] !== undefined ? String(p.target[wi]) : 'reps';
     var options = Object.keys(SET_TYPES).map(function(key){
       return '<option value="' + key + '"' + (type === key ? ' selected' : '') + '>' + SET_TYPES[key] + '</option>';
     }).join('');
     var fields = ex.unilateral ? ['right','left'].map(function(side){
       var sideData = r[side], name = side === 'right' ? 'derecho' : 'izquierdo';
-      var sideTarget = p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[ri] !== undefined
-        ? String(p.sidePlans[side].target[ri]) : tgt;
+      var sideTarget = type === 'normal' && p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[wi] !== undefined
+        ? String(p.sidePlans[side].target[wi]) : tgt;
       return '<div class="side-inputs"><span class="side-label">' + (side === 'right' ? 'Der.' : 'Izq.') + '</span>' +
         '<input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" autocomplete="off" placeholder="kg" aria-label="Peso lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.w) + '">' +
         '<input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '">' +
@@ -695,27 +717,33 @@ function applyEntryCfg(ei, key, v, k){
     Object.assign(exById(en.exId), clone(c));
   }
   en.rows.forEach(function(row){ ensureRowMode(row, c.unilateral); });
-  var warmRows = en.rows.filter(function(row){ return setType(row) === 'warmup'; });
-  var workRows = en.rows.filter(function(row){ return setType(row) !== 'warmup'; });
-  while(warmRows.length > c.warmupSets){
-    var moved = warmRows.pop(); moved.type = 'normal'; workRows.unshift(moved);
+  var warmCount = en.rows.filter(function(row){ return setType(row) === 'warmup'; }).length;
+  while(warmCount > c.warmupSets){
+    var warmIndex = en.rows.map(setType).lastIndexOf('warmup');
+    en.rows[warmIndex].type = 'normal'; warmCount--;
   }
-  while(warmRows.length < c.warmupSets){
-    var warm = newRow(warmRows.length ? (c.unilateral ? warmRows[warmRows.length-1].right.w : warmRows[warmRows.length-1].w) : (workRows.length ? (c.unilateral ? workRows[0].right.w : workRows[0].w) : ''), c.unilateral);
-    warm.type = 'warmup'; warmRows.push(warm);
+  while(warmCount < c.warmupSets){
+    var firstWork = en.rows.find(function(row){ return setType(row) !== 'warmup'; });
+    var firstValue = firstWork ? (c.unilateral ? firstWork.right.w : firstWork.w) : '';
+    var warm = newRow(firstValue, c.unilateral);
+    warm.type = 'warmup'; en.rows.unshift(warm); warmCount++;
   }
-  while(workRows.length < c.sets){
-    workRows.push(nextRow(workRows[workRows.length-1] || warmRows[warmRows.length-1], c.unilateral));
+  var normalCount = en.rows.filter(function(row){ return setType(row) === 'normal'; }).length;
+  while(normalCount < c.sets){
+    var lastNormalIndex = en.rows.map(setType).lastIndexOf('normal');
+    var insertAt = lastNormalIndex >= 0 ? lastNormalIndex + 1 : warmCount;
+    var previous = en.rows[insertAt - 1] || en.rows[insertAt];
+    en.rows.splice(insertAt, 0, nextRow(previous, c.unilateral)); normalCount++;
   }
-  while(workRows.length > c.sets){
-    var last = workRows[workRows.length-1];
+  while(normalCount > c.sets){
+    var normalIndex = en.rows.map(setType).lastIndexOf('normal');
+    var last = en.rows[normalIndex];
     var hasReps = c.unilateral
       ? (String(last.right.r).trim() !== '' || String(last.left.r).trim() !== '')
       : String(last.r).trim() !== '';
     if(hasReps) break;
-    workRows.pop();
+    en.rows.splice(normalIndex, 1); normalCount--;
   }
-  en.rows = warmRows.concat(workRows);
   if(!en.cfg) Store.saveProfile();
   saveDraft(); render();
 }
@@ -796,7 +824,7 @@ function savedHtml(){
       '<div><strong>' + session.entries.length + '</strong><span>Ejercicios</span></div>' +
       '<div><strong>' + stats.effectiveSets + '</strong><span>Series efectivas</span></div>' +
       '<div><strong>' + stats.reps + '</strong><span>Reps registradas</span></div>' +
-      '<div><strong>' + fmt(stats.volume) + ' kg</strong><span>Volumen (kg × reps)</span></div></div>' +
+      '<div><strong>' + fmt(stats.volume) + ' kg</strong><span>Volumen sin aprox.</span></div></div>' +
     '<div class="list"><p class="sec-title">Lo que hiciste</p>' + exercises + '</div>' +
     '<div class="list"><p class="sec-title">Objetivo para la próxima sesión</p>' +
       (items || '<p class="small muted">Registra otro entreno para obtener sugerencias.</p>') + '</div></section>';
@@ -806,10 +834,37 @@ function sessionStats(session){
   session.entries.forEach(function(entry){
     stats.effectiveSets += entryEffectiveSets(entry);
     entry.sets.forEach(function(set){
-      if(set.w > 0 && set.r > 0){ stats.reps += set.r; stats.volume += set.w * set.r; }
+      if(set.w > 0 && set.r > 0) stats.reps += set.r;
     });
+    stats.volume += entryVolume(entry);
   });
   return stats;
+}
+function entryVolume(entry){
+  if(!entry.unilateral){
+    return entry.sets.reduce(function(total, set){
+      return total + (setType(set) !== 'warmup' && set.w > 0 && set.r > 0 ? set.w * set.r : 0);
+    }, 0);
+  }
+  var pairs = {}, volume = 0;
+  entry.sets.forEach(function(set){
+    var type = setType(set);
+    if(type === 'warmup') return;
+    if(type !== 'normal'){
+      if(set.w > 0 && set.r > 0) volume += set.w * set.r;
+      return;
+    }
+    if(set.pair === undefined) return;
+    var key = String(set.pair);
+    if(!pairs[key]) pairs[key] = {};
+    pairs[key][set.side] = set;
+  });
+  return Object.keys(pairs).reduce(function(total, key){
+    var pair = pairs[key], right = pair.right, left = pair.left;
+    return right && left && right.w > 0 && right.r > 0 && left.w > 0 && left.r > 0
+      ? total + right.w * right.r + left.w * left.r
+      : total;
+  }, volume);
 }
 function entryEffectiveSets(entry){
   if(!entry.unilateral) return entry.sets.filter(function(set){ return countsForProgress(set) && set.w > 0 && set.r > 0; }).length;
@@ -868,7 +923,7 @@ function homeDashboard(){
     '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
-    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' kg</strong><span>volumen</span></div></div>';
+    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' kg</strong><span>volumen · sin aprox.</span></div></div>';
   if(latest){
     var latestStats = sessionStats(latest);
     var exercises = latest.entries.slice(0, 6).map(function(entry){
@@ -878,7 +933,7 @@ function homeDashboard(){
     }).join('');
     out += '<section class="latest-workout"><div class="latest-head"><div><span class="home-eyebrow">Tu actividad reciente</span><h3>' + esc(latest.routineName || (latest.demo ? 'Entreno de ejemplo' : 'Entrenamiento')) + '</h3><span class="latest-date">' + esc(dFmt(latest.date, {weekday:'long', day:'numeric', month:'long'})) + '</span></div>' +
       '<button class="text-button" data-act="tab" data-tab="historial">Ver historial</button></div>' +
-      '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' kg</strong> volumen</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
+      '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' kg</strong> volumen sin aprox.</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
       (exercises ? '<div class="home-exercises">' + exercises + (latest.entries.length > 6 ? '<span class="more-exercises">+' + (latest.entries.length - 6) + ' más</span>' : '') + '</div>' : '') +
       '</section>';
   } else {
@@ -1006,6 +1061,7 @@ function routineLibraryDetail(routine){
     var warmups = Number(item.warmupSets) || 0;
     return '<div class="library-exercise-row"><span class="exercise-mark" aria-hidden="true">' + esc(exName(item.exId).trim().charAt(0).toUpperCase()) + '</span><span><strong>' + esc(exName(item.exId)) + '</strong><small>' +
       (warmups ? warmups + ' aprox. + ' : '') + item.sets + ' series · ' + item.min + '–' + item.max + ' reps' + (item.unilateral ? ' · por lado' : '') + '</small></span></div>';
+      (exById(item.exId) && exById(item.exId).archived ? ' · ejercicio archivado (se omitirá al entrenar)' : '') + '</small></span></div>';
   }).join('');
   return '<div class="library-heading"><div><button class="text-button library-back" data-act="routine-back">‹ ' + (program ? esc(program.name) : 'Biblioteca') + '</button><h2>' + esc(routine.name) + '</h2></div>' +
     '<button class="library-add" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar rutina">✎</button></div>' +
@@ -1029,7 +1085,8 @@ function routineEditor(){
     };
     var ef = '';
     for(var k=0;k<it.sets;k++){
-      ef += '<div class="field"><label class="lab" for="ef-' + i + '-' + k + '">Serie ' + (k+1) + '</label><input id="ef-' + i + '-' + k + '" class="in" inputmode="decimal" data-ef="1" data-i="' + i + '" data-k="' + k + '" value="' + esc(effInputVal(it.efforts[k])) + '"></div>';
+      var effort = it.efforts && it.efforts[k] !== undefined ? it.efforts[k] : S.profile.settings.targetRir;
+      ef += '<div class="field"><label class="lab" for="ef-' + i + '-' + k + '">Serie ' + (k+1) + '</label><input id="ef-' + i + '-' + k + '" class="in" inputmode="decimal" data-ef="1" data-i="' + i + '" data-k="' + k + '" value="' + esc(effInputVal(effort)) + '"></div>';
     }
     out += '<section class="card"><div class="card-head"><h3>' + esc(exName(it.exId)) + '</h3><div class="it-tools">' +
       '<button class="mini" data-act="rut-up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Subir ejercicio">↑</button>' +
@@ -1151,9 +1208,11 @@ function viewSet(){
     '<p class="lab">Esfuerzo objetivo por defecto</p><div class="stepper"><button class="btn ghost sm" data-act="tr-minus" aria-label="Bajar esfuerzo objetivo">−</button>' +
     '<span class="v">' + (st.mode === 'rpe' ? 'RPE ' + fmt(10 - tr) : 'RIR ' + tr) + '</span><button class="btn ghost sm" data-act="tr-plus" aria-label="Subir RIR objetivo">+</button></div>' +
     '<p class="small muted">Se usa en ejercicios sueltos. En una rutina puedes fijar el esfuerzo de cada serie. Se sube de peso cuando todas las series llegan al tope sin quedar más de una repetición por debajo del esfuerzo pedido.</p></section>';
-  out += '<section class="card"><p class="sec-title">Temporizador de descanso</p><div class="field"><label class="lab" for="rest-setting">Duración predeterminada</label><select id="rest-setting" class="txt" data-setting="restSeconds">' +
+  out += '<section class="card"><p class="sec-title">Temporizador de descanso</p><div class="field"><label class="lab" for="rest-setting">Series efectivas y back-off</label><select id="rest-setting" class="txt" data-setting="restSeconds">' +
     [60,90,120,180,300].map(function(seconds){ return '<option value="' + seconds + '"' + (Number(st.restSeconds) === seconds ? ' selected' : '') + '>' + Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0') + ' min</option>'; }).join('') +
-    '</select></div><p class="small muted">El descanso empieza al completar las repeticiones de una serie; en ejercicios unilaterales, al completar ambos lados. También puedes iniciarlo manualmente.</p></section>';
+    '</select></div><div class="field"><label class="lab" for="warmup-rest-setting">Series de aproximación</label><select id="warmup-rest-setting" class="txt" data-setting="warmupRestSeconds">' +
+    [0,15,30,45,60,90,120].map(function(seconds){ return '<option value="' + seconds + '"' + (Number(st.warmupRestSeconds) === seconds ? ' selected' : '') + '>' + (seconds ? seconds + ' s' : 'Sin temporizador') + '</option>'; }).join('') +
+    '</select></div><p class="small muted">El descanso empieza al completar una serie (en unilateral, al completar ambos lados). Drop set y rest-pause no inician el temporizador automáticamente. También puedes iniciarlo manualmente.</p></section>';
   out += '<section class="card"><details class="how"><summary>Cómo decide la app</summary><ul class="small">' +
     '<li>Cada ejercicio tiene series y un rango de repeticiones, por ejemplo 3×8–12.</li>' +
     '<li>Mantienes el peso y sumas repeticiones hasta llegar al tope en todas las series.</li>' +
@@ -1275,10 +1334,13 @@ function createExercise(name){
 }
 function startRoutine(id){
   var r = S.profile.routines[id]; if(!r) return;
-  var entries = [];
+  var entries = [], skipped = false;
   r.items.forEach(function(it, index){
     if(!exById(it.exId)) return;
-    var cfg = {sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, efforts:it.efforts.slice(), unilateral:!!it.unilateral};
+    if(exById(it.exId).archived){ skipped = true; return; }
+    var cfg = {sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral};
+    while(cfg.efforts.length < cfg.sets) cfg.efforts.push(cfg.efforts.length ? cfg.efforts[cfg.efforts.length-1] : S.profile.settings.targetRir);
+    cfg.efforts = cfg.efforts.slice(0, cfg.sets);
     var p = planFor(Object.assign({}, exById(it.exId), cfg)), rows = [];
     for(var j=0;j<cfg.warmupSets;j++){
       var warm = plannedRow(p, cfg.unilateral, p.nextW);
@@ -1287,9 +1349,11 @@ function startRoutine(id){
     for(var i=0;i<cfg.sets;i++) rows.push(plannedRow(p, cfg.unilateral, p.nextW));
     entries.push({exId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
   });
-  if(!entries.length){ toast('La rutina no tiene ejercicios'); return; }
+  if(!entries.length){ toast(skipped ? 'La rutina solo tiene ejercicios archivados' : 'La rutina no tiene ejercicios'); return; }
   S.draft = {date:iso(new Date()), startedAt:Date.now(), routineId:id, entries:entries}; saveDraft();
+  S.restEndsAt = null; saveRestEnd();
   S.confirm = null; S.picker = false; S.justSaved = null; S.tab = 'hoy'; render(); window.scrollTo(0, 0);
+  if(skipped) toast('Se omitieron los ejercicios archivados de la rutina');
 }
 function saveRoutine(){
   var r = S.redit, name = r.name.trim();
@@ -1329,6 +1393,7 @@ function updateRoutineFromDraft(){
   return true;
 }
 function finish(updateRoutine){
+  if(!workingDone()){ toast('Registra al menos una serie efectiva completa'); return; }
   if(updateRoutine === undefined && routineNeedsUpdate()){
     S.confirm = 'finish-routine'; render(); return;
   }
@@ -1344,7 +1409,6 @@ function finish(updateRoutine){
       });
     if(sets.length){ entries.push({exId:en.exId, sets:sets, unilateral:!!ex.unilateral, cfg:en.cfg || null}); saved.push({exId:en.exId, cfg:en.cfg || null}); }
   });
-  if(!workingDone()){ toast('Registra al menos una serie normal completa en ambos lados'); return; }
   var finishedAt = Date.now();
   var session = {
     id:uid('s_'), date:S.draft.date || iso(new Date()), ts:finishedAt,
@@ -1358,7 +1422,7 @@ function finish(updateRoutine){
   S.sessions.push(session);
   Store.saveSession(session);
   S.justSaved = {session:session, next:saved};
-  S.draft = blankDraft(); saveDraft(); S.confirm = null;
+  S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
   render(); window.scrollTo(0, 0);
 }
 function onClick(ev){
@@ -1392,7 +1456,13 @@ function onClick(ev){
     case 'rut-new': S.selectedRoutine = null; S.redit = {id:null, name:'', items:[], pick:false, programId:S.selectedProgram || ''}; S.tab = 'rutinas'; render(); window.scrollTo(0, 0); break;
     case 'rut-edit':
       var rr = S.profile.routines[t.dataset.id];
-      S.selectedRoutine = null; S.redit = {id:rr.id, name:rr.name, items:clone(rr.items), pick:false, programId:rr.programId || ''}; render(); window.scrollTo(0, 0); break;
+      var editItems = clone(rr.items).map(function(item){
+        item.efforts = (item.efforts || []).slice();
+        while(item.efforts.length < item.sets) item.efforts.push(item.efforts.length ? item.efforts[item.efforts.length-1] : S.profile.settings.targetRir);
+        item.efforts = item.efforts.slice(0, item.sets);
+        return item;
+      });
+      S.selectedRoutine = null; S.redit = {id:rr.id, name:rr.name, items:editItems, pick:false, programId:rr.programId || ''}; render(); window.scrollTo(0, 0); break;
     case 'rut-cancel': S.redit = null; render(); break;
     case 'rut-save': saveRoutine(); break;
     case 'rut-add': S.redit.pick = true; render(); var q2 = $('#pk-q'); if(q2){ q2.focus(); q2.scrollIntoView({block:'center'}); } break;
@@ -1427,7 +1497,7 @@ function onClick(ev){
       saveRestEnd(); updateRestTimer(); render(); break;
     case 'rest-stop': S.restEndsAt = null; saveRestEnd(); render(); break;
     case 'discard': S.confirm = 'discard'; render(); break;
-    case 'discard-ok': S.draft = blankDraft(); saveDraft(); S.confirm = null; render(); break;
+    case 'discard-ok': S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null; render(); break;
     case 'dismiss-saved': S.justSaved = null; render(); break;
     case 'toggle-ex': S.openEx = S.openEx === t.dataset.id ? null : t.dataset.id; S.confirm = null; render(); break;
     case 'archive': S.confirm = 'arch:' + t.dataset.id; render(); break;
@@ -1465,6 +1535,7 @@ function onInput(ev){
     var v = num(t.value);
     target.rir = (t.value.trim() === '' || v === null) ? '' : String(S.profile.settings.mode === 'rpe' ? 10 - v : v);
   }
+  if(!rowComplete(row, effEx(S.draft.entries[ei]).unilateral)) delete row.restTriggered;
   saveDraft(); refreshLive(ei);
 }
 function onChange(ev){
@@ -1495,16 +1566,19 @@ function onChange(ev){
     if(![60,90,120,180,300].includes(seconds)){ render(); return; }
     S.profile.settings.restSeconds = seconds; Store.saveProfile(); render(); return;
   }
-  if(t.dataset.f === 'r'){
+  if(t.dataset.setting === 'warmupRestSeconds'){
+    var warmupSeconds = Number(t.value);
+    if(![0,15,30,45,60,90,120].includes(warmupSeconds)){ render(); return; }
+    S.profile.settings.warmupRestSeconds = warmupSeconds; Store.saveProfile(); render(); return;
+  }
+  if(t.dataset.f === 'r' || t.dataset.f === 'w'){
     var autoEntry = S.draft.entries[+t.dataset.ei], autoRow = autoEntry && autoEntry.rows[+t.dataset.ri];
-    var autoEx = autoEntry && effEx(autoEntry), isComplete = false;
-    if(autoRow && autoEx && autoEx.unilateral){
-      var sides = ensureRowMode(autoRow, true);
-      isComplete = ['right','left'].every(function(side){ return num(sides[side].w) > 0 && num(sides[side].r) > 0; });
-    } else if(autoRow){
-      isComplete = num(autoRow.w) > 0 && num(autoRow.r) > 0;
+    var autoEx = autoEntry && effEx(autoEntry);
+    if(autoRow && autoEx && autoRestEligible(autoRow) && rowComplete(autoRow, autoEx.unilateral) && !autoRow.restTriggered){
+      autoRow.restTriggered = true;
+      var duration = restSecondsFor(autoRow);
+      if(duration){ startRest(duration); saveDraft(); render(); }
     }
-    if(isComplete) startRest(Number(S.profile.settings.restSeconds) || 90);
   }
   if(t.dataset.it === 'unilateral'){
     var routineItem = S.redit && S.redit.items[+t.dataset.i];
@@ -1518,7 +1592,12 @@ function onChange(ev){
   }
   if(t.dataset.hc || t.dataset.hef !== undefined){
     if(t.dataset.hc === 'unilateral'){
+      var cfgEntry = S.draft.entries[+t.dataset.ei];
+      var hasLeftValues = cfgEntry && cfgEntry.rows.some(function(row){
+        return row.left && [row.left.w, row.left.r, row.left.rir].some(function(value){ return String(value || '').trim() !== ''; });
+      });
       applyEntryCfg(+t.dataset.ei, 'unilateral', t.value === 'true');
+      if(t.value === 'false' && hasLeftValues) toast('En modo bilateral se usa el lado derecho; el detalle por lado se conserva durante este entreno.');
       return;
     }
     var hv = num(t.value);
@@ -1552,9 +1631,16 @@ function onChange(ev){
   var ex = exById(t.dataset.id); if(!ex) return;
   if(key === 'unilateral'){
     if(t.value !== 'true' && t.value !== 'false'){ render(); return; }
+    var hadSideData = ex.unilateral && t.value === 'false' && S.draft.entries.some(function(en){
+      return en.exId === ex.id && en.rows.some(function(row){
+        return row.left && [row.left.w, row.left.r, row.left.rir].some(function(value){ return String(value || '').trim() !== ''; });
+      });
+    });
     ex.unilateral = t.value === 'true';
     S.draft.entries.forEach(function(en){ if(en.exId === ex.id) en.rows.forEach(function(row){ ensureRowMode(row, ex.unilateral); }); });
-    Store.saveProfile(); saveDraft(); render(); return;
+    Store.saveProfile(); saveDraft(); render();
+    if(hadSideData) toast('En modo bilateral se usa el lado derecho; el detalle por lado se conserva durante este entreno.');
+    return;
   }
   var v = num(t.value);
   if(v === null){ render(); return; }
