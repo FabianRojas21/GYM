@@ -40,6 +40,10 @@ Durante un entrenamiento puedes elegir el tipo de cada serie:
   para progresar. Registra cada bajada de peso o bloque de rest-pause como una
   fila aparte con su propio peso y repeticiones.
 
+Al evaluar una subida, la app considera solo las series normales requeridas
+por la configuración del ejercicio. Las series normales adicionales también
+se guardan, pero no bloquean la progresión ni cambian el objetivo.
+
 Los entrenamientos anteriores siguen siendo compatibles: las series que se
 guardaron como calentamiento se muestran como aproximaciones.
 

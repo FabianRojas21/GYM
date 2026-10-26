@@ -246,9 +246,9 @@ var Store = {
 /* ---------- motor de sobrecarga progresiva ---------- */
 function exById(id){ return S.profile.exercises[id]; }
 function exName(id){ var e = exById(id); return e ? e.name : 'Ejercicio eliminado'; }
-function effTxt(rir){
+function effTxt(rir, settings){
   if(rir === null || rir === undefined) return '';
-  return S.profile.settings.mode === 'rpe' ? 'RPE ' + fmt1(10 - rir) : 'RIR ' + fmt1(rir);
+  return settings.mode === 'rpe' ? 'RPE ' + fmt1(10 - rir) : 'RIR ' + fmt1(rir);
 }
 var SET_TYPES = {
   normal:'Normal', warmup:'Aproximación', backoff:'Back-off',
@@ -273,14 +273,14 @@ function rowComplete(row, unilateral){
 }
 /* ejercicio efectivo: ajustes base + ajustes propios de la rutina (solo en esa rutina) */
 function effEx(en){ return Object.assign({}, exById(en.exId), en.cfg || {}); }
-function effortTarget(ex, i){
+function effortTarget(ex, i, settings){
   var e = ex.efforts;
-  return (e && e[i] !== undefined && e[i] !== null) ? e[i] : S.profile.settings.targetRir;
+  return (e && e[i] !== undefined && e[i] !== null) ? e[i] : settings.targetRir;
 }
-function tgtText(ex){
-  var list = []; for(var i=0;i<ex.sets;i++) list.push(effortTarget(ex, i));
+function tgtText(ex, settings){
+  var list = []; for(var i=0;i<ex.sets;i++) list.push(effortTarget(ex, i, settings));
   var same = list.every(function(v){ return v === list[0]; });
-  return same ? effTxt(list[0]) : list.map(effTxt).join(' / ');
+  return same ? effTxt(list[0], settings) : list.map(function(value){ return effTxt(value, settings); }).join(' / ');
 }
 function entriesFor(exId){
   return S.sessions.filter(function(s){ return s.entries.some(function(e){ return e.exId === exId; }); })
@@ -293,18 +293,18 @@ function entriesFor(exId){
 }
 function mean(a){ return a.reduce(function(x,y){ return x+y; }, 0) / a.length; }
 
-function analyzeCore(ex, sets, prevSets){
-  var tr = S.profile.settings.targetRir;
+function analyzeCore(ex, sets, prevSets, settings){
+  var tr = settings.targetRir;
   var wk = sets.filter(function(s){ return countsForProgress(s) && s.w > 0 && s.r > 0; });
   if(!wk.length) return null;
   var W = Math.max.apply(null, wk.map(function(s){ return s.w; }));
-  var at = wk.filter(function(s){ return s.w === W; });
+  var at = wk.filter(function(s){ return s.w === W; }).slice(0, ex.sets);
   var reps = at.map(function(s){ return s.r; });
   var rirs = at.map(function(s){ return s.rir; }).filter(function(v){ return v !== null && v !== undefined; });
   var avgRir = rirs.length ? mean(rirs) : null;
   /* diferencia entre el esfuerzo real y el objetivo de cada serie (positivo = te sobró más de lo pedido) */
   var diffs = [];
-  at.forEach(function(s, i){ if(s.rir !== null && s.rir !== undefined) diffs.push(s.rir - effortTarget(ex, i)); });
+  at.forEach(function(s, i){ if(s.rir !== null && s.rir !== undefined) diffs.push(s.rir - effortTarget(ex, i, settings)); });
   var avgDiff = diffs.length ? mean(diffs) : null;
   var n = at.length, need = ex.sets, inc = ex.inc;
   var avgReps = mean(reps);
@@ -316,7 +316,7 @@ function analyzeCore(ex, sets, prevSets){
   for(var i=0;i<need;i++){ progress += Math.min(1, Math.max(0, ((reps[i] !== undefined ? reps[i] : ex.min) - ex.min) / span)); }
   progress /= need;
   var repsFalt = 0;
-  for(var j=0;j<Math.max(need, n);j++){ if(reps[j] !== undefined) repsFalt += Math.max(0, ex.max - reps[j]); }
+  for(var j=0;j<need;j++){ if(reps[j] !== undefined) repsFalt += Math.max(0, ex.max - reps[j]); }
   var serFalt = Math.max(0, need - n);
   var a = {W:W, nextW:W, reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[]};
   var fill = function(v){ return Array.apply(null, Array(need)).map(function(){ return v; }); };
@@ -325,12 +325,12 @@ function analyzeCore(ex, sets, prevSets){
     a.status = 'sube'; a.nextW = W + inc; a.target = fill(ex.min); a.progress = 1;
     a.headline = 'Sube a ' + fmt(a.nextW) + ' kg';
     a.detail = allTop
-      ? 'Cumpliste ' + need + '×' + ex.max + (avgRir !== null ? ' con ' + effTxt(avgRir) : '') + '. Próximo entreno: ' + fmt(a.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.'
-      : 'Te sobraron repeticiones (' + effTxt(avgRir) + ' frente a ' + tgtText(ex) + '). Sube a ' + fmt(a.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.';
+      ? 'Cumpliste ' + need + '×' + ex.max + (avgRir !== null ? ' con ' + effTxt(avgRir, settings) : '') + '. Próximo entreno: ' + fmt(a.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.'
+      : 'Te sobraron repeticiones (' + effTxt(avgRir, settings) + ' frente a ' + tgtText(ex, settings) + '). Sube a ' + fmt(a.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.';
   } else if(allTop){
     a.status = 'confirma'; a.target = fill(ex.max); a.progress = 1;
     a.headline = 'Repite ' + fmt(W) + ' kg';
-    a.detail = 'Llegaste a ' + ex.max + ' reps pero más al límite de lo pedido (' + effTxt(avgRir) + '). Repite con ' + tgtText(ex) + ' para confirmar la subida.';
+    a.detail = 'Llegaste a ' + ex.max + ' reps pero más al límite de lo pedido (' + effTxt(avgRir, settings) + '). Repite con ' + tgtText(ex, settings) + ' para confirmar la subida.';
   } else if(avgReps < ex.min){
     var prevLow = false;
     if(prevSets){
@@ -360,7 +360,7 @@ function analyzeCore(ex, sets, prevSets){
       a.target.push(okEffort ? Math.min(ex.max, r + 1) : r);
     }
     a.headline = fmt(W) + ' kg, suma reps';
-    a.detail = 'Objetivo: ' + a.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + fmt(W + inc) + ' kg.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir) + ' frente a ' + tgtText(ex) + '), así que mantén las reps.');
+    a.detail = 'Objetivo: ' + a.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + fmt(W + inc) + ' kg.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir, settings) + ' frente a ' + tgtText(ex, settings) + '), así que mantén las reps.');
   }
   return a;
 }
@@ -380,14 +380,14 @@ function completeUnilateralSets(sets){
   });
   return sets.filter(function(s){ return complete[String(s.pair)]; });
 }
-function analyze(ex, sets, prevSets){
-  if(!ex.unilateral) return analyzeCore(ex, sets, prevSets);
+function analyze(ex, sets, prevSets, settings){
+  if(!ex.unilateral) return analyzeCore(ex, sets, prevSets, settings);
   var current = completeUnilateralSets(sets);
   if(!current.length) return null;
   var previous = prevSets ? completeUnilateralSets(prevSets) : null;
   var coreEx = Object.assign({}, ex, {unilateral:false});
-  var right = analyzeCore(coreEx, current.filter(function(s){ return s.side === 'right'; }), previous && previous.filter(function(s){ return s.side === 'right'; }));
-  var left = analyzeCore(coreEx, current.filter(function(s){ return s.side === 'left'; }), previous && previous.filter(function(s){ return s.side === 'left'; }));
+  var right = analyzeCore(coreEx, current.filter(function(s){ return s.side === 'right'; }), previous && previous.filter(function(s){ return s.side === 'right'; }), settings);
+  var left = analyzeCore(coreEx, current.filter(function(s){ return s.side === 'left'; }), previous && previous.filter(function(s){ return s.side === 'left'; }), settings);
   if(!right || !left) return null;
   var rank = {sube:0, reps:1, confirma:2, mantener:3, bajar:4};
   var weaker = rank[right.status] >= rank[left.status] ? right : left;
@@ -406,7 +406,7 @@ function planFor(ex){
   var hist = entriesFor(ex.id);
   if(!hist.length) return {status:'nuevo'};
   var last = hist[hist.length-1], prev = hist[hist.length-2];
-  var a = analyze(ex, last.sets, prev ? prev.sets : null);
+  var a = analyze(ex, last.sets, prev ? prev.sets : null, S.profile.settings);
   if(!a) return {status:'nuevo'};
   a.last = last;
   return a;
@@ -535,7 +535,7 @@ function setsText(sets, withWarm){
         var label = side === 'right' ? 'Der.' : 'Izq.';
         if(type !== 'normal') label += ' ' + SET_TYPES[type];
         var text = label + ': ' + fmt(s.w) + ' kg × ' + s.r;
-        if(s.rir !== null && s.rir !== undefined && type !== 'warmup') text += ' · ' + effTxt(s.rir);
+        if(s.rir !== null && s.rir !== undefined && type !== 'warmup') text += ' · ' + effTxt(s.rir, S.profile.settings);
         parts.push(text);
       });
       return 'Serie ' + (+key+1) + ': ' + parts.join(' · ');
@@ -553,7 +553,7 @@ function setsText(sets, withWarm){
     var prefix = g.side ? (g.side === 'right' ? 'Der. ' : 'Izq. ') : '';
     prefix += g.type === 'warmup' ? 'cal. ' : (g.type === 'normal' ? '' : SET_TYPES[g.type] + ': ');
     var t = prefix + fmt(g.w) + ' kg × ' + g.reps.join(', ');
-    if(g.rirs.length && g.type !== 'warmup') t += ' · ' + effTxt(mean(g.rirs));
+    if(g.rirs.length && g.type !== 'warmup') t += ' · ' + effTxt(mean(g.rirs), S.profile.settings);
     return t;
   }).join(' | ');
 }
@@ -706,7 +706,7 @@ function liveHtml(ei){
   var en = S.draft.entries[ei], ex = effEx(en);
   var sets = rowsToSets(en.rows, ex.unilateral);
   var hist = entriesFor(ex.id), last = hist[hist.length-1];
-  var a = analyze(ex, sets, last ? last.sets : null);
+  var a = analyze(ex, sets, last ? last.sets : null, S.profile.settings);
   if(!a) return '<p class="muted small">' + (ex.unilateral
     ? 'Completa peso y repeticiones en ambos lados para ver tu progreso.'
     : 'Anota tus series y verás cuánto te falta para subir de peso.') + '</p>';
@@ -762,10 +762,10 @@ function workingDone(){
 }
 function goalHtml(ex){
   var p = planFor(ex);
-  var plan = '<p class="muted small">' + ex.sets + (ex.unilateral ? ' rondas · cada lado: ' : ' series × ') + ex.min + '–' + ex.max + ' reps · esfuerzo por serie: ' + esc(tgtText(ex)) + ' · salto ' + fmt(ex.inc) + ' kg</p>';
+  var plan = '<p class="muted small">' + ex.sets + (ex.unilateral ? ' rondas · cada lado: ' : ' series × ') + ex.min + '–' + ex.max + ' reps · esfuerzo por serie: ' + esc(tgtText(ex, S.profile.settings)) + ' · salto ' + fmt(ex.inc) + ' kg</p>';
   if(p.status === 'nuevo'){
     return '<div class="goal"><div class="goal-row">' + chip('nuevo') + '<strong>Primera vez</strong></div>' +
-      '<p class="small">Elige un peso con el que llegues a ' + ex.min + '–' + ex.max + ' reps con ' + esc(tgtText(ex)) + (ex.unilateral ? ' en cada lado' : '') + '. Con eso te armo el objetivo del próximo entreno.</p>' + plan + '</div>';
+      '<p class="small">Elige un peso con el que llegues a ' + ex.min + '–' + ex.max + ' reps con ' + esc(tgtText(ex, S.profile.settings)) + (ex.unilateral ? ' en cada lado' : '') + '. Con eso te armo el objetivo del próximo entreno.</p>' + plan + '</div>';
   }
   return '<div class="goal"><div class="goal-row">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (fmt(p.nextW) + ' kg × ' + p.target.join(' · '))) + '</span></div>' +
     '<p class="muted small">Última vez, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p>' + barHtml(p, ex) +
@@ -783,7 +783,7 @@ function entryHtml(en, ei){
     var type = setType(r);
     var wi = workIndex;
     if(type === 'normal') workIndex++;
-    var effPh = type === 'normal' ? fmt(mode === 'rpe' ? 10 - effortTarget(ex, wi) : effortTarget(ex, wi)) : '';
+    var effPh = type === 'normal' ? fmt(mode === 'rpe' ? 10 - effortTarget(ex, wi, S.profile.settings) : effortTarget(ex, wi, S.profile.settings)) : '';
     var tgt = type === 'normal' && p.target && p.target[wi] !== undefined ? String(p.target[wi]) : 'reps';
     var options = Object.keys(SET_TYPES).map(function(key){
       return '<option value="' + key + '"' + (type === key ? ' selected' : '') + '>' + SET_TYPES[key] + '</option>';
@@ -830,7 +830,7 @@ function cfgPanel(en, ei){
   };
   var ef = '';
   for(var k=0;k<ex.sets;k++){
-    ef += '<div class="field"><label class="lab" for="hef-' + ei + '-' + k + '">Serie ' + (k+1) + '</label><input id="hef-' + ei + '-' + k + '" class="in" inputmode="decimal" data-hef="1" data-ei="' + ei + '" data-k="' + k + '" value="' + esc(effInputVal(effortTarget(ex, k))) + '"></div>';
+    ef += '<div class="field"><label class="lab" for="hef-' + ei + '-' + k + '">Serie ' + (k+1) + '</label><input id="hef-' + ei + '-' + k + '" class="in" inputmode="decimal" data-hef="1" data-ei="' + ei + '" data-k="' + k + '" value="' + esc(effInputVal(effortTarget(ex, k, S.profile.settings))) + '"></div>';
   }
   return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) +
     '<div class="field"><label class="lab" for="hc-warmupMode-' + ei + '">Peso de aproximación</label><select id="hc-warmupMode-' + ei + '" class="txt" data-hc="warmupMode" data-ei="' + ei + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
@@ -1037,7 +1037,7 @@ function suggestHtml(){
     var ex = exById(id), p = planFor(ex);
     var goal = p.status === 'nuevo' ? '' : (p.displayTarget || (fmt(p.nextW) + ' kg × ' + p.target.join(' · ')));
     return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' + goal + '</div></div>' +
-      '<div class="line" style="flex-wrap:nowrap">' + chip(p.status) + '<button class="btn sm" data-act="pick" data-id="' + esc(id) + '" aria-label="Añadir ' + esc(ex.name) + ' a hoy">Añadir</button></div></div>';
+      '<div class="line">' + chip(p.status) + '<button class="btn sm" data-act="pick" data-id="' + esc(id) + '" aria-label="Añadir ' + esc(ex.name) + ' a hoy">Añadir</button></div></div>';
   }).join('') + '</div>';
 }
 function routineList(){
