@@ -127,9 +127,18 @@ function updateRestTimer(){
 }
 
 var toastTimer;
-function toast(msg){
-  var el = $('#toast'); el.textContent = msg; el.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.hidden = true; }, 2600);
+function toast(msg, actionLabel, action){
+  var el = $('#toast'); el.textContent = msg;
+  if(actionLabel && action){
+    var button = document.createElement('button');
+    button.type = 'button'; button.className = 'toast-action'; button.textContent = actionLabel;
+    button.addEventListener('click', function(){
+      clearTimeout(toastTimer); el.hidden = true; action();
+    }, {once:true});
+    el.appendChild(button);
+  }
+  el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.hidden = true; }, action ? 5000 : 2600);
 }
 
 /* ---------- almacenamiento: cuenta (db) o este navegador ---------- */
@@ -641,6 +650,41 @@ function liveHtml(ei){
     : 'Anota tus series y verás cuánto te falta para subir de peso.') + '</p>';
   return '<div class="goal-row">' + chip(a.status) + '<strong>Así vas: ' + esc(a.headline) + '</strong></div>' + barHtml(a, ex) + '<p class="small">' + esc(a.detail) + '</p>';
 }
+function previousWorkSet(exId, workIndex, unilateral){
+  var sessions = S.sessions.filter(function(session){
+    return session.entries.some(function(entry){ return entry.exId === exId; });
+  }).sort(function(a,b){
+    return a.date === b.date ? (b.ts || 0) - (a.ts || 0) : (a.date < b.date ? 1 : -1);
+  });
+  if(!sessions.length) return null;
+  var entries = sessions[0].entries.filter(function(entry){ return entry.exId === exId; });
+  if(!entries.length || !!entries[0].unilateral !== !!unilateral) return null;
+  var sets = [];
+  entries.forEach(function(entry){ sets = sets.concat(entry.sets); });
+  if(!unilateral){
+    var normalSets = sets.filter(function(set){ return setType(set) === 'normal' && set.w > 0 && set.r > 0; });
+    return normalSets[workIndex] || null;
+  }
+  var pairs = {};
+  sets.forEach(function(set){
+    if(set.pair === undefined || setType(set) !== 'normal' || !(set.w > 0 && set.r > 0)) return;
+    var key = String(set.pair);
+    if(!pairs[key]) pairs[key] = {};
+    pairs[key][set.side] = set;
+  });
+  var complete = Object.keys(pairs).sort(function(a,b){ return Number(a) - Number(b); })
+    .map(function(key){ return pairs[key]; })
+    .filter(function(pair){ return pair.right && pair.left; });
+  return complete[workIndex] || null;
+}
+function previousReferenceHtml(exId, workIndex, unilateral){
+  var previous = previousWorkSet(exId, workIndex, unilateral);
+  if(!previous) return '';
+  var value = unilateral
+    ? 'Anterior: der. ' + fmt(previous.right.w) + ' kg × ' + previous.right.r + ' · izq. ' + fmt(previous.left.w) + ' kg × ' + previous.left.r
+    : 'Anterior: ' + fmt(previous.w) + ' kg × ' + previous.r;
+  return '<span class="set-reference">' + esc(value) + '</span>';
+}
 function workingDone(){
   var c = 0;
   S.draft.entries.forEach(function(en){
@@ -696,7 +740,8 @@ function entryHtml(en, ei){
     return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + '">' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
-      '<select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select></div>';
+      '<select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select>' +
+      (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral) : '') + '</div>';
   }).join('');
   var head = ex.unilateral
     ? '<div class="set head unilateral-head"><span>#</span><span class="side-type-head">Lado · kg · reps · ' + effLab + '</span></div>'
@@ -942,34 +987,55 @@ function sessionEditorHtml(session){
   var edit = S.sessionEdit;
   var minutes = Math.max(0, Math.floor((Number(session.durationMs) || 0) / 60000));
   var hours = Math.floor(minutes / 60), remainder = minutes % 60;
-  var date = edit && edit.id === session.id ? edit.date : session.date;
-  var editHours = edit && edit.id === session.id ? edit.hours : hours;
-  var editMinutes = edit && edit.id === session.id ? edit.minutes : remainder;
-  return '<section class="card"><p class="sec-title">Editar fecha y duración</p>' +
-    '<div class="fields"><div class="field"><label class="lab" for="session-edit-date">Día del entrenamiento</label><input class="txt" id="session-edit-date" type="date" required value="' + esc(date) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
-    '<div class="field"><label class="lab" for="session-edit-hours">Horas</label><input class="txt" id="session-edit-hours" type="number" min="0" max="999" step="1" inputmode="numeric" required value="' + esc(editHours) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
-    '<div class="field"><label class="lab" for="session-edit-minutes">Minutos</label><input class="txt" id="session-edit-minutes" type="number" min="0" max="59" step="1" inputmode="numeric" required value="' + esc(editMinutes) + '"' + (edit.saving ? ' disabled' : '') + '></div></div>' +
-    '<p class="small muted">La duración se guarda con precisión de minutos. La fecha corregida también actualiza el resumen semanal.</p>' +
+  var data = edit.session, date = edit.date, editHours = edit.hours, editMinutes = edit.minutes;
+  var setsHtml = data.entries.map(function(entry, entryIndex){
+    var exercise = exName(entry.exId);
+    var rows = entry.sets.map(function(set, setIndex){
+      var side = set.side === 'right' ? ' · Der.' : (set.side === 'left' ? ' · Izq.' : '');
+      var effort = set.rir === null || set.rir === undefined ? '' : fmt(S.profile.settings.mode === 'rpe' ? 10 - set.rir : set.rir);
+      var input = function(field, label, value, mode){
+        return '<label class="field session-set-field"><span class="lab">' + label + '</span><input class="in" data-session-edit="' + field + '" data-entry="' + entryIndex + '" data-set="' + setIndex + '" inputmode="' + mode + '" value="' + esc(value === null || value === undefined ? '' : value) + '"' + (edit.saving ? ' disabled' : '') + '></label>';
+      };
+      var options = Object.keys(SET_TYPES).map(function(key){
+        return '<option value="' + key + '"' + (setType(set) === key ? ' selected' : '') + '>' + SET_TYPES[key] + '</option>';
+      }).join('');
+      return '<div class="session-set-edit"><strong>Serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1) + esc(side) + '</strong>' +
+        input('weight', 'Kg', set.w, 'decimal') + input('reps', 'Reps', set.r, 'numeric') + input('effort', S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR', effort, 'decimal') +
+        '<select class="txt session-set-type" data-session-edit="type" data-entry="' + entryIndex + '" data-set="' + setIndex + '" aria-label="Tipo de serie"' + (edit.saving ? ' disabled' : '') + '>' + options + '</select></div>';
+    }).join('');
+    return '<div class="session-entry-edit"><p class="sec-title">' + esc(exercise) + '</p>' + rows + '</div>';
+  }).join('');
+  return '<section class="card"><p class="sec-title">Editar entrenamiento</p>' +
+    '<div class="fields"><div class="field"><label class="lab" for="session-edit-date">Día del entrenamiento</label><input class="txt" id="session-edit-date" data-session-meta="date" type="date" required value="' + esc(date) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
+    '<div class="field"><label class="lab" for="session-edit-hours">Horas</label><input class="txt" id="session-edit-hours" data-session-meta="hours" type="number" min="0" max="999" step="1" inputmode="numeric" required value="' + esc(editHours) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
+    '<div class="field"><label class="lab" for="session-edit-minutes">Minutos</label><input class="txt" id="session-edit-minutes" data-session-meta="minutes" type="number" min="0" max="59" step="1" inputmode="numeric" required value="' + esc(editMinutes) + '"' + (edit.saving ? ' disabled' : '') + '></div></div>' +
+    '<p class="small muted">La duración se guarda con precisión de minutos. Corrige aquí peso, reps o esfuerzo de cada serie; también puedes cambiar el tipo. La fecha corregida actualiza el resumen semanal.</p>' +
+    setsHtml +
     '<div class="row"><button class="btn sm" data-act="session-edit-save"' + (edit.saving ? ' disabled' : '') + '>Guardar cambios</button><button class="btn ghost sm" data-act="session-edit-cancel"' + (edit.saving ? ' disabled' : '') + '>Cancelar</button></div></section>';
 }
 function saveSessionEdit(){
   var edit = S.sessionEdit;
   if(!edit || edit.saving) return;
-  var session = S.sessions.find(function(item){ return item.id === edit.id; });
-  if(!session){ S.sessionEdit = null; toast('No se encontró el entrenamiento'); render(); return; }
-  var date = $('#session-edit-date').value, hoursText = $('#session-edit-hours').value, minutesText = $('#session-edit-minutes').value;
+  var date = edit.date, hoursText = String(edit.hours), minutesText = String(edit.minutes);
   var hours = Number(hoursText), minutes = Number(minutesText);
   var validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && iso(parseISO(date)) === date;
   if(!validDate){ toast('Elige una fecha válida'); return; }
   if(hoursText.trim() === '' || minutesText.trim() === '' || !Number.isInteger(hours) || hours < 0 || hours > 999 || !Number.isInteger(minutes) || minutes < 0 || minutes > 59){
     toast('Indica horas y minutos válidos'); return;
   }
-  var updated = Object.assign({}, session, {date:date, durationMs:(hours * 60 + minutes) * 60000});
+  var validSets = edit.session.entries.every(function(entry){
+    return entry.sets.every(function(set){
+      return Number.isFinite(set.w) && set.w > 0 && Number.isInteger(set.r) && set.r > 0 &&
+        (set.rir === null || set.rir === undefined || (Number.isFinite(set.rir) && set.rir >= 0 && set.rir <= 10));
+    });
+  });
+  if(!validSets){ toast('Cada serie debe tener peso y reps válidos; el esfuerzo debe estar entre 0 y 10'); return; }
+  var updated = Object.assign({}, edit.session, {date:date, durationMs:(hours * 60 + minutes) * 60000});
   edit.saving = true; render();
   Store.updateSession(updated).then(function(){
     var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
     if(index >= 0) S.sessions[index] = updated;
-    S.sessionEdit = null; render(); toast('Fecha y duración actualizadas');
+    S.sessionEdit = null; render(); toast('Entrenamiento actualizado');
   }).catch(function(){
     if(S.sessionEdit && S.sessionEdit.id === updated.id) S.sessionEdit.saving = false;
     render();
@@ -1107,7 +1173,7 @@ function viewRut(){
 function libraryRoutineCard(routine){
   var count = routine.items.length, replacing = S.confirm === 'start:' + routine.id;
   return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="' + esc(routine.id) + '"><span class="library-cover routine-cover">' + esc(routine.name.trim().charAt(0).toUpperCase() || 'R') + '</span><span><strong>' + esc(routine.name) + '</strong><small>' + count + ' ejercicio' + (count === 1 ? '' : 's') + '</small></span></button>' +
-    '<div class="library-card-actions"><button class="btn sm" data-act="rut-start" data-id="' + esc(routine.id) + '">' + (replacing ? 'Reemplazar' : 'Entrenar') + '</button><button class="mini" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar ' + esc(routine.name) + '">✎</button>' +
+    '<div class="library-card-actions"><button class="btn sm" data-act="rut-start" data-id="' + esc(routine.id) + '">' + (replacing ? 'Reemplazar' : 'Entrenar') + '</button><button class="mini" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar ' + esc(routine.name) + '">✎</button><button class="mini" data-act="rut-duplicate" data-id="' + esc(routine.id) + '" aria-label="Duplicar ' + esc(routine.name) + '">⧉</button>' +
     (S.confirm === 'delr:' + routine.id
       ? '<button class="mini danger" data-act="rut-del-ok" data-id="' + esc(routine.id) + '" aria-label="Confirmar borrar rutina">✓</button>'
       : '<button class="mini" data-act="rut-del" data-id="' + esc(routine.id) + '" aria-label="Borrar ' + esc(routine.name) + '">×</button>') + '</div></div>';
@@ -1131,7 +1197,21 @@ function routineLibraryDetail(routine){
     '<div class="library-routine-summary"><span>' + routine.items.length + ' ejercicio' + (routine.items.length === 1 ? '' : 's') + '</span>' +
     (program ? '<span>' + esc(program.name) + '</span>' : '') + '</div>' +
     '<div class="library-exercises">' + (exercises || '<p class="muted">Añade ejercicios a esta rutina desde Editar.</p>') + '</div>' +
-    '<button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button>';
+    '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn ghost" data-act="rut-duplicate" data-id="' + esc(routine.id) + '">Duplicar rutina</button></div>';
+}
+function routineItemsForEdit(routine){
+  return clone(routine.items).map(function(item){
+    item.efforts = (item.efforts || []).slice();
+    while(item.efforts.length < item.sets) item.efforts.push(item.efforts.length ? item.efforts[item.efforts.length-1] : S.profile.settings.targetRir);
+    item.efforts = item.efforts.slice(0, item.sets);
+    return item;
+  });
+}
+function duplicateRoutine(id){
+  var routine = S.profile.routines[id];
+  if(!routine) return;
+  S.redit = {id:null, name:routine.name + ' (copia)', items:routineItemsForEdit(routine), pick:false, programId:routine.programId || ''};
+  S.selectedRoutine = null; S.tab = 'rutinas'; S.librarySection = 'rutinas'; S.confirm = null; render(); window.scrollTo(0, 0);
 }
 function routineEditor(){
   var r = S.redit, lab = S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR';
@@ -1522,13 +1602,9 @@ function onClick(ev){
     case 'rut-new': S.selectedRoutine = null; S.redit = {id:null, name:'', items:[], pick:false, programId:S.selectedProgram || ''}; S.tab = 'rutinas'; render(); window.scrollTo(0, 0); break;
     case 'rut-edit':
       var rr = S.profile.routines[t.dataset.id];
-      var editItems = clone(rr.items).map(function(item){
-        item.efforts = (item.efforts || []).slice();
-        while(item.efforts.length < item.sets) item.efforts.push(item.efforts.length ? item.efforts[item.efforts.length-1] : S.profile.settings.targetRir);
-        item.efforts = item.efforts.slice(0, item.sets);
-        return item;
-      });
+      var editItems = routineItemsForEdit(rr);
       S.selectedRoutine = null; S.redit = {id:rr.id, name:rr.name, items:editItems, pick:false, programId:rr.programId || ''}; render(); window.scrollTo(0, 0); break;
+    case 'rut-duplicate': duplicateRoutine(t.dataset.id); break;
     case 'rut-cancel': S.redit = null; render(); break;
     case 'rut-save': saveRoutine(); break;
     case 'rut-add': S.redit.pick = true; render(); var q2 = $('#pk-q'); if(q2){ q2.focus(); q2.scrollIntoView({block:'center'}); } break;
@@ -1545,13 +1621,31 @@ function onClick(ev){
       break;
     case 'rut-del': S.confirm = 'delr:' + t.dataset.id; render(); break;
     case 'rut-del-ok': delete S.profile.routines[t.dataset.id]; S.selectedRoutine = null; Store.saveProfile(); S.confirm = null; render(); toast('Rutina borrada'); break;
-    case 'rm-ex': S.draft.entries.splice(ei, 1); saveDraft(); render(); break;
+    case 'rm-ex':
+      var removedEntry = S.draft.entries[ei], entryIndex = ei, draftAtRemoval = S.draft;
+      if(!removedEntry) break;
+      S.draft.entries.splice(ei, 1); saveDraft(); render();
+      toast('Ejercicio quitado del entreno', 'Deshacer', function(){
+        if(S.draft !== draftAtRemoval || S.draft.entries.indexOf(removedEntry) >= 0) return;
+        S.draft.entries.splice(Math.min(entryIndex, S.draft.entries.length), 0, removedEntry);
+        saveDraft(); render();
+      });
+      break;
     case 'toggle-cfg': var xid = S.draft.entries[ei].exId; S.openCfg = S.openCfg === xid ? null : xid; render(); break;
     case 'add-set':
       var rows = S.draft.entries[ei].rows, lr = rows[rows.length-1];
       var entryEx = effEx(S.draft.entries[ei]);
       rows.push(nextRow(lr, entryEx.unilateral)); saveDraft(); render(); break;
-    case 'rm-set': S.draft.entries[ei].rows.splice(ri, 1); saveDraft(); render(); break;
+    case 'rm-set':
+      var removeFrom = S.draft.entries[ei], removedRow = removeFrom && removeFrom.rows[ri], rowIndex = ri, draftForRow = S.draft;
+      if(!removedRow) break;
+      removeFrom.rows.splice(ri, 1); saveDraft(); render();
+      toast('Serie quitada del entreno', 'Deshacer', function(){
+        if(S.draft !== draftForRow || S.draft.entries.indexOf(removeFrom) < 0 || removeFrom.rows.indexOf(removedRow) >= 0) return;
+        removeFrom.rows.splice(Math.min(rowIndex, removeFrom.rows.length), 0, removedRow);
+        saveDraft(); render();
+      });
+      break;
     case 'finish': finish(); break;
     case 'finish-update': finish(true); break;
     case 'finish-keep': finish(false); break;
@@ -1574,7 +1668,7 @@ function onClick(ev){
       var editSession = S.sessions.find(function(s){ return s.id === t.dataset.id; });
       if(editSession){
         var editDuration = Math.max(0, Math.floor((Number(editSession.durationMs) || 0) / 60000));
-        S.sessionEdit = {id:editSession.id, date:editSession.date, hours:Math.floor(editDuration / 60), minutes:editDuration % 60, saving:false};
+        S.sessionEdit = {id:editSession.id, session:clone(editSession), date:editSession.date, hours:String(Math.floor(editDuration / 60)), minutes:String(editDuration % 60), saving:false};
         S.confirm = null; render();
       }
       break;
@@ -1598,6 +1692,24 @@ function onClick(ev){
 }
 function onInput(ev){
   var t = ev.target;
+  if(t.dataset.sessionMeta){
+    if(!S.sessionEdit || S.sessionEdit.saving) return;
+    S.sessionEdit[t.dataset.sessionMeta] = t.value;
+    return;
+  }
+  if(t.dataset.sessionEdit){
+    var edit = S.sessionEdit;
+    if(!edit || edit.saving) return;
+    var entry = edit.session.entries[+t.dataset.entry], set = entry && entry.sets[+t.dataset.set];
+    if(!set) return;
+    if(t.dataset.sessionEdit === 'weight') set.w = num(t.value);
+    if(t.dataset.sessionEdit === 'reps') set.r = num(t.value);
+    if(t.dataset.sessionEdit === 'effort'){
+      var value = t.value.trim() === '' ? null : num(t.value);
+      set.rir = value === null ? null : (S.profile.settings.mode === 'rpe' ? 10 - value : value);
+    }
+    return;
+  }
   if(t.id === 'pk-q'){ $('#pk-list').innerHTML = pickerList(t.value, S.redit && S.redit.pick ? 'routine' : 'day'); return; }
   if(t.dataset.rf === 'name' && S.redit){ S.redit.name = t.value; return; }
   if(t.dataset.pf === 'name' && S.pedit){ S.pedit.name = t.value; return; }
@@ -1616,6 +1728,17 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.sessionEdit === 'type'){
+    var edit = S.sessionEdit, entry = edit && edit.session.entries[+t.dataset.entry], set = entry && entry.sets[+t.dataset.set];
+    if(!set || !Object.prototype.hasOwnProperty.call(SET_TYPES, t.value)) return;
+    set.type = t.value;
+    if(entry.unilateral && set.pair !== undefined){
+      entry.sets.forEach(function(other){
+        if(other.pair === set.pair) other.type = t.value;
+      });
+    }
+    return;
+  }
   if(t.dataset.routineProgram !== undefined && S.redit){
     S.redit.programId = t.value;
     return;

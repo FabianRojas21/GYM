@@ -16,13 +16,19 @@ La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
 con accesos a tus rutinas y a los ejercicios que puedes retomar.
 
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
-del entrenamiento y ajustar el tiempo registrado. La corrección de la fecha
-también actualiza el resumen de la semana.
+del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes
+corregir el peso, las repeticiones, el esfuerzo y el tipo de las series. La
+fecha corregida también actualiza el resumen de la semana.
 
 La **Biblioteca** organiza el contenido en **Programas**, **Rutinas** y
 **Ejercicios**. Un programa agrupa rutinas; al crear o editar una rutina puedes
 asignarla a un programa. Las rutinas que ya existían permanecen disponibles y
-pueden seguir sin programa.
+pueden seguir sin programa. Desde el detalle de una rutina puedes duplicarla,
+editar la copia y guardarla como una nueva versión.
+
+Durante un entreno, las series normales muestran como referencia el peso y las
+repeticiones de la serie correspondiente de la última sesión. Si quitas una
+serie o un ejercicio por error, usa **Deshacer** en el aviso que aparece.
 
 ## Tipos de serie
 
