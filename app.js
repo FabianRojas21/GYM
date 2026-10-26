@@ -447,11 +447,17 @@ function validBackup(data){
   var validNumber = function(value){ return typeof value === 'number' && isFinite(value); };
   if(profile.settings && profile.settings.mode && !['rir','rpe'].includes(profile.settings.mode)) return false;
   if(profile.settings && profile.settings.targetRir !== undefined && !validNumber(profile.settings.targetRir)) return false;
+  var validWarmupConfig = function(item){
+    return (item.warmupMode === undefined || ['auto','manual'].includes(item.warmupMode)) &&
+      (item.warmupStep === undefined || (validNumber(item.warmupStep) && item.warmupStep > 0)) &&
+      (item.warmupPercents === undefined || (Array.isArray(item.warmupPercents) &&
+        item.warmupPercents.every(function(percent){ return validNumber(percent) && percent >= 1 && percent <= 100; })));
+  };
   var exerciseIds = Object.keys(profile.exercises || {});
   for(var i=0;i<exerciseIds.length;i++){
     var ex = profile.exercises[exerciseIds[i]];
     if(!isObject(ex) || typeof ex.name !== 'string' || !validNumber(ex.sets) || !validNumber(ex.min) || !validNumber(ex.max) || !validNumber(ex.inc) ||
-      (ex.warmupSets !== undefined && !validNumber(ex.warmupSets))) return false;
+      (ex.warmupSets !== undefined && !validNumber(ex.warmupSets)) || !validWarmupConfig(ex)) return false;
   }
   var routineIds = Object.keys(profile.routines || {});
   for(var j=0;j<routineIds.length;j++){
@@ -461,7 +467,7 @@ function validBackup(data){
       return isObject(item) && typeof item.exId === 'string' && validNumber(item.sets) &&
         validNumber(item.min) && validNumber(item.max) && validNumber(item.inc) &&
         (item.warmupSets === undefined || validNumber(item.warmupSets)) &&
-        (item.efforts === undefined || Array.isArray(item.efforts));
+        (item.efforts === undefined || Array.isArray(item.efforts)) && validWarmupConfig(item);
     })) return false;
   }
   var programIds = Object.keys(profile.programs || {});
@@ -615,6 +621,61 @@ function plannedRow(plan, unilateral, fallback){
   }
   return row;
 }
+function defaultWarmupPercent(index){
+  return [50,80,90,95,97,98,99,99,99,99][index] || 99;
+}
+function warmupSettings(ex){
+  return {
+    warmupMode:ex.warmupMode === 'manual' ? 'manual' : 'auto',
+    warmupStep:Number(ex.warmupStep) > 0 ? Number(ex.warmupStep) : (Number(ex.inc) > 0 ? Number(ex.inc) : 2.5),
+    warmupPercents:Array.from({length:Number(ex.warmupSets) || 0}, function(_, index){
+      var value = ex.warmupPercents && num(ex.warmupPercents[index]);
+      return value !== null && value > 0 && value <= 100 ? value : defaultWarmupPercent(index);
+    })
+  };
+}
+function warmupWeight(load, percent, step){
+  if(!(Number(load) > 0) || !(Number(percent) > 0) || !(Number(step) > 0)) return '';
+  var rounded = Math.floor((Number(load) * Number(percent) / 100 + 1e-9) / Number(step)) * Number(step);
+  return rounded > 0 ? String(Math.round(rounded * 100) / 100).replace('.', ',') : '';
+}
+function syncAutoWarmupWeights(en, ex){
+  var settings = warmupSettings(ex);
+  if(settings.warmupMode !== 'auto') return;
+  var work = en.rows.find(function(row){ return setType(row) === 'normal'; });
+  var plan = planFor(ex);
+  var warmIndex = 0;
+  en.rows.forEach(function(row){
+    if(setType(row) !== 'warmup') return;
+    var percent = settings.warmupPercents[warmIndex] || defaultWarmupPercent(warmIndex);
+    if(ex.unilateral){
+      ['right','left'].forEach(function(side){
+        var entered = work && work[side] ? num(work[side].w) : null;
+        var planned = plan.sidePlans && plan.sidePlans[side] ? plan.sidePlans[side].nextW : plan.nextW;
+        row[side].w = warmupWeight(entered || planned, percent, settings.warmupStep);
+      });
+    } else {
+      var enteredWeight = work ? num(work.w) : null;
+      row.w = warmupWeight(enteredWeight || plan.nextW, percent, settings.warmupStep);
+    }
+    warmIndex++;
+  });
+}
+function refreshAutoWarmupInputs(ei, en, ex){
+  syncAutoWarmupWeights(en, ex);
+  en.rows.forEach(function(row, ri){
+    if(setType(row) !== 'warmup') return;
+    if(ex.unilateral){
+      ['right','left'].forEach(function(side){
+        var input = $('[data-f="w"][data-ei="' + ei + '"][data-ri="' + ri + '"][data-side="' + side + '"]');
+        if(input) input.value = row[side].w;
+      });
+    } else {
+      var input = $('[data-f="w"][data-ei="' + ei + '"][data-ri="' + ri + '"]');
+      if(input) input.value = row.w;
+    }
+  });
+}
 function nextRow(previous, unilateral){
   if(!unilateral) return newRow(previous ? previous.w : '');
   var row = newRow('', true);
@@ -626,10 +687,11 @@ function nextRow(previous, unilateral){
 function addEntry(exId){
   var ex = exById(exId), p = planFor(ex), rows = [];
   for(var j=0;j<(Number(ex.warmupSets) || 0);j++){
-    var warm = plannedRow(p, ex.unilateral, p.nextW);
+    var warm = newRow(warmupSettings(ex).warmupMode === 'manual' ? '' : p.nextW, ex.unilateral);
     warm.type = 'warmup'; rows.push(warm);
   }
   for(var i=0;i<ex.sets;i++) rows.push(plannedRow(p, ex.unilateral, p.nextW));
+  syncAutoWarmupWeights({rows:rows}, ex);
   if(!S.draft.date) S.draft.date = iso(new Date());
   if(!S.draft.startedAt) S.draft.startedAt = Date.now();
   S.draft.entries.push({exId:exId, rows:rows});
@@ -761,6 +823,7 @@ function entryHtml(en, ei){
 }
 function cfgPanel(en, ei){
   var ex = effEx(en), lab = S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR';
+  var warmCfg = warmupSettings(ex);
   var rt = en.cfg && S.draft.routineId && S.profile.routines[S.draft.routineId];
   var f = function(key, label, val){
     return '<div class="field"><label class="lab" for="hc-' + key + '-' + ei + '">' + label + '</label><input id="hc-' + key + '-' + ei + '" class="txt" inputmode="decimal" data-hc="' + key + '" data-ei="' + ei + '" value="' + esc(String(val).replace('.', ',')) + '"></div>';
@@ -769,25 +832,34 @@ function cfgPanel(en, ei){
   for(var k=0;k<ex.sets;k++){
     ef += '<div class="field"><label class="lab" for="hef-' + ei + '-' + k + '">Serie ' + (k+1) + '</label><input id="hef-' + ei + '-' + k + '" class="in" inputmode="decimal" data-hef="1" data-ei="' + ei + '" data-k="' + k + '" value="' + esc(effInputVal(effortTarget(ex, k))) + '"></div>';
   }
-  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto (kg)', ex.inc) +
+  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) +
+    '<div class="field"><label class="lab" for="hc-warmupMode-' + ei + '">Peso de aproximación</label><select id="hc-warmupMode-' + ei + '" class="txt" data-hc="warmupMode" data-ei="' + ei + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
+    f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
     '<div class="field"><label class="lab" for="hc-unilateral-' + ei + '">Ejecución</label><select id="hc-unilateral-' + ei + '" class="txt" data-hc="unilateral" data-ei="' + ei + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
+    ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
+      return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-hc="warmupPercent" data-ei="' + ei + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
+    }).join('') + '</div></div>' : '') +
     '<div class="field"><span class="lab">Esfuerzo objetivo por serie (' + lab + ')</span><div class="efforts">' + ef + '</div></div>' +
     '<p class="small muted">' + (rt ? 'Estos ajustes solo cambian el entreno de hoy. Al terminar puedes actualizar «' + esc(rt.name) + '» o conservar su configuración.' : 'Se guardan en este ejercicio y valen para tus próximos entrenos.') +
-    ' Con mancuernas, el salto es por mancuerna.</p></div>';
+    ' El redondeo es hacia abajo y este incremento es independiente del salto de progresión.</p></div>';
 }
 function applyEntryCfg(ei, key, v, k){
   var en = S.draft.entries[ei]; if(!en) return;
   var ex = effEx(en), tr = S.profile.settings.targetRir;
-  var c = {sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, efforts:(ex.efforts || []).slice(), unilateral:!!ex.unilateral};
+  var c = Object.assign({sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, efforts:(ex.efforts || []).slice(), unilateral:!!ex.unilateral}, warmupSettings(ex));
   while(c.efforts.length < c.sets) c.efforts.push(c.efforts.length ? c.efforts[c.efforts.length-1] : tr);
   if(key === 'sets') c.sets = Math.min(10, Math.max(1, Math.round(v)));
   if(key === 'warmupSets') c.warmupSets = Math.min(10, Math.max(0, Math.round(v)));
   if(key === 'min'){ c.min = Math.min(50, Math.max(1, Math.round(v))); if(c.max <= c.min) c.max = c.min + 1; }
   if(key === 'max'){ c.max = Math.min(60, Math.max(2, Math.round(v))); if(c.min >= c.max) c.min = c.max - 1; }
   if(key === 'inc') c.inc = Math.min(25, Math.max(0.25, v));
+  if(key === 'warmupStep') c.warmupStep = Math.min(100, Math.max(0.05, v));
+  if(key === 'warmupMode') c.warmupMode = v;
   if(key === 'unilateral') c.unilateral = !!v;
   if(key === 'ef') c.efforts[k] = Math.min(6, Math.max(0, S.profile.settings.mode === 'rpe' ? 10 - v : v));
   while(c.efforts.length < c.sets) c.efforts.push(c.efforts.length ? c.efforts[c.efforts.length-1] : tr);
+  c.warmupPercents = warmupSettings(c).warmupPercents;
+  if(key === 'warmupPercent') c.warmupPercents[k] = Math.min(100, Math.max(1, v));
   c.efforts = c.efforts.slice(0, c.sets);
   if(en.cfg){
     en.cfg = c;
@@ -802,7 +874,7 @@ function applyEntryCfg(ei, key, v, k){
   }
   while(warmCount < c.warmupSets){
     var firstWork = en.rows.find(function(row){ return setType(row) !== 'warmup'; });
-    var firstValue = firstWork ? (c.unilateral ? firstWork.right.w : firstWork.w) : '';
+    var firstValue = c.warmupMode === 'manual' ? '' : (firstWork ? (c.unilateral ? firstWork.right.w : firstWork.w) : '');
     var warm = newRow(firstValue, c.unilateral);
     warm.type = 'warmup'; en.rows.unshift(warm); warmCount++;
   }
@@ -822,6 +894,7 @@ function applyEntryCfg(ei, key, v, k){
     if(hasReps) break;
     en.rows.splice(normalIndex, 1); normalCount--;
   }
+  syncAutoWarmupWeights(en, effEx(en));
   if(!en.cfg) Store.saveProfile();
   saveDraft(); render();
 }
@@ -1130,7 +1203,7 @@ function effInputVal(rir){ return fmt(S.profile.settings.mode === 'rpe' ? 10 - r
 function newItem(exId){
   var ex = exById(exId), ef = [];
   for(var i=0;i<ex.sets;i++) ef.push(S.profile.settings.targetRir);
-  return {exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, efforts:ef, unilateral:!!ex.unilateral};
+  return Object.assign({exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, efforts:ef, unilateral:!!ex.unilateral}, warmupSettings(ex));
 }
 function viewRut(){
   if(S.pedit) return programEditor();
@@ -1219,6 +1292,7 @@ function routineItemsForEdit(routine){
     item.efforts = (item.efforts || []).slice();
     while(item.efforts.length < item.sets) item.efforts.push(item.efforts.length ? item.efforts[item.efforts.length-1] : S.profile.settings.targetRir);
     item.efforts = item.efforts.slice(0, item.sets);
+    Object.assign(item, warmupSettings(item));
     return item;
   });
 }
@@ -1238,6 +1312,7 @@ function routineEditor(){
     '</select></div>' +
     '<p class="hint">Los ajustes de cada ejercicio valen solo en esta rutina. Con mancuernas, el salto es por mancuerna: un salto de 2 kg lleva de 26 a 28 kg.</p></section>';
   r.items.forEach(function(it, i){
+    var warmCfg = warmupSettings(it);
     var f = function(key, label, val){
       return '<div class="field"><label class="lab" for="it-' + key + '-' + i + '">' + label + '</label><input id="it-' + key + '-' + i + '" class="txt" inputmode="decimal" data-it="' + key + '" data-i="' + i + '" value="' + esc(String(val).replace('.', ',')) + '"></div>';
     };
@@ -1250,10 +1325,15 @@ function routineEditor(){
       '<button class="mini" data-act="rut-up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Subir ejercicio">↑</button>' +
       '<button class="mini" data-act="rut-down" data-i="' + i + '"' + (i === r.items.length-1 ? ' disabled' : '') + ' aria-label="Bajar ejercicio">↓</button>' +
       '<button class="mini" data-act="rut-rm-item" data-i="' + i + '" aria-label="Quitar ejercicio">×</button></div></div>' +
-      '<div class="fields">' + f('sets', 'Series de trabajo', it.sets) + f('warmupSets', 'Series de aproximación', Number(it.warmupSets) || 0) + f('min', 'Reps mín.', it.min) + f('max', 'Reps máx.', it.max) + f('inc', 'Salto (kg)', it.inc) +
+      '<div class="fields">' + f('sets', 'Series de trabajo', it.sets) + f('warmupSets', 'Series de aproximación', Number(it.warmupSets) || 0) + f('min', 'Reps mín.', it.min) + f('max', 'Reps máx.', it.max) + f('inc', 'Salto de progresión (kg)', it.inc) +
+      '<div class="field"><label class="lab" for="it-warmupMode-' + i + '">Peso de aproximación</label><select id="it-warmupMode-' + i + '" class="txt" data-it="warmupMode" data-i="' + i + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
+      f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="it-unilateral-' + i + '">Ejecución</label><select id="it-unilateral-' + i + '" class="txt" data-it="unilateral" data-i="' + i + '"><option value="false"' + (it.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (it.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
+      ((Number(it.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
+        return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-it="warmupPercent" data-i="' + i + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
+      }).join('') + '</div></div>' : '') +
       '<div class="field"><span class="lab">Esfuerzo objetivo por serie (' + lab + ')</span><div class="efforts">' + ef + '</div></div>' +
-      '<p class="small muted">' + ((Number(it.warmupSets) || 0) ? it.warmupSets + (it.warmupSets === 1 ? ' serie de aproximación + ' : ' series de aproximación + ') : '') + it.sets + ' series de trabajo × ' + it.min + '–' + it.max + ' reps. Subes ' + fmt(it.inc) + ' kg cuando todas las series de trabajo lleguen a ' + it.max + ' reps con el esfuerzo pedido.</p></section>';
+      '<p class="small muted">' + ((Number(it.warmupSets) || 0) ? it.warmupSets + (it.warmupSets === 1 ? ' serie de aproximación + ' : ' series de aproximación + ') + (warmCfg.warmupMode === 'auto' ? ' calculada desde el peso de trabajo y redondeada hacia abajo en saltos de ' + fmt(warmCfg.warmupStep) + ' kg. ' : 'con peso manual. ') : '') + it.sets + ' series de trabajo × ' + it.min + '–' + it.max + ' reps. Subes ' + fmt(it.inc) + ' kg cuando todas las series de trabajo lleguen a ' + it.max + ' reps con el esfuerzo pedido.</p></section>';
   });
   if(r.pick) out += pickerHtml('routine');
   else out += '<button class="btn ghost block" data-act="rut-add">+ Añadir ejercicio</button>';
@@ -1295,6 +1375,7 @@ function chartSvg(pts){
 function exDetail(ex){
   var hist = entriesFor(ex.id);
   var records = personalRecords(ex);
+  var warmCfg = warmupSettings(ex);
   var recordHtml = records.weight ? '<div class="record-grid">' +
     '<div><span>Mayor peso</span><strong>' + fmt(records.weight.value) + ' kg</strong><small>' + esc(dFmt(records.weight.date)) + '</small></div>' +
     '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' +
@@ -1313,7 +1394,11 @@ function exDetail(ex){
     '<p class="muted small">Peso × (1 + (reps + RIR) ÷ 30), ' + (ex.unilateral ? 'mejor estimado del lado más débil por entreno.' : 'mejor serie de cada entreno.') + '</p></div>' +
     (rows ? '<div class="scroll-x"><table class="table"><thead><tr><th>Fecha</th><th>Series</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
-      f('sets', 'Series', ex.sets) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto (kg)', ex.inc) +
+      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
+      '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
+      '</div>' + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
+        return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-cfg="warmupPercent" data-id="' + esc(ex.id) + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
+      }).join('') + '</div></div>' : '') + '<div class="fields">' +
       '<div class="field"><label class="lab" for="cfg-unilateral">Ejecución</label><select id="cfg-unilateral" class="txt" data-cfg="unilateral" data-id="' + esc(ex.id) + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div></div>' +
     (S.confirm === 'arch:' + ex.id
       ? '<button class="btn danger sm" data-act="archive-ok" data-id="' + esc(ex.id) + '">Confirmar: archivar</button>'
@@ -1499,15 +1584,16 @@ function startRoutine(id){
   r.items.forEach(function(it, index){
     if(!exById(it.exId)) return;
     if(exById(it.exId).archived){ skipped = true; return; }
-    var cfg = {sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral};
+    var cfg = Object.assign({sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral}, warmupSettings(it));
     while(cfg.efforts.length < cfg.sets) cfg.efforts.push(cfg.efforts.length ? cfg.efforts[cfg.efforts.length-1] : S.profile.settings.targetRir);
     cfg.efforts = cfg.efforts.slice(0, cfg.sets);
     var p = planFor(Object.assign({}, exById(it.exId), cfg)), rows = [];
     for(var j=0;j<cfg.warmupSets;j++){
-      var warm = plannedRow(p, cfg.unilateral, p.nextW);
+      var warm = newRow(cfg.warmupMode === 'manual' ? '' : p.nextW, cfg.unilateral);
       warm.type = 'warmup'; rows.push(warm);
     }
     for(var i=0;i<cfg.sets;i++) rows.push(plannedRow(p, cfg.unilateral, p.nextW));
+    syncAutoWarmupWeights({rows:rows}, Object.assign({}, exById(it.exId), cfg));
     entries.push({exId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
   });
   if(!entries.length){ toast(skipped ? 'La rutina solo tiene ejercicios archivados' : 'La rutina no tiene ejercicios'); return; }
@@ -1738,6 +1824,8 @@ function onInput(ev){
     var v = num(t.value);
     target.rir = (t.value.trim() === '' || v === null) ? '' : String(S.profile.settings.mode === 'rpe' ? 10 - v : v);
   }
+  var entry = S.draft.entries[ei], exercise = effEx(entry);
+  if(f === 'w' && setType(row) === 'normal') refreshAutoWarmupInputs(ei, entry, exercise);
   if(!rowComplete(row, effEx(S.draft.entries[ei]).unilateral)) delete row.restTriggered;
   saveDraft(); refreshLive(ei);
 }
@@ -1757,6 +1845,24 @@ function onChange(ev){
   if(t.dataset.routineProgram !== undefined && S.redit){
     S.redit.programId = t.value;
     return;
+  }
+  if(t.dataset.hc === 'warmupMode'){
+    if(t.value !== 'auto' && t.value !== 'manual'){ render(); return; }
+    applyEntryCfg(+t.dataset.ei, 'warmupMode', t.value);
+    return;
+  }
+  if(t.dataset.it === 'warmupMode' && S.redit){
+    var modeItem = S.redit.items[+t.dataset.i];
+    if(!modeItem || (t.value !== 'auto' && t.value !== 'manual')){ render(); return; }
+    modeItem.warmupMode = t.value;
+    render(); return;
+  }
+  if(t.dataset.it === 'warmupPercent' && S.redit){
+    var percentItem = S.redit.items[+t.dataset.i], routinePercent = num(t.value);
+    if(!percentItem || routinePercent === null || routinePercent < 1 || routinePercent > 100){ render(); return; }
+    if(!Array.isArray(percentItem.warmupPercents)) percentItem.warmupPercents = warmupSettings(percentItem).warmupPercents;
+    percentItem.warmupPercents[+t.dataset.k] = routinePercent;
+    render(); return;
   }
   if(t.id === 'backup-file'){
     var file = t.files && t.files[0];
@@ -1799,6 +1905,25 @@ function onChange(ev){
     if(!routineItem || (t.value !== 'true' && t.value !== 'false')){ render(); return; }
     routineItem.unilateral = t.value === 'true'; render(); return;
   }
+  if(t.dataset.hc === 'warmupPercent'){
+    var percentValue = num(t.value);
+    if(percentValue === null || percentValue < 1 || percentValue > 100){ render(); return; }
+    applyEntryCfg(+t.dataset.ei, 'warmupPercent', percentValue, +t.dataset.k);
+    return;
+  }
+  if(t.dataset.cfg === 'warmupMode'){
+    if(t.value !== 'auto' && t.value !== 'manual'){ render(); return; }
+    var modeExercise = exById(t.dataset.id);
+    if(!modeExercise) return;
+    modeExercise.warmupMode = t.value; Store.saveProfile(); render(); return;
+  }
+  if(t.dataset.cfg === 'warmupPercent'){
+    var exercisePercent = num(t.value), percentExercise = exById(t.dataset.id);
+    if(!percentExercise || exercisePercent === null || exercisePercent < 1 || exercisePercent > 100){ render(); return; }
+    percentExercise.warmupPercents = warmupSettings(percentExercise).warmupPercents;
+    percentExercise.warmupPercents[+t.dataset.k] = exercisePercent;
+    Store.saveProfile(); render(); return;
+  }
   if(t.dataset.setType !== undefined){
     var setRow = S.draft.entries[+t.dataset.ei] && S.draft.entries[+t.dataset.ei].rows[+t.dataset.ri];
     if(!setRow || !Object.prototype.hasOwnProperty.call(SET_TYPES, t.value)){ render(); return; }
@@ -1828,7 +1953,11 @@ function onChange(ev){
       for(var j=0;j<ns;j++) ef.push(it.efforts[j] !== undefined ? it.efforts[j] : (it.efforts.length ? it.efforts[it.efforts.length-1] : S.profile.settings.targetRir));
       it.sets = ns; it.efforts = ef;
     }
-    if(k === 'warmupSets') it.warmupSets = Math.min(10, Math.max(0, Math.round(v0)));
+    if(k === 'warmupSets'){
+      it.warmupSets = Math.min(10, Math.max(0, Math.round(v0)));
+      it.warmupPercents = warmupSettings(it).warmupPercents;
+    }
+    if(k === 'warmupStep') it.warmupStep = Math.min(100, Math.max(0.05, v0));
     if(k === 'min'){ it.min = Math.min(50, Math.max(1, Math.round(v0))); if(it.max <= it.min) it.max = it.min + 1; }
     if(k === 'max'){ it.max = Math.min(60, Math.max(2, Math.round(v0))); if(it.min >= it.max) it.min = it.max - 1; }
     if(k === 'inc') it.inc = Math.min(25, Math.max(0.25, v0));
@@ -1862,6 +1991,11 @@ function onChange(ev){
   if(key === 'min'){ ex.min = Math.min(50, Math.max(1, Math.round(v))); if(ex.max <= ex.min) ex.max = ex.min + 1; }
   if(key === 'max'){ ex.max = Math.min(60, Math.max(2, Math.round(v))); if(ex.min >= ex.max) ex.min = ex.max - 1; }
   if(key === 'inc') ex.inc = Math.min(25, Math.max(0.25, v));
+  if(key === 'warmupStep') ex.warmupStep = Math.min(100, Math.max(0.05, v));
+  if(key === 'warmupSets'){
+    ex.warmupSets = Math.min(10, Math.max(0, Math.round(v)));
+    ex.warmupPercents = warmupSettings(ex).warmupPercents;
+  }
   Store.saveProfile(); render();
 }
 
