@@ -6,11 +6,16 @@ App de gimnasio para PC y móvil.
 
 - `index.html`: estructura de la aplicación.
 - `styles.css`: estilos y diseño.
-- `app.js`: lógica de la aplicación.
+- `app.js`: interfaz, almacenamiento y flujo de la aplicación.
+- `engine.js`: motor independiente de progresión.
+- `engine.test.js`: pruebas del motor, ejecutables con `node --test`.
 
-Los tres archivos deben permanecer en la misma carpeta. Para probar la app,
+Los archivos deben permanecer en la misma carpeta. Para probar la app,
 abre esta carpeta en VS Code, instala la extensión Live Server y elige
 **Open with Live Server** sobre `index.html`.
+
+Antes de guardar cambios en el motor, ejecuta `node --test` para comprobar sus
+reglas de progresión.
 
 La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
 con accesos a tus rutinas y a los ejercicios que puedes retomar.
@@ -25,6 +30,20 @@ La **Biblioteca** organiza el contenido en **Programas**, **Rutinas** y
 asignarla a un programa. Las rutinas que ya existían permanecen disponibles y
 pueden seguir sin programa. Desde el detalle de una rutina puedes duplicarla,
 editar la copia y guardarla como una nueva versión.
+
+En **Hoy**, el resumen semanal también muestra las series efectivas por grupo
+muscular. Asigna un músculo principal a cada ejercicio desde **Biblioteca →
+Ejercicios**; los registros anteriores quedan como «Sin asignar» hasta que lo
+clasifiques. Se cuentan solo las series normales completas, una vez por ronda
+en los ejercicios unilaterales; las aproximaciones y técnicas especiales no
+se incluyen en este conteo.
+
+En las reglas del ejercicio o de cada elemento de una rutina puedes ajustar
+**Peso disponible cada (kg)**. La app redondea las recomendaciones de subida
+hacia el siguiente peso disponible y las de bajada hacia uno disponible menor
+o igual. Por ejemplo, un salto progresivo de 2 kg desde 26 kg con mancuernas
+disponibles cada 2 kg propone 28 kg. Los datos y reglas existentes se
+conservan; si no configuras este valor, se usa el salto de progresión actual.
 
 Durante un entreno, las series normales muestran como referencia el peso y las
 repeticiones de la serie correspondiente de la última sesión. Si quitas una
