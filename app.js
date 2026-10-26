@@ -64,7 +64,7 @@ var S = {
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null,
-  restEndsAt:loadRestEnd(), pendingImport:null
+  restEndsAt:loadRestEnd(), pendingImport:null, sessionEdit:null
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -170,6 +170,22 @@ var Store = {
   saveSession:function(s){
     if(S.kind !== 'db'){ Store.saveLocal(); return Promise.resolve(); }
     return Store.col.doc(s.id).set(clone(s)).catch(function(){ toast('No se pudo guardar el entreno'); });
+  },
+  updateSession:function(session){
+    if(S.kind === 'db'){
+      return Store.col.doc(session.id).set(clone(session)).catch(function(error){
+        toast('No se pudo guardar los cambios del entreno');
+        throw error;
+      });
+    }
+    try {
+      var sessions = S.sessions.map(function(item){ return item.id === session.id ? session : item; });
+      localStorage.setItem(LK, JSON.stringify({profile:S.profile, sessions:sessions}));
+      return Promise.resolve();
+    } catch(error){
+      toast('No se pudo guardar los cambios del entreno');
+      return Promise.reject(error);
+    }
   },
   deleteSessions:function(ids){
     if(S.kind !== 'db'){ Store.saveLocal(); return Promise.resolve(); }
@@ -905,6 +921,43 @@ function humanDuration(ms){
   var rest = minutes % 60;
   return hours ? hours + ' h' + (rest ? ' ' + rest + ' min' : '') : minutes + ' min';
 }
+function sessionEditorHtml(session){
+  var edit = S.sessionEdit;
+  var minutes = Math.max(0, Math.floor((Number(session.durationMs) || 0) / 60000));
+  var hours = Math.floor(minutes / 60), remainder = minutes % 60;
+  var date = edit && edit.id === session.id ? edit.date : session.date;
+  var editHours = edit && edit.id === session.id ? edit.hours : hours;
+  var editMinutes = edit && edit.id === session.id ? edit.minutes : remainder;
+  return '<section class="card"><p class="sec-title">Editar fecha y duración</p>' +
+    '<div class="fields"><div class="field"><label class="lab" for="session-edit-date">Día del entrenamiento</label><input class="txt" id="session-edit-date" type="date" required value="' + esc(date) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
+    '<div class="field"><label class="lab" for="session-edit-hours">Horas</label><input class="txt" id="session-edit-hours" type="number" min="0" max="999" step="1" inputmode="numeric" required value="' + esc(editHours) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
+    '<div class="field"><label class="lab" for="session-edit-minutes">Minutos</label><input class="txt" id="session-edit-minutes" type="number" min="0" max="59" step="1" inputmode="numeric" required value="' + esc(editMinutes) + '"' + (edit.saving ? ' disabled' : '') + '></div></div>' +
+    '<p class="small muted">La duración se guarda con precisión de minutos. La fecha corregida también actualiza el resumen semanal.</p>' +
+    '<div class="row"><button class="btn sm" data-act="session-edit-save"' + (edit.saving ? ' disabled' : '') + '>Guardar cambios</button><button class="btn ghost sm" data-act="session-edit-cancel"' + (edit.saving ? ' disabled' : '') + '>Cancelar</button></div></section>';
+}
+function saveSessionEdit(){
+  var edit = S.sessionEdit;
+  if(!edit || edit.saving) return;
+  var session = S.sessions.find(function(item){ return item.id === edit.id; });
+  if(!session){ S.sessionEdit = null; toast('No se encontró el entrenamiento'); render(); return; }
+  var date = $('#session-edit-date').value, hoursText = $('#session-edit-hours').value, minutesText = $('#session-edit-minutes').value;
+  var hours = Number(hoursText), minutes = Number(minutesText);
+  var validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && iso(parseISO(date)) === date;
+  if(!validDate){ toast('Elige una fecha válida'); return; }
+  if(hoursText.trim() === '' || minutesText.trim() === '' || !Number.isInteger(hours) || hours < 0 || hours > 999 || !Number.isInteger(minutes) || minutes < 0 || minutes > 59){
+    toast('Indica horas y minutos válidos'); return;
+  }
+  var updated = Object.assign({}, session, {date:date, durationMs:(hours * 60 + minutes) * 60000});
+  edit.saving = true; render();
+  Store.updateSession(updated).then(function(){
+    var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
+    if(index >= 0) S.sessions[index] = updated;
+    S.sessionEdit = null; render(); toast('Fecha y duración actualizadas');
+  }).catch(function(){
+    if(S.sessionEdit && S.sessionEdit.id === updated.id) S.sessionEdit.saving = false;
+    render();
+  });
+}
 function volumeText(volume){ return new Intl.NumberFormat('es-CL', {maximumFractionDigits:0}).format(Math.round(volume)); }
 function homeDashboard(){
   var start = new Date(), mondayOffset = (start.getDay() + 6) % 7;
@@ -1189,12 +1242,15 @@ function viewHist(){
     var body = s.entries.map(function(e){
       return '<div><strong>' + esc(exName(e.exId)) + '</strong><div class="small muted">' + esc(setsText(e.sets, true)) + '</div></div>';
     }).join('');
+    var editing = S.sessionEdit && S.sessionEdit.id === s.id;
+    var duration = Number(s.durationMs) > 0 ? humanDuration(s.durationMs) : 'Sin duración';
     return '<section class="card"><div class="card-head"><div><h3>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</h3>' +
-      '<p class="small muted">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series' + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</p></div></div>' +
+      '<p class="small muted">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</p></div></div>' +
       '<div class="list" style="gap:8px">' + body + '</div>' +
-      (S.confirm === 'sess:' + s.id
-        ? '<button class="btn danger sm" data-act="del-sess-ok" data-id="' + esc(s.id) + '">Confirmar: borrar entreno</button>'
-        : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</section>';
+      (editing ? sessionEditorHtml(s) : '<div class="row"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar fecha y duración</button>' +
+        (S.confirm === 'sess:' + s.id
+          ? '<button class="btn danger sm" data-act="del-sess-ok" data-id="' + esc(s.id) + '">Confirmar: borrar entreno</button>'
+          : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</div>') + '</section>';
   }).join('') + '</div>';
 }
 function viewSet(){
@@ -1503,7 +1559,17 @@ function onClick(ev){
     case 'archive': S.confirm = 'arch:' + t.dataset.id; render(); break;
     case 'archive-ok': S.profile.exercises[t.dataset.id].archived = true; S.draft.entries = S.draft.entries.filter(function(en){ return en.exId !== t.dataset.id; }); saveDraft(); Store.saveProfile(); S.confirm = null; S.openEx = null; render(); break;
     case 'del-sess': S.confirm = 'sess:' + t.dataset.id; render(); break;
-    case 'del-sess-ok': S.sessions = S.sessions.filter(function(s){ return s.id !== t.dataset.id; }); Store.deleteSessions([t.dataset.id]); S.confirm = null; render(); toast('Entreno borrado'); break;
+    case 'del-sess-ok': S.sessions = S.sessions.filter(function(s){ return s.id !== t.dataset.id; }); Store.deleteSessions([t.dataset.id]); if(S.sessionEdit && S.sessionEdit.id === t.dataset.id) S.sessionEdit = null; S.confirm = null; render(); toast('Entreno borrado'); break;
+    case 'session-edit':
+      var editSession = S.sessions.find(function(s){ return s.id === t.dataset.id; });
+      if(editSession){
+        var editDuration = Math.max(0, Math.floor((Number(editSession.durationMs) || 0) / 60000));
+        S.sessionEdit = {id:editSession.id, date:editSession.date, hours:Math.floor(editDuration / 60), minutes:editDuration % 60, saving:false};
+        S.confirm = null; render();
+      }
+      break;
+    case 'session-edit-save': saveSessionEdit(); break;
+    case 'session-edit-cancel': S.sessionEdit = null; render(); break;
     case 'set-mode': st.mode = t.dataset.mode; Store.saveProfile(); render(); break;
     case 'tr-minus': st.targetRir = Math.max(0, st.targetRir - 1); Store.saveProfile(); render(); break;
     case 'tr-plus': st.targetRir = Math.min(4, st.targetRir + 1); Store.saveProfile(); render(); break;
