@@ -32,6 +32,11 @@ var LIB = [
   {name:'Extensión de tríceps en polea', sets:3, min:10, max:15, inc:2.5},
   {name:'Elevaciones laterales', sets:3, min:12, max:20, inc:1}
 ];
+var MUSCLES = {
+  unassigned:'Sin asignar', chest:'Pecho', back:'Espalda', shoulders:'Hombros',
+  biceps:'Bíceps', triceps:'Tríceps', quads:'Cuádriceps', hamstrings:'Isquiotibiales',
+  glutes:'Glúteos', calves:'Pantorrillas', core:'Core', other:'Otro'
+};
 
 /* ---------- estado ---------- */
 var DK = 'sobrecarga:draft:v1';
@@ -50,6 +55,13 @@ function normProfile(p){
   d.routines = p.routines || {};
   d.programs = p.programs || {};
   return d;
+}
+function exerciseLoadStep(ex){ return Number(ex.loadStep) > 0 ? Number(ex.loadStep) : (Number(ex.inc) > 0 ? Number(ex.inc) : 2.5); }
+function muscleId(ex){ return Object.prototype.hasOwnProperty.call(MUSCLES, ex.muscle) ? ex.muscle : 'unassigned'; }
+function muscleOptions(selected){
+  return Object.keys(MUSCLES).map(function(id){
+    return '<option value="' + id + '"' + (muscleId({muscle:selected}) === id ? ' selected' : '') + '>' + MUSCLES[id] + '</option>';
+  }).join('');
 }
 function blankDraft(){ return {date:null, startedAt:null, routineId:null, entries:[]}; }
 function loadDraft(){
@@ -246,10 +258,8 @@ var Store = {
 /* ---------- motor de sobrecarga progresiva ---------- */
 function exById(id){ return S.profile.exercises[id]; }
 function exName(id){ var e = exById(id); return e ? e.name : 'Ejercicio eliminado'; }
-function effTxt(rir, settings){
-  if(rir === null || rir === undefined) return '';
-  return settings.mode === 'rpe' ? 'RPE ' + fmt1(10 - rir) : 'RIR ' + fmt1(rir);
-}
+var Engine = window.SobrecargaEngine;
+var effTxt = Engine.effTxt;
 var SET_TYPES = {
   normal:'Normal', warmup:'Aproximación', backoff:'Back-off',
   dropset:'Drop set', restpause:'Rest-pause'
@@ -273,15 +283,8 @@ function rowComplete(row, unilateral){
 }
 /* ejercicio efectivo: ajustes base + ajustes propios de la rutina (solo en esa rutina) */
 function effEx(en){ return Object.assign({}, exById(en.exId), en.cfg || {}); }
-function effortTarget(ex, i, settings){
-  var e = ex.efforts;
-  return (e && e[i] !== undefined && e[i] !== null) ? e[i] : settings.targetRir;
-}
-function tgtText(ex, settings){
-  var list = []; for(var i=0;i<ex.sets;i++) list.push(effortTarget(ex, i, settings));
-  var same = list.every(function(v){ return v === list[0]; });
-  return same ? effTxt(list[0], settings) : list.map(function(value){ return effTxt(value, settings); }).join(' / ');
-}
+var effortTarget = Engine.effortTarget;
+var tgtText = Engine.targetText;
 function entriesFor(exId){
   return S.sessions.filter(function(s){ return s.entries.some(function(e){ return e.exId === exId; }); })
     .sort(function(a,b){ return a.date === b.date ? (a.ts||0)-(b.ts||0) : (a.date < b.date ? -1 : 1); })
@@ -293,115 +296,8 @@ function entriesFor(exId){
 }
 function mean(a){ return a.reduce(function(x,y){ return x+y; }, 0) / a.length; }
 
-function analyzeCore(ex, sets, prevSets, settings){
-  var tr = settings.targetRir;
-  var wk = sets.filter(function(s){ return countsForProgress(s) && s.w > 0 && s.r > 0; });
-  if(!wk.length) return null;
-  var W = Math.max.apply(null, wk.map(function(s){ return s.w; }));
-  var at = wk.filter(function(s){ return s.w === W; }).slice(0, ex.sets);
-  var reps = at.map(function(s){ return s.r; });
-  var rirs = at.map(function(s){ return s.rir; }).filter(function(v){ return v !== null && v !== undefined; });
-  var avgRir = rirs.length ? mean(rirs) : null;
-  /* diferencia entre el esfuerzo real y el objetivo de cada serie (positivo = te sobró más de lo pedido) */
-  var diffs = [];
-  at.forEach(function(s, i){ if(s.rir !== null && s.rir !== undefined) diffs.push(s.rir - effortTarget(ex, i, settings)); });
-  var avgDiff = diffs.length ? mean(diffs) : null;
-  var n = at.length, need = ex.sets, inc = ex.inc;
-  var avgReps = mean(reps);
-  var allTop = n >= need && reps.every(function(r){ return r >= ex.max; });
-  var okEffort = avgDiff === null || avgDiff >= -1;
-  var easy = avgDiff !== null && avgDiff >= 2 && n >= need && reps.every(function(r){ return r >= ex.min; });
-  var span = Math.max(1, ex.max - ex.min);
-  var progress = 0;
-  for(var i=0;i<need;i++){ progress += Math.min(1, Math.max(0, ((reps[i] !== undefined ? reps[i] : ex.min) - ex.min) / span)); }
-  progress /= need;
-  var repsFalt = 0;
-  for(var j=0;j<need;j++){ if(reps[j] !== undefined) repsFalt += Math.max(0, ex.max - reps[j]); }
-  var serFalt = Math.max(0, need - n);
-  var a = {W:W, nextW:W, reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[]};
-  var fill = function(v){ return Array.apply(null, Array(need)).map(function(){ return v; }); };
-
-  if((allTop && okEffort) || easy){
-    a.status = 'sube'; a.nextW = W + inc; a.target = fill(ex.min); a.progress = 1;
-    a.headline = 'Sube a ' + fmt(a.nextW) + ' kg';
-    a.detail = allTop
-      ? 'Cumpliste ' + need + '×' + ex.max + (avgRir !== null ? ' con ' + effTxt(avgRir, settings) : '') + '. Próximo entreno: ' + fmt(a.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.'
-      : 'Te sobraron repeticiones (' + effTxt(avgRir, settings) + ' frente a ' + tgtText(ex, settings) + '). Sube a ' + fmt(a.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.';
-  } else if(allTop){
-    a.status = 'confirma'; a.target = fill(ex.max); a.progress = 1;
-    a.headline = 'Repite ' + fmt(W) + ' kg';
-    a.detail = 'Llegaste a ' + ex.max + ' reps pero más al límite de lo pedido (' + effTxt(avgRir, settings) + '). Repite con ' + tgtText(ex, settings) + ' para confirmar la subida.';
-  } else if(avgReps < ex.min){
-    var prevLow = false;
-    if(prevSets){
-      var pw = prevSets.filter(function(s){ return countsForProgress(s) && s.w > 0 && s.r > 0; });
-      if(pw.length){
-        var pW = Math.max.apply(null, pw.map(function(s){ return s.w; }));
-        var pr = pw.filter(function(s){ return s.w === pW; }).map(function(s){ return s.r; });
-        prevLow = pW === W && mean(pr) < ex.min;
-      }
-    }
-    if(prevLow){
-      var dw = Math.max(inc, roundTo(W * 0.9, inc));
-      if(dw >= W) dw = Math.max(0, W - inc);
-      a.status = 'bajar'; a.nextW = dw; a.target = fill(ex.min);
-      a.headline = 'Baja a ' + fmt(dw) + ' kg';
-      a.detail = 'Dos entrenos seguidos bajo ' + ex.min + ' reps con ' + fmt(W) + ' kg. Baja un poco y vuelve a construir desde ' + ex.min + ' reps.';
-    } else {
-      a.status = 'mantener'; a.target = fill(ex.min);
-      a.headline = 'Mantén ' + fmt(W) + ' kg';
-      a.detail = 'Promedio de ' + fmt1(avgReps) + ' reps, bajo el mínimo de ' + ex.min + '. Busca ' + ex.min + ' reps en todas las series antes de subir.';
-    }
-  } else {
-    a.status = 'reps';
-    var last = reps[reps.length-1];
-    for(var k=0;k<need;k++){
-      var r = reps[k] !== undefined ? reps[k] : last;
-      a.target.push(okEffort ? Math.min(ex.max, r + 1) : r);
-    }
-    a.headline = fmt(W) + ' kg, suma reps';
-    a.detail = 'Objetivo: ' + a.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + fmt(W + inc) + ' kg.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir, settings) + ' frente a ' + tgtText(ex, settings) + '), así que mantén las reps.');
-  }
-  return a;
-}
-function completeUnilateralSets(sets){
-  var pairs = {};
-  sets.forEach(function(s){
-    if(s.pair === undefined || (s.side !== 'right' && s.side !== 'left')) return;
-    var key = String(s.pair);
-    if(!pairs[key]) pairs[key] = {};
-    pairs[key][s.side] = s;
-  });
-  var complete = {};
-  Object.keys(pairs).forEach(function(key){
-    var p = pairs[key], right = p.right, left = p.left;
-    if(right && left && countsForProgress(right) && countsForProgress(left) &&
-      right.w > 0 && right.r > 0 && left.w > 0 && left.r > 0) complete[key] = true;
-  });
-  return sets.filter(function(s){ return complete[String(s.pair)]; });
-}
-function analyze(ex, sets, prevSets, settings){
-  if(!ex.unilateral) return analyzeCore(ex, sets, prevSets, settings);
-  var current = completeUnilateralSets(sets);
-  if(!current.length) return null;
-  var previous = prevSets ? completeUnilateralSets(prevSets) : null;
-  var coreEx = Object.assign({}, ex, {unilateral:false});
-  var right = analyzeCore(coreEx, current.filter(function(s){ return s.side === 'right'; }), previous && previous.filter(function(s){ return s.side === 'right'; }), settings);
-  var left = analyzeCore(coreEx, current.filter(function(s){ return s.side === 'left'; }), previous && previous.filter(function(s){ return s.side === 'left'; }), settings);
-  if(!right || !left) return null;
-  var rank = {sube:0, reps:1, confirma:2, mantener:3, bajar:4};
-  var weaker = rank[right.status] >= rank[left.status] ? right : left;
-  var sideTarget = function(name, result){ return name + ': ' + fmt(result.nextW) + ' kg × ' + result.target.join(', ') + ' reps'; };
-  return Object.assign({}, weaker, {
-    W:Math.min(right.W, left.W),
-    nextW:Math.min(right.nextW, left.nextW),
-    progress:Math.min(right.progress, left.progress),
-    sidePlans:{right:right, left:left},
-    displayTarget:sideTarget('Der.', right) + ' · ' + sideTarget('Izq.', left),
-    headline:(weaker === right ? 'Derecho: ' : 'Izquierdo: ') + weaker.headline,
-    detail:'Derecho: ' + right.detail + ' Izquierdo: ' + left.detail
-  });
-}
+var analyzeCore = Engine.analyzeCore;
+var analyze = Engine.analyze;
 function planFor(ex){
   var hist = entriesFor(ex.id);
   if(!hist.length) return {status:'nuevo'};
@@ -451,7 +347,9 @@ function validBackup(data){
     return (item.warmupMode === undefined || ['auto','manual'].includes(item.warmupMode)) &&
       (item.warmupStep === undefined || (validNumber(item.warmupStep) && item.warmupStep > 0)) &&
       (item.warmupPercents === undefined || (Array.isArray(item.warmupPercents) &&
-        item.warmupPercents.every(function(percent){ return validNumber(percent) && percent >= 1 && percent <= 100; })));
+        item.warmupPercents.every(function(percent){ return validNumber(percent) && percent >= 1 && percent <= 100; }))) &&
+      (item.loadStep === undefined || (validNumber(item.loadStep) && item.loadStep > 0)) &&
+      (item.muscle === undefined || Object.prototype.hasOwnProperty.call(MUSCLES, item.muscle));
   };
   var exerciseIds = Object.keys(profile.exercises || {});
   for(var i=0;i<exerciseIds.length;i++){
@@ -563,12 +461,13 @@ function barHtml(a, ex){
       var plan = a.sidePlans[side], name = side === 'right' ? 'Derecho' : 'Izquierdo';
       var p = Math.round(Math.min(1, plan.progress) * 100);
       return '<div class="barwrap"><div class="small muted">' + name + '</div><div class="bar" role="img" aria-label="Avance del lado ' + name.toLowerCase() + ': ' + p + '%"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + p + '%"></i></div>' +
-        '<div class="barlab"><span>' + fmt(plan.W) + ' kg</span><span>' + fmt(plan.W + ex.inc) + ' kg</span></div></div>';
+        '<div class="barlab"><span>' + fmt(plan.W) + ' kg</span><span>' + fmt(plan.progressTarget || plan.W + ex.inc) + ' kg</span></div></div>';
     }).join('') + '</div>';
   }
   var p = Math.round(Math.min(1, a.progress) * 100);
-  return '<div class="barwrap"><div class="bar" role="img" aria-label="Avance hacia ' + fmt(a.W + ex.inc) + ' kg: ' + p + '%"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + p + '%"></i></div>' +
-    '<div class="barlab"><span>' + fmt(a.W) + ' kg</span><span>' + fmt(a.W + ex.inc) + ' kg</span></div></div>';
+  var targetWeight = a.progressTarget || a.W + ex.inc;
+  return '<div class="barwrap"><div class="bar" role="img" aria-label="Avance hacia ' + fmt(targetWeight) + ' kg: ' + p + '%"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + p + '%"></i></div>' +
+    '<div class="barlab"><span>' + fmt(a.W) + ' kg</span><span>' + fmt(targetWeight) + ' kg</span></div></div>';
 }
 
 /* ---------- borrador del entreno de hoy ---------- */
@@ -832,7 +731,7 @@ function cfgPanel(en, ei){
   for(var k=0;k<ex.sets;k++){
     ef += '<div class="field"><label class="lab" for="hef-' + ei + '-' + k + '">Serie ' + (k+1) + '</label><input id="hef-' + ei + '-' + k + '" class="in" inputmode="decimal" data-hef="1" data-ei="' + ei + '" data-k="' + k + '" value="' + esc(effInputVal(effortTarget(ex, k, S.profile.settings))) + '"></div>';
   }
-  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) +
+  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('loadStep', 'Peso disponible cada (kg)', exerciseLoadStep(ex)) +
     '<div class="field"><label class="lab" for="hc-warmupMode-' + ei + '">Peso de aproximación</label><select id="hc-warmupMode-' + ei + '" class="txt" data-hc="warmupMode" data-ei="' + ei + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
     f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
     '<div class="field"><label class="lab" for="hc-unilateral-' + ei + '">Ejecución</label><select id="hc-unilateral-' + ei + '" class="txt" data-hc="unilateral" data-ei="' + ei + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
@@ -841,18 +740,19 @@ function cfgPanel(en, ei){
     }).join('') + '</div></div>' : '') +
     '<div class="field"><span class="lab">Esfuerzo objetivo por serie (' + lab + ')</span><div class="efforts">' + ef + '</div></div>' +
     '<p class="small muted">' + (rt ? 'Estos ajustes solo cambian el entreno de hoy. Al terminar puedes actualizar «' + esc(rt.name) + '» o conservar su configuración.' : 'Se guardan en este ejercicio y valen para tus próximos entrenos.') +
-    ' El redondeo es hacia abajo y este incremento es independiente del salto de progresión.</p></div>';
+    ' El redondeo de aproximaciones es hacia abajo; el peso disponible se usa para ajustar las recomendaciones de progresión.</p></div>';
 }
 function applyEntryCfg(ei, key, v, k){
   var en = S.draft.entries[ei]; if(!en) return;
   var ex = effEx(en), tr = S.profile.settings.targetRir;
-  var c = Object.assign({sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, efforts:(ex.efforts || []).slice(), unilateral:!!ex.unilateral}, warmupSettings(ex));
+  var c = Object.assign({sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), efforts:(ex.efforts || []).slice(), unilateral:!!ex.unilateral}, warmupSettings(ex));
   while(c.efforts.length < c.sets) c.efforts.push(c.efforts.length ? c.efforts[c.efforts.length-1] : tr);
   if(key === 'sets') c.sets = Math.min(10, Math.max(1, Math.round(v)));
   if(key === 'warmupSets') c.warmupSets = Math.min(10, Math.max(0, Math.round(v)));
   if(key === 'min'){ c.min = Math.min(50, Math.max(1, Math.round(v))); if(c.max <= c.min) c.max = c.min + 1; }
   if(key === 'max'){ c.max = Math.min(60, Math.max(2, Math.round(v))); if(c.min >= c.max) c.min = c.max - 1; }
   if(key === 'inc') c.inc = Math.min(25, Math.max(0.25, v));
+  if(key === 'loadStep') c.loadStep = Math.min(100, Math.max(0.05, v));
   if(key === 'warmupStep') c.warmupStep = Math.min(100, Math.max(0.05, v));
   if(key === 'warmupMode') c.warmupMode = v;
   if(key === 'unilateral') c.unilateral = !!v;
@@ -1028,6 +928,25 @@ function entryEffectiveSets(entry){
   });
   return Object.keys(pairs).filter(function(key){ return pairs[key].right && pairs[key].left; }).length;
 }
+function weeklyMuscleSummaryHtml(week){
+  var counts = {};
+  week.forEach(function(session){
+    session.entries.forEach(function(entry){
+      var count = entryEffectiveSets(entry);
+      if(!count) return;
+      var exercise = exById(entry.exId), id = muscleId(exercise || {});
+      counts[id] = (counts[id] || 0) + count;
+    });
+  });
+  var groups = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || MUSCLES[a].localeCompare(MUSCLES[b], 'es'); });
+  var content = groups.length
+    ? '<div class="weekly-muscle-list">' + groups.map(function(id){
+        return '<div class="weekly-muscle-row"><span>' + esc(MUSCLES[id]) + '</span><strong>' + counts[id] + '</strong></div>';
+      }).join('') + '</div>'
+    : '<p class="home-weekly-note">Aún no hay series efectivas registradas esta semana.</p>';
+  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><p>Cuenta series normales completas; no incluye aproximaciones ni técnicas especiales.</p></div>' +
+    content + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
+}
 function suggestHtml(){
   var ids = Object.keys(S.profile.exercises).filter(function(k){
     var e = S.profile.exercises[k]; return !e.archived && lastDate(k) && !S.draft.entries.some(function(x){ return x.exId === k; });
@@ -1147,7 +1066,8 @@ function homeDashboard(){
     '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
-    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' kg</strong><span>volumen · sin aprox.</span></div></div>';
+    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' kg</strong><span>volumen · sin aprox.</span></div></div>' +
+    weeklyMuscleSummaryHtml(week);
   if(latest){
     var latestStats = sessionStats(latest);
     var exercises = latest.entries.slice(0, 6).map(function(entry){
@@ -1203,7 +1123,7 @@ function effInputVal(rir){ return fmt(S.profile.settings.mode === 'rpe' ? 10 - r
 function newItem(exId){
   var ex = exById(exId), ef = [];
   for(var i=0;i<ex.sets;i++) ef.push(S.profile.settings.targetRir);
-  return Object.assign({exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, efforts:ef, unilateral:!!ex.unilateral}, warmupSettings(ex));
+  return Object.assign({exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), efforts:ef, unilateral:!!ex.unilateral}, warmupSettings(ex));
 }
 function viewRut(){
   if(S.pedit) return programEditor();
@@ -1289,6 +1209,7 @@ function routineLibraryDetail(routine){
 }
 function routineItemsForEdit(routine){
   return clone(routine.items).map(function(item){
+    item.loadStep = Number(item.loadStep) > 0 ? Number(item.loadStep) : exerciseLoadStep(exById(item.exId) || item);
     item.efforts = (item.efforts || []).slice();
     while(item.efforts.length < item.sets) item.efforts.push(item.efforts.length ? item.efforts[item.efforts.length-1] : S.profile.settings.targetRir);
     item.efforts = item.efforts.slice(0, item.sets);
@@ -1325,7 +1246,7 @@ function routineEditor(){
       '<button class="mini" data-act="rut-up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Subir ejercicio">↑</button>' +
       '<button class="mini" data-act="rut-down" data-i="' + i + '"' + (i === r.items.length-1 ? ' disabled' : '') + ' aria-label="Bajar ejercicio">↓</button>' +
       '<button class="mini" data-act="rut-rm-item" data-i="' + i + '" aria-label="Quitar ejercicio">×</button></div></div>' +
-      '<div class="fields">' + f('sets', 'Series de trabajo', it.sets) + f('warmupSets', 'Series de aproximación', Number(it.warmupSets) || 0) + f('min', 'Reps mín.', it.min) + f('max', 'Reps máx.', it.max) + f('inc', 'Salto de progresión (kg)', it.inc) +
+      '<div class="fields">' + f('sets', 'Series de trabajo', it.sets) + f('warmupSets', 'Series de aproximación', Number(it.warmupSets) || 0) + f('min', 'Reps mín.', it.min) + f('max', 'Reps máx.', it.max) + f('inc', 'Salto de progresión (kg)', it.inc) + f('loadStep', 'Peso disponible cada (kg)', Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId) || it)) +
       '<div class="field"><label class="lab" for="it-warmupMode-' + i + '">Peso de aproximación</label><select id="it-warmupMode-' + i + '" class="txt" data-it="warmupMode" data-i="' + i + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
       f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="it-unilateral-' + i + '">Ejecución</label><select id="it-unilateral-' + i + '" class="txt" data-it="unilateral" data-i="' + i + '"><option value="false"' + (it.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (it.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
@@ -1394,9 +1315,9 @@ function exDetail(ex){
     '<p class="muted small">Peso × (1 + (reps + RIR) ÷ 30), ' + (ex.unilateral ? 'mejor estimado del lado más débil por entreno.' : 'mejor serie de cada entreno.') + '</p></div>' +
     (rows ? '<div class="scroll-x"><table class="table"><thead><tr><th>Fecha</th><th>Series</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
-      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
+      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('loadStep', 'Peso disponible cada (kg)', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-      '</div>' + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
+      '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></div>' + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
         return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-cfg="warmupPercent" data-id="' + esc(ex.id) + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
       }).join('') + '</div></div>' : '') + '<div class="fields">' +
       '<div class="field"><label class="lab" for="cfg-unilateral">Ejecución</label><select id="cfg-unilateral" class="txt" data-cfg="unilateral" data-id="' + esc(ex.id) + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div></div>' +
@@ -1584,7 +1505,7 @@ function startRoutine(id){
   r.items.forEach(function(it, index){
     if(!exById(it.exId)) return;
     if(exById(it.exId).archived){ skipped = true; return; }
-    var cfg = Object.assign({sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral}, warmupSettings(it));
+    var cfg = Object.assign({sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, loadStep:Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId)), efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral}, warmupSettings(it));
     while(cfg.efforts.length < cfg.sets) cfg.efforts.push(cfg.efforts.length ? cfg.efforts[cfg.efforts.length-1] : S.profile.settings.targetRir);
     cfg.efforts = cfg.efforts.slice(0, cfg.sets);
     var p = planFor(Object.assign({}, exById(it.exId), cfg)), rows = [];
@@ -1961,6 +1882,7 @@ function onChange(ev){
     if(k === 'min'){ it.min = Math.min(50, Math.max(1, Math.round(v0))); if(it.max <= it.min) it.max = it.min + 1; }
     if(k === 'max'){ it.max = Math.min(60, Math.max(2, Math.round(v0))); if(it.min >= it.max) it.min = it.max - 1; }
     if(k === 'inc') it.inc = Math.min(25, Math.max(0.25, v0));
+    if(k === 'loadStep') it.loadStep = Math.min(100, Math.max(0.05, v0));
     render(); return;
   }
   if(S.redit && t.dataset.ef !== undefined){
@@ -1985,12 +1907,17 @@ function onChange(ev){
     if(hadSideData) toast('En modo bilateral se usa el lado derecho; el detalle por lado se conserva durante este entreno.');
     return;
   }
+  if(key === 'muscle'){
+    if(!Object.prototype.hasOwnProperty.call(MUSCLES, t.value)){ render(); return; }
+    ex.muscle = t.value; Store.saveProfile(); render(); return;
+  }
   var v = num(t.value);
   if(v === null){ render(); return; }
   if(key === 'sets') ex.sets = Math.min(10, Math.max(1, Math.round(v)));
   if(key === 'min'){ ex.min = Math.min(50, Math.max(1, Math.round(v))); if(ex.max <= ex.min) ex.max = ex.min + 1; }
   if(key === 'max'){ ex.max = Math.min(60, Math.max(2, Math.round(v))); if(ex.min >= ex.max) ex.min = ex.max - 1; }
   if(key === 'inc') ex.inc = Math.min(25, Math.max(0.25, v));
+  if(key === 'loadStep') ex.loadStep = Math.min(100, Math.max(0.05, v));
   if(key === 'warmupStep') ex.warmupStep = Math.min(100, Math.max(0.05, v));
   if(key === 'warmupSets'){
     ex.warmupSets = Math.min(10, Math.max(0, Math.round(v)));
