@@ -48,6 +48,10 @@ conservan; si no configuras este valor, se usa el salto de progresión actual.
 Durante un entreno, las series normales muestran como referencia el peso y las
 repeticiones de la serie correspondiente de la última sesión. Si quitas una
 serie o un ejercicio por error, usa **Deshacer** en el aviso que aparece.
+También puedes mover ejercicios arriba o abajo durante el entreno; el nuevo
+orden se guarda en el borrador actual. Si empezaste desde una rutina, al
+terminar podrás elegir si guardas el orden y los ajustes en ella o si la dejas
+sin cambios.
 
 ## Tipos de serie
 
