@@ -322,16 +322,18 @@ details.how ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:col
   transition:opacity .2s;
 }
 .toast[hidden]{display:none!important}
-.toast-action{margin-left:14px;border:0;background:transparent;color:var(--accent);font:700 15px/1 var(--font-body);text-transform:uppercase}
+.toast-action{margin-left:14px;border:0;background:transparent;color:var(--bg);font:700 15px/1 var(--font-body);text-decoration:underline;text-transform:uppercase}
 @media (prefers-reduced-motion: reduce){.toast{transition:none}}
+@media (max-width:520px){
+  .session-set-edit{grid-template-columns:minmax(55px,.8fr) repeat(3,minmax(45px,1fr))}
+  .session-set-edit>strong{grid-column:1/-1;padding:4px 0 0}
+  .session-set-type{grid-column:1/-1}
+}
 @media (max-width:380px){
   .brand{font-size:22px}
   .head-row h2{font-size:30px}
   .workout-meta{gap:6px}
   .home-dashboard{padding:14px;gap:14px}
-  .session-set-edit{grid-template-columns:minmax(55px,.8fr) repeat(3,minmax(45px,1fr));}
-  .session-set-edit>strong{grid-column:1/-1;padding:4px 0 0}
-  .session-set-type{grid-column:1/-1}
   .home-heading{align-items:flex-start;flex-direction:column}
   .home-week{text-align:left}
   .latest-stats strong{font-size:15px}

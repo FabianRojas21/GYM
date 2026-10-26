@@ -1030,7 +1030,22 @@ function saveSessionEdit(){
     });
   });
   if(!validSets){ toast('Cada serie debe tener peso y reps válidos; el esfuerzo debe estar entre 0 y 10'); return; }
-  var updated = Object.assign({}, edit.session, {date:date, durationMs:(hours * 60 + minutes) * 60000});
+  var durationMs = (hours * 60 + minutes) * 60000;
+  var updated = Object.assign({}, edit.session, {date:date, durationMs:durationMs});
+  var shiftToDate = function(timestamp){
+    var original = new Date(timestamp), shifted = parseISO(date);
+    shifted.setHours(original.getHours(), original.getMinutes(), original.getSeconds(), original.getMilliseconds());
+    return shifted.getTime();
+  };
+  if(Number.isFinite(edit.session.startedAt)){
+    updated.startedAt = shiftToDate(edit.session.startedAt);
+    updated.finishedAt = updated.startedAt + durationMs;
+  } else if(Number.isFinite(edit.session.finishedAt)){
+    updated.finishedAt = shiftToDate(edit.session.finishedAt);
+    updated.startedAt = updated.finishedAt - durationMs;
+  }
+  if(Number.isFinite(updated.finishedAt)) updated.ts = updated.finishedAt;
+  else if(Number.isFinite(edit.session.ts)) updated.ts = shiftToDate(edit.session.ts);
   edit.saving = true; render();
   Store.updateSession(updated).then(function(){
     var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
