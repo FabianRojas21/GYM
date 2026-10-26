@@ -90,3 +90,12 @@ aproximaciones se agregan al principio y no cuentan para la progresión. Si
 cambias la configuración de una rutina mientras entrenas con ella, al terminar
 puedes guardar esos cambios en la rutina o terminar conservando la configuración
 original.
+
+Las aproximaciones pueden calcularse automáticamente desde el peso de la
+primera serie de trabajo o anotarse manualmente. El modo automático propone
+50 % para la primera serie y 80 % para la segunda; las siguientes usan 90 %,
+95 % y aumentos graduales. Puedes ajustar el porcentaje de cada serie y el
+incremento de redondeo por separado del salto de progresión. Los pesos se
+redondean hacia abajo al múltiplo de ese incremento (por ejemplo, 80 % de
+26 kg con incrementos de 2 kg resulta en 20 kg). Si todavía no registraste un
+peso de trabajo, la aproximación queda vacía hasta que lo indiques.
