@@ -1,4 +1,4 @@
-  # GYM
+# GYM
 
 App de gimnasio para PC y móvil.
 
@@ -14,6 +14,10 @@ abre esta carpeta en VS Code, instala la extensión Live Server y elige
 
 La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
 con accesos a tus rutinas y a los ejercicios que puedes retomar.
+
+En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
+del entrenamiento y ajustar el tiempo registrado. La corrección de la fecha
+también actualiza el resumen de la semana.
 
 La **Biblioteca** organiza el contenido en **Programas**, **Rutinas** y
 **Ejercicios**. Un programa agrupa rutinas; al crear o editar una rutina puedes
