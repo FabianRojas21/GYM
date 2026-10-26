@@ -707,8 +707,12 @@ function entryHtml(en, ei){
   var head = ex.unilateral
     ? '<div class="set head unilateral-head"><span>#</span><span class="side-type-head">Lado · kg · reps · ' + effLab + '</span></div>'
     : '<div class="set head"><span>#</span><span>kg</span><span>Reps</span><span>' + effLab + '</span><span></span><span class="set-type-head">Tipo de serie</span></div>';
+  var orderControls = S.draft.entries.length > 1
+    ? '<div class="workout-card-tools"><button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="-1"' + (ei === 0 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' arriba" title="Mover arriba">↑</button>' +
+      '<button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="1"' + (ei === S.draft.entries.length - 1 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' abajo" title="Mover abajo">↓</button></div>'
+    : '';
   return '<section class="card" data-ei="' + ei + '">' +
-    '<div class="card-head"><h3>' + esc(ex.name) + '</h3><button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div>' +
+    '<div class="card-head workout-card-head"><h3>' + esc(ex.name) + '</h3><div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
     goalHtml(ex) +
     '<div class="sets">' + head + rows + '</div>' +
     '<p class="hint">' + (ex.unilateral
@@ -1106,7 +1110,7 @@ function viewHoy(){
   if(!S.draft.entries.length && !S.picker) out += suggestHtml();
   if(S.draft.entries.length){
     if(S.confirm === 'finish-routine'){
-      out += '<section class="card"><p class="sec-title">¿Actualizar la rutina?</p><p class="small">Cambiaste la configuración de este entreno. Puedes guardar esos ajustes para la próxima vez o dejar la rutina como estaba antes de entrenar.</p>' +
+      out += '<section class="card"><p class="sec-title">¿Actualizar la rutina?</p><p class="small">Cambiaste el orden o la configuración de este entreno. Puedes guardar esos cambios para la próxima vez o dejar la rutina como estaba antes de entrenar.</p>' +
         '<div class="row"><button class="btn" data-act="finish-update"' + (done ? '' : ' disabled') + '>Actualizar rutina y terminar</button><button class="btn ghost" data-act="finish-keep"' + (done ? '' : ' disabled') + '>Terminar sin cambiarla</button><button class="btn ghost" data-act="finish-cancel">Volver al entreno</button></div></section>';
     } else {
       out += '<div class="row"><button class="btn" id="finish" data-act="finish"' + (done ? '' : ' disabled') + '>Terminar entreno</button>' +
@@ -1545,17 +1549,32 @@ function saveProgram(){
 }
 function routineNeedsUpdate(){
   if(!S.draft.routineId) return false;
-  return S.draft.entries.some(function(entry){
+  var routineEntries = S.draft.entries.filter(function(entry){
+    return Number.isInteger(entry.routineItemIndex);
+  });
+  var routineIndexes = routineEntries.map(function(entry){ return entry.routineItemIndex; });
+  var sortedIndexes = routineIndexes.slice().sort(function(a,b){ return a-b; });
+  var orderChanged = routineIndexes.some(function(index, position){ return index !== sortedIndexes[position]; });
+  return orderChanged || S.draft.entries.some(function(entry){
     return entry.cfg && entry.routineCfg && JSON.stringify(entry.cfg) !== JSON.stringify(entry.routineCfg);
   });
 }
 function updateRoutineFromDraft(){
   var routine = S.profile.routines[S.draft.routineId];
   if(!routine) return false;
+  var slots = [], orderedItems = [], seen = {};
   S.draft.entries.forEach(function(entry){
     if(!entry.cfg || entry.routineItemIndex === undefined) return;
     var item = routine.items[entry.routineItemIndex];
-    if(item && item.exId === entry.exId) Object.assign(item, clone(entry.cfg));
+    if(item && item.exId === entry.exId && !seen[entry.routineItemIndex]){
+      Object.assign(item, clone(entry.cfg));
+      seen[entry.routineItemIndex] = true;
+      slots.push(entry.routineItemIndex);
+      orderedItems.push(item);
+    }
+  });
+  slots.sort(function(a,b){ return a-b; }).forEach(function(slot, index){
+    routine.items[slot] = orderedItems[index];
   });
   Store.saveProfile();
   return true;
@@ -1643,6 +1662,12 @@ function onClick(ev){
       break;
     case 'rut-del': S.confirm = 'delr:' + t.dataset.id; render(); break;
     case 'rut-del-ok': delete S.profile.routines[t.dataset.id]; S.selectedRoutine = null; Store.saveProfile(); S.confirm = null; render(); toast('Rutina borrada'); break;
+    case 'move-exercise':
+      var moveFrom = ei, moveTo = ei + Number(t.dataset.direction);
+      if(!Number.isInteger(moveTo) || moveTo < 0 || moveTo >= S.draft.entries.length) break;
+      var movedEntry = S.draft.entries.splice(moveFrom, 1)[0];
+      S.draft.entries.splice(moveTo, 0, movedEntry);
+      saveDraft(); render(); break;
     case 'rm-ex':
       var removedEntry = S.draft.entries[ei], entryIndex = ei, draftAtRemoval = S.draft;
       if(!removedEntry) break;
