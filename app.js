@@ -91,15 +91,32 @@ function saveRestEnd(){
 function startRest(seconds){
   S.restEndsAt = Date.now() + seconds * 1000;
   saveRestEnd();
+  refreshRestTimerSection();
+}
+function restTimerHtml(){
+  if(!S.draft.entries.length) return '';
+  var restSeconds = Number(S.profile.settings.restSeconds) || 90;
+  return '<section class="rest-timer" id="rest-timer" aria-live="polite"><div><span class="lab">Descanso</span><strong class="num" id="rest-clock">' +
+    (S.restEndsAt ? '00:00' : 'Listo') + '</strong></div><div class="row">' +
+    '<button class="btn ghost sm" data-act="rest-start">Iniciar ' + Math.floor(restSeconds / 60) + ':' + String(restSeconds % 60).padStart(2, '0') + '</button>' +
+    (S.restEndsAt ? '<button class="btn ghost sm" data-act="rest-add">+30 s</button><button class="btn ghost sm" data-act="rest-stop">Detener</button>' : '') +
+    '</div></section>';
+}
+function refreshRestTimerSection(){
+  var el = $('#rest-timer');
+  if(!el) return;
+  var html = restTimerHtml();
+  if(html) el.outerHTML = html;
+  else el.remove();
   updateRestTimer();
 }
 function updateRestTimer(){
   var el = $('#rest-clock');
-  if(!S.restEndsAt) return;
+  if(!S.restEndsAt){ if(el) el.textContent = 'Listo'; return; }
   var remaining = S.restEndsAt - Date.now();
   if(remaining <= 0){
     S.restEndsAt = null; saveRestEnd();
-    if(S.ready) render();
+    refreshRestTimerSection();
     toast('Descanso terminado');
     return;
   }
@@ -659,7 +676,7 @@ function entryHtml(en, ei){
     ensureRowMode(r, ex.unilateral);
     var type = setType(r);
     var wi = workIndex;
-    if(type !== 'warmup') workIndex++;
+    if(type === 'normal') workIndex++;
     var effPh = type === 'normal' ? fmt(mode === 'rpe' ? 10 - effortTarget(ex, wi) : effortTarget(ex, wi)) : '';
     var tgt = type === 'normal' && p.target && p.target[wi] !== undefined ? String(p.target[wi]) : 'reps';
     var options = Object.keys(SET_TYPES).map(function(key){
@@ -824,7 +841,7 @@ function savedHtml(){
           return sides.some(function(set){ return set.side === 'right'; }) && sides.some(function(set){ return set.side === 'left'; });
         }).length
       : entry.sets.filter(function(set){ return countsForProgress(set) && set.w > 0 && set.r > 0; }).length;
-    var reps = entry.sets.reduce(function(total, set){ return total + set.r; }, 0);
+    var reps = entry.sets.reduce(function(total, set){ return total + (setType(set) !== 'warmup' ? set.r : 0); }, 0);
     return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' +
       effective + ' serie' + (effective === 1 ? '' : 's') + (effective === 1 ? ' efectiva' : ' efectivas') + (entry.unilateral ? ' · por lado' : '') +
       ' · ' + reps + ' reps registradas</div><div class="small">' + esc(setsText(entry.sets, true)) + '</div></div></div>';
@@ -839,7 +856,7 @@ function savedHtml(){
     '<div class="summary-stats"><div><strong>' + formatDuration(session.durationMs || 0) + '</strong><span>Duración</span></div>' +
       '<div><strong>' + session.entries.length + '</strong><span>Ejercicios</span></div>' +
       '<div><strong>' + stats.effectiveSets + '</strong><span>Series efectivas</span></div>' +
-      '<div><strong>' + stats.reps + '</strong><span>Reps registradas</span></div>' +
+      '<div><strong>' + stats.reps + '</strong><span>Reps sin aproximaciones</span></div>' +
       '<div><strong>' + fmt(stats.volume) + ' kg</strong><span>Volumen sin aprox.</span></div></div>' +
     '<div class="list"><p class="sec-title">Lo que hiciste</p>' + exercises + '</div>' +
     '<div class="list"><p class="sec-title">Objetivo para la próxima sesión</p>' +
@@ -850,7 +867,7 @@ function sessionStats(session){
   session.entries.forEach(function(entry){
     stats.effectiveSets += entryEffectiveSets(entry);
     entry.sets.forEach(function(set){
-      if(set.w > 0 && set.r > 0) stats.reps += set.r;
+      if(setType(set) !== 'warmup' && set.w > 0 && set.r > 0) stats.reps += set.r;
     });
     stats.volume += entryVolume(entry);
   });
@@ -1006,14 +1023,7 @@ function viewHoy(){
   out += '<div class="head-row"><h2>Hoy</h2><div class="workout-meta">' +
     (S.draft.startedAt ? '<span class="workout-clock-label">Tiempo <strong class="num" id="workout-clock">' + formatDuration(Date.now() - S.draft.startedAt) + '</strong></span>' : '') +
     '<span class="num muted" id="done-count">' + done + ' serie' + (done === 1 ? '' : 's') + ' efectiva' + (done === 1 ? '' : 's') + '</span></div></div>';
-  if(S.draft.entries.length){
-    var restSeconds = Number(S.profile.settings.restSeconds) || 90;
-    out += '<section class="rest-timer" aria-live="polite"><div><span class="lab">Descanso</span><strong class="num" id="rest-clock">' +
-      (S.restEndsAt ? '00:00' : 'Listo') + '</strong></div><div class="row">' +
-      '<button class="btn ghost sm" data-act="rest-start">Iniciar ' + Math.floor(restSeconds / 60) + ':' + String(restSeconds % 60).padStart(2, '0') + '</button>' +
-      (S.restEndsAt ? '<button class="btn ghost sm" data-act="rest-add">+30 s</button><button class="btn ghost sm" data-act="rest-stop">Detener</button>' : '') +
-      '</div></section>';
-  }
+  if(S.draft.entries.length) out += restTimerHtml();
   if(rt) out += '<p class="muted">Rutina: <strong>' + esc(rt.name) + '</strong></p>';
   if(!S.draft.entries.length && !S.picker) out += routineQuick();
   out += S.draft.entries.map(entryHtml).join('');
@@ -1113,7 +1123,7 @@ function routineLibraryDetail(routine){
   var exercises = routine.items.map(function(item){
     var warmups = Number(item.warmupSets) || 0;
     return '<div class="library-exercise-row"><span class="exercise-mark" aria-hidden="true">' + esc(exName(item.exId).trim().charAt(0).toUpperCase()) + '</span><span><strong>' + esc(exName(item.exId)) + '</strong><small>' +
-      (warmups ? warmups + ' aprox. + ' : '') + item.sets + ' series · ' + item.min + '–' + item.max + ' reps' + (item.unilateral ? ' · por lado' : '') + '</small></span></div>';
+      (warmups ? warmups + ' aprox. + ' : '') + item.sets + ' series · ' + item.min + '–' + item.max + ' reps' + (item.unilateral ? ' · por lado' : '') +
       (exById(item.exId) && exById(item.exId).archived ? ' · ejercicio archivado (se omitirá al entrenar)' : '') + '</small></span></div>';
   }).join('');
   return '<div class="library-heading"><div><button class="text-button library-back" data-act="routine-back">‹ ' + (program ? esc(program.name) : 'Biblioteca') + '</button><h2>' + esc(routine.name) + '</h2></div>' +
@@ -1643,7 +1653,7 @@ function onChange(ev){
     if(autoRow && autoEx && autoRestEligible(autoRow) && rowComplete(autoRow, autoEx.unilateral) && !autoRow.restTriggered){
       autoRow.restTriggered = true;
       var duration = restSecondsFor(autoRow);
-      if(duration){ startRest(duration); saveDraft(); render(); }
+      if(duration){ startRest(duration); saveDraft(); }
     }
   }
   if(t.dataset.it === 'unilateral'){
