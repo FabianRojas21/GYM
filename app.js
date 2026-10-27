@@ -80,7 +80,16 @@ var S = {
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
-function saveDraft(){ try { localStorage.setItem(DK, JSON.stringify(S.draft)); } catch(e){} }
+function saveDraft(){
+  try {
+    localStorage.setItem(DK, JSON.stringify(S.draft));
+    draftSaveWarningShown = false;
+    return true;
+  } catch(e){
+    if(!draftSaveWarningShown){ toast('No se pudo guardar el entreno en curso. Copia tus datos antes de salir'); draftSaveWarningShown = true; }
+    return false;
+  }
+}
 if(S.draft.entries.length && !S.draft.startedAt){ S.draft.startedAt = Date.now(); saveDraft(); }
 
 function formatDuration(ms){
@@ -139,6 +148,7 @@ function updateRestTimer(){
 }
 
 var toastTimer;
+var draftSaveWarningShown = false;
 function toast(msg, actionLabel, action){
   var el = $('#toast'); el.textContent = msg;
   if(actionLabel && action){
@@ -192,8 +202,13 @@ var Store = {
     }, fail);
   },
   saveLocal:function(){
-    try { localStorage.setItem(LK, JSON.stringify({profile:S.profile, sessions:S.sessions})); }
-    catch(e){ toast('No se pudo guardar en este navegador'); }
+    try {
+      localStorage.setItem(LK, JSON.stringify({profile:S.profile, sessions:S.sessions}));
+      return true;
+    } catch(e){
+      toast('No se pudo guardar en este navegador');
+      return false;
+    }
   },
   saveProfile:function(){
     if(S.kind !== 'db'){ Store.saveLocal(); return; }
@@ -206,8 +221,21 @@ var Store = {
     Store.ref.set(clone(S.profile)).catch(function(){ toast('No se pudo guardar los cambios'); }).then(function(){ profBusy = false; });
   },
   saveSession:function(s){
-    if(S.kind !== 'db'){ Store.saveLocal(); return Promise.resolve(); }
-    return Store.col.doc(s.id).set(clone(s)).catch(function(){ toast('No se pudo guardar el entreno'); });
+    if(S.kind !== 'db'){
+      var exists = S.sessions.some(function(item){ return item.id === s.id; });
+      var sessions = exists ? S.sessions.map(function(item){ return item.id === s.id ? s : item; }) : S.sessions.concat([s]);
+      try {
+        localStorage.setItem(LK, JSON.stringify({profile:S.profile, sessions:sessions}));
+        return Promise.resolve();
+      } catch(e){
+        toast('No se pudo guardar el entreno en este navegador');
+        return Promise.reject(e);
+      }
+    }
+    return Store.col.doc(s.id).set(clone(s)).catch(function(error){
+      toast('No se pudo guardar el entreno');
+      throw error;
+    });
   },
   updateSession:function(session){
     if(S.kind === 'db'){
@@ -1033,15 +1061,23 @@ function saveSessionEdit(){
     shifted.setHours(original.getHours(), original.getMinutes(), original.getSeconds(), original.getMilliseconds());
     return shifted.getTime();
   };
-  if(Number.isFinite(edit.session.startedAt)){
+  var legacyBase = Number.isFinite(edit.session.finishedAt)
+    ? edit.session.finishedAt
+    : (Number.isFinite(edit.session.ts) ? edit.session.ts : edit.session.startedAt);
+  if(Number.isFinite(edit.session.startedAt) && !Number.isFinite(edit.session.finishedAt)){
     updated.startedAt = shiftToDate(edit.session.startedAt);
     updated.finishedAt = updated.startedAt + durationMs;
-  } else if(Number.isFinite(edit.session.finishedAt)){
-    updated.finishedAt = shiftToDate(edit.session.finishedAt);
+  } else if(Number.isFinite(edit.session.startedAt)){
+    updated.startedAt = shiftToDate(edit.session.startedAt);
+    updated.finishedAt = updated.startedAt + durationMs;
+  } else if(Number.isFinite(legacyBase)){
+    updated.finishedAt = shiftToDate(legacyBase);
     updated.startedAt = updated.finishedAt - durationMs;
+  } else {
+    var fallback = parseISO(date); fallback.setHours(12, 0, 0, 0);
+    updated.finishedAt = fallback.getTime(); updated.startedAt = updated.finishedAt - durationMs;
   }
-  if(Number.isFinite(updated.finishedAt)) updated.ts = updated.finishedAt;
-  else if(Number.isFinite(edit.session.ts)) updated.ts = shiftToDate(edit.session.ts);
+  updated.ts = updated.finishedAt;
   edit.saving = true; render();
   Store.updateSession(updated).then(function(){
     var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
@@ -1547,35 +1583,47 @@ function saveProgram(){
   S.pedit = null; S.librarySection = 'programas'; S.selectedProgram = id;
   Store.saveProfile(); render(); toast('Programa guardado');
 }
+function draftRoutineItems(){
+  var routine = S.profile.routines[S.draft.routineId];
+  if(!routine) return null;
+  var seen = {}, items = [];
+  for(var i=0;i<S.draft.entries.length;i++){
+    var entry = S.draft.entries[i], ex = exById(entry.exId);
+    if(!ex) continue;
+    var original = Number.isInteger(entry.routineItemIndex) ? routine.items[entry.routineItemIndex] : null;
+    var base = Object.assign({}, ex, entry.cfg || {});
+    var item;
+    if(original && original.exId === entry.exId && !seen[entry.routineItemIndex]){
+      item = clone(original);
+      Object.assign(item, entry.cfg || {});
+      seen[entry.routineItemIndex] = true;
+    } else {
+      item = {
+        exId:entry.exId, sets:Number(base.sets) || 3, min:Number(base.min) || 8,
+        max:Number(base.max) || 12, inc:Number(base.inc) || 2.5,
+        loadStep:Number(base.loadStep) > 0 ? Number(base.loadStep) : exerciseLoadStep(ex),
+        unilateral:!!base.unilateral
+      };
+      if(Number(base.warmupSets) > 0) item.warmupSets = Number(base.warmupSets);
+      Object.assign(item, entry.cfg || {});
+      item.exId = entry.exId;
+    }
+    items.push(item);
+  }
+  return items;
+}
 function routineNeedsUpdate(){
   if(!S.draft.routineId) return false;
-  var routineEntries = S.draft.entries.filter(function(entry){
-    return Number.isInteger(entry.routineItemIndex);
-  });
-  var routineIndexes = routineEntries.map(function(entry){ return entry.routineItemIndex; });
-  var sortedIndexes = routineIndexes.slice().sort(function(a,b){ return a-b; });
-  var orderChanged = routineIndexes.some(function(index, position){ return index !== sortedIndexes[position]; });
-  return orderChanged || S.draft.entries.some(function(entry){
-    return entry.cfg && entry.routineCfg && JSON.stringify(entry.cfg) !== JSON.stringify(entry.routineCfg);
-  });
+  var routine = S.profile.routines[S.draft.routineId];
+  var desired = draftRoutineItems();
+  if(!routine || !desired) return false;
+  return JSON.stringify(routine.items) !== JSON.stringify(desired);
 }
 function updateRoutineFromDraft(){
   var routine = S.profile.routines[S.draft.routineId];
-  if(!routine) return false;
-  var slots = [], orderedItems = [], seen = {};
-  S.draft.entries.forEach(function(entry){
-    if(!entry.cfg || entry.routineItemIndex === undefined) return;
-    var item = routine.items[entry.routineItemIndex];
-    if(item && item.exId === entry.exId && !seen[entry.routineItemIndex]){
-      Object.assign(item, clone(entry.cfg));
-      seen[entry.routineItemIndex] = true;
-      slots.push(entry.routineItemIndex);
-      orderedItems.push(item);
-    }
-  });
-  slots.sort(function(a,b){ return a-b; }).forEach(function(slot, index){
-    routine.items[slot] = orderedItems[index];
-  });
+  var items = draftRoutineItems();
+  if(!routine || !items) return false;
+  routine.items = items;
   Store.saveProfile();
   return true;
 }
@@ -1606,11 +1654,14 @@ function finish(updateRoutine){
   };
   var rt = S.draft.routineId && S.profile.routines[S.draft.routineId];
   if(rt){ session.routineId = rt.id; session.routineName = rt.name; }
-  S.sessions.push(session);
-  Store.saveSession(session);
-  S.justSaved = {session:session, next:saved};
-  S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
-  render(); window.scrollTo(0, 0);
+  Store.saveSession(session).then(function(){
+    S.sessions.push(session);
+    S.justSaved = {session:session, next:saved};
+    S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
+    render(); window.scrollTo(0, 0);
+  }).catch(function(){
+    toast('No se guardó el entreno; conserva la pantalla abierta y vuelve a intentarlo');
+  });
 }
 function onClick(ev){
   var t = ev.target.closest('[data-act]'); if(!t) return;
