@@ -76,7 +76,7 @@ var S = {
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null,
-  restEndsAt:loadRestEnd(), pendingImport:null, sessionEdit:null
+  restEndsAt:loadRestEnd(), pendingImport:null, sessionEdit:null, finishSaving:false
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -218,7 +218,15 @@ var Store = {
     if(profBusy){ profTimer = setTimeout(Store.flush, 200); return; }
     if(!profDirty) return;
     profDirty = false; profBusy = true;
-    Store.ref.set(clone(S.profile)).catch(function(){ toast('No se pudo guardar los cambios'); }).then(function(){ profBusy = false; });
+    Store.ref.set(clone(S.profile)).then(function(){
+      profBusy = false;
+      if(profDirty) profTimer = setTimeout(Store.flush, 200);
+    }).catch(function(){
+      profBusy = false;
+      profDirty = true;
+      toast('No se pudieron guardar los cambios; se reintentará');
+      profTimer = setTimeout(Store.flush, 5000);
+    });
   },
   saveSession:function(s){
     if(S.kind !== 'db'){
@@ -369,6 +377,12 @@ function validBackup(data){
   if((profile.settings !== undefined && !isObject(profile.settings)) || !isObject(profile.exercises || {}) ||
     !isObject(profile.routines || {}) || !isObject(profile.programs || {})) return false;
   var validNumber = function(value){ return typeof value === 'number' && isFinite(value); };
+  var validPositiveNumber = function(value){ return validNumber(value) && value >= 0; };
+  var validDate = function(value){
+    if(typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    var parsed = parseISO(value);
+    return !isNaN(parsed.getTime()) && iso(parsed) === value;
+  };
   if(profile.settings && profile.settings.mode && !['rir','rpe'].includes(profile.settings.mode)) return false;
   if(profile.settings && profile.settings.targetRir !== undefined && !validNumber(profile.settings.targetRir)) return false;
   var validWarmupConfig = function(item){
@@ -403,13 +417,17 @@ function validBackup(data){
   }
   var sessionIds = {};
   return data.sessions.every(function(session){
-    if(!isObject(session) || typeof session.id !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(session.date) || !Array.isArray(session.entries)) return false;
+    if(!isObject(session) || typeof session.id !== 'string' || !validDate(session.date) || !Array.isArray(session.entries)) return false;
+    if(session.durationMs !== undefined && !validPositiveNumber(session.durationMs)) return false;
+    if(['ts','startedAt','finishedAt'].some(function(field){
+      return session[field] !== undefined && !validPositiveNumber(session[field]);
+    })) return false;
     if(sessionIds[session.id]) return false;
     sessionIds[session.id] = true;
     return session.entries.every(function(entry){
       return isObject(entry) && typeof entry.exId === 'string' && Array.isArray(entry.sets) &&
         entry.sets.every(function(set){
-          return isObject(set) && validNumber(set.w) && validNumber(set.r) &&
+          return isObject(set) && validPositiveNumber(set.w) && validPositiveNumber(set.r) &&
             (set.rir === undefined || set.rir === null || validNumber(set.rir)) &&
             (set.type === undefined || Object.prototype.hasOwnProperty.call(SET_TYPES, set.type));
         });
@@ -1147,9 +1165,9 @@ function viewHoy(){
   if(S.draft.entries.length){
     if(S.confirm === 'finish-routine'){
       out += '<section class="card"><p class="sec-title">¿Actualizar la rutina?</p><p class="small">Cambiaste el orden o la configuración de este entreno. Puedes guardar esos cambios para la próxima vez o dejar la rutina como estaba antes de entrenar.</p>' +
-        '<div class="row"><button class="btn" data-act="finish-update"' + (done ? '' : ' disabled') + '>Actualizar rutina y terminar</button><button class="btn ghost" data-act="finish-keep"' + (done ? '' : ' disabled') + '>Terminar sin cambiarla</button><button class="btn ghost" data-act="finish-cancel">Volver al entreno</button></div></section>';
+        '<div class="row"><button class="btn" data-act="finish-update"' + (done && !S.finishSaving ? '' : ' disabled') + '>Actualizar rutina y terminar</button><button class="btn ghost" data-act="finish-keep"' + (done && !S.finishSaving ? '' : ' disabled') + '>Terminar sin cambiarla</button><button class="btn ghost" data-act="finish-cancel">Volver al entreno</button></div></section>';
     } else {
-      out += '<div class="row"><button class="btn" id="finish" data-act="finish"' + (done ? '' : ' disabled') + '>Terminar entreno</button>' +
+      out += '<div class="row"><button class="btn" id="finish" data-act="finish"' + (done && !S.finishSaving ? '' : ' disabled') + '>' + (S.finishSaving ? 'Guardando…' : 'Terminar entreno') + '</button>' +
         (S.confirm === 'discard'
           ? '<button class="btn danger" data-act="discard-ok">Confirmar descarte</button>'
           : '<button class="btn ghost" data-act="discard">Descartar</button>') + '</div>';
@@ -1629,10 +1647,12 @@ function updateRoutineFromDraft(){
 }
 function finish(updateRoutine){
   if(!workingDone()){ toast('Registra al menos una serie efectiva completa'); return; }
+  if(S.finishSaving) return;
   if(updateRoutine === undefined && routineNeedsUpdate()){
     S.confirm = 'finish-routine'; render(); return;
   }
   if(updateRoutine && !updateRoutineFromDraft()){ toast('No se encontró la rutina para actualizar'); return; }
+  S.finishSaving = true; render();
   var entries = [], saved = [];
   S.draft.entries.forEach(function(en){
     var ex = effEx(en);
@@ -1655,11 +1675,14 @@ function finish(updateRoutine){
   var rt = S.draft.routineId && S.profile.routines[S.draft.routineId];
   if(rt){ session.routineId = rt.id; session.routineName = rt.name; }
   Store.saveSession(session).then(function(){
+    S.finishSaving = false;
     S.sessions.push(session);
     S.justSaved = {session:session, next:saved};
     S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
     render(); window.scrollTo(0, 0);
   }).catch(function(){
+    S.finishSaving = false;
+    render();
     toast('No se guardó el entreno; conserva la pantalla abierta y vuelve a intentarlo');
   });
 }
