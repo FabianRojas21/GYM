@@ -45,6 +45,9 @@
 <script src="app.js"></script>
 <div id="pwa-update" hidden><button type="button" id="pwa-update-button">Instalar nueva versión</button></div>
 <script>
+if (location.hostname === '0.0.0.0') {
+  location.replace(location.href.replace('0.0.0.0', '127.0.0.1'));
+}
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
     navigator.serviceWorker.register('./sw.js').then(function(registration){
