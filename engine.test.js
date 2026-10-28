@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const {analyze, analyzeCore, effTxt} = require('./engine.js');
 
 const rirSettings = {mode:'rir', targetRir:2};
@@ -71,6 +72,27 @@ test('espera ambas partes de cada ronda unilateral', () => {
     {...set(10), pair, side:'left'}
   ]);
   assert.equal(analyze(exercise, complete, null, rirSettings).status, 'sube');
+});
+
+test('la PWA y la publicación incluyen recursos y actualización offline', () => {
+  const sw=fs.readFileSync('./sw.js','utf8');
+  const index=fs.readFileSync('./index.html','utf8');
+  const manifest=JSON.parse(fs.readFileSync('./manifest.webmanifest','utf8'));
+  const workflow=fs.readFileSync('./.github/workflows/pages.yml','utf8');
+  assert.match(sw,/clients\.claim/);
+  assert.match(sw,/SKIP_WAITING/);
+  assert.match(index,/serviceWorker\.register/);
+  assert.equal(manifest.display,'standalone');
+  assert.match(workflow,/actions\/deploy-pages/);
+});
+
+test('fatiga, anomalías y accesibilidad están integradas en la interfaz', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const index=fs.readFileSync('./index.html','utf8');
+  assert.match(app,/fatiga estimada/i);
+  assert.match(app,/peso más de 50 % sobre tu récord/);
+  assert.match(app,/aria-selected/);
+  assert.match(index,/aria-controls="view"/);
 });
 
 test('permite peso cero para ejercicios con carga corporal', () => {
