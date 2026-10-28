@@ -237,10 +237,22 @@ var Store = {
         Store.firebaseAuth = firebase.auth(firebaseApp);
         Store.firebaseDb = firebase.firestore(firebaseApp);
         Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){ });
-        Store.firebaseAuth.getRedirectResult().catch(function(error){
+        var redirectPending=false;
+        try{ redirectPending=sessionStorage.getItem('sobrecarga-google-redirect')==='1'; }catch(e){}
+        Store.firebaseAuth.getRedirectResult().then(function(result){
+          try{ sessionStorage.removeItem('sobrecarga-google-redirect'); }catch(e){}
+          if(result && result.user){ Store.startFirebase(result.user); }
+        }).catch(function(error){
+          try{ sessionStorage.removeItem('sobrecarga-google-redirect'); }catch(e){}
           console.warn('No se pudo completar el inicio de sesión con Google', error);
-          if(error && error.code) toast('Inicio de sesión cancelado o bloqueado: ' + error.code);
+          if(error && error.code) toast('No se pudo iniciar sesión (' + error.code + '). En Brave, desactiva Shields para esta página o permite cookies de Google.');
         });
+        if(redirectPending) setTimeout(function(){
+          if(!S.cloudUser){
+            try{ sessionStorage.removeItem('sobrecarga-google-redirect'); }catch(e){}
+            toast('Google regresó sin iniciar la cuenta. En Brave desactiva Shields para esta página y permite las cookies de accounts.google.com y firebaseapp.com.');
+          }
+        }, 15000);
         var authResolved=false;
         Store.firebaseAuth.onAuthStateChanged(function(user){
           authResolved=true;
@@ -333,9 +345,15 @@ var Store = {
   signIn:function(){
     if(!Store.firebaseAuth) return Promise.reject(new Error('Firebase no inicializado'));
     var provider=new firebase.auth.GoogleAuthProvider();
-    if(location.hostname.endsWith('github.io')) return Store.firebaseAuth.signInWithRedirect(provider);
+    if(location.hostname.endsWith('github.io')){
+      try{ sessionStorage.setItem('sobrecarga-google-redirect','1'); }catch(e){}
+      return Store.firebaseAuth.signInWithRedirect(provider);
+    }
     return Store.firebaseAuth.signInWithPopup(provider).catch(function(error){
-      if(error && ['auth/popup-blocked','auth/popup-closed-by-user'].includes(error.code)) return Store.firebaseAuth.signInWithRedirect(provider);
+      if(error && ['auth/popup-blocked','auth/popup-closed-by-user'].includes(error.code)){
+        try{ sessionStorage.setItem('sobrecarga-google-redirect','1'); }catch(e){}
+        return Store.firebaseAuth.signInWithRedirect(provider);
+      }
       throw error;
     });
   },
