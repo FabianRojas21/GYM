@@ -86,6 +86,18 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.match(workflow,/actions\/deploy-pages/);
 });
 
+test('la sección Yo incluye resumen, ejercicios y medidas corporales', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const index=fs.readFileSync('./index.html','utf8');
+  assert.match(app,/function viewProfile/);
+  assert.match(app,/profileSummary\(\)/);
+  assert.match(app,/profileExercises\(\)/);
+  assert.match(app,/profileMeasurements\(\)/);
+  assert.match(app,/measurements:\[\]/);
+  assert.match(app,/measurement-save/);
+  assert.match(index,/data-tab="yo"/);
+});
+
 test('fatiga, anomalías y accesibilidad están integradas en la interfaz', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const index=fs.readFileSync('./index.html','utf8');

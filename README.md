@@ -141,6 +141,17 @@ La interfaz incluye navegación por pestañas con teclado, enlace para saltar al
 contenido, foco visible, estados de pestaña accesibles y movimiento del foco
 al cambiar de sección.
 
+## Perfil personal «Yo»
+
+La sección **Yo** separa la información personal en tres áreas:
+
+- **Resumen:** entrenamientos, volumen, duración, peso corporal, carga muscular y fatiga reciente.
+- **Ejercicios:** ejercicios realizados, ordenables por nombre, uso reciente, frecuencia o volumen histórico. Al abrir uno se muestra su detalle completo.
+- **Medidas:** historial corporal de peso, altura, perímetros, fuerza de peso corporal opcional y porcentaje de grasa. Cada medición conserva fecha, valores y notas.
+
+Las medidas se incluyen en perfiles, respaldos JSON y copias automáticas. Se
+mantienen separadas de los entrenamientos para no mezclarlas con el historial de series.
+
 ## Instalación y publicación móvil
 
 La aplicación incluye un Service Worker y un manifiesto PWA. Para instalarla,
