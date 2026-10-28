@@ -43,7 +43,7 @@ var DK = 'sobrecarga:draft:v1';
 var LK = 'sobrecarga:data:v1';
 var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45}, exercises:{}, routines:{}, programs:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45}, exercises:{}, routines:{}, programs:{}, goals:{}}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
@@ -54,6 +54,7 @@ function normProfile(p){
   d.exercises = p.exercises || {};
   d.routines = p.routines || {};
   d.programs = p.programs || {};
+  d.goals = p.goals || {};
   return d;
 }
 function exerciseLoadStep(ex){ return Number(ex.loadStep) > 0 ? Number(ex.loadStep) : (Number(ex.inc) > 0 ? Number(ex.inc) : 2.5); }
@@ -76,7 +77,7 @@ var S = {
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null,
-  restEndsAt:loadRestEnd(), pendingImport:null, sessionEdit:null, finishSaving:false
+  restEndsAt:loadRestEnd(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -454,6 +455,89 @@ function restoreBackup(){
     S.pendingImport = null; S.confirm = null; S.justSaved = null;
     render(); toast('Respaldo restaurado');
   }).catch(function(){ toast('No se pudo restaurar el respaldo'); });
+}
+function csvCell(value){
+  var text = value === null || value === undefined ? '' : String(value);
+  return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+function downloadSessionsCsv(){
+  var rows = [['fecha','ejercicio','tipo','peso_kg','repeticiones','esfuerzo','serie']];
+  S.sessions.slice().sort(function(a,b){ return a.date.localeCompare(b.date) || a.ts-b.ts; }).forEach(function(session){
+    session.entries.forEach(function(entry){
+      var exercise = exById(entry.exId);
+      entry.sets.forEach(function(set, index){
+        rows.push([session.date, exercise ? exercise.name : entry.exId, set.type || 'normal', set.w, set.r, set.rir, index+1]);
+      });
+    });
+  });
+  var csv = '\ufeff' + rows.map(function(row){ return row.map(csvCell).join(','); }).join('\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  var url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href = url; link.download = 'sobrecarga-entrenos-' + iso(new Date()) + '.csv';
+  document.body.appendChild(link); link.click(); link.remove(); setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  toast('Entrenos exportados a CSV');
+}
+function parseCsv(text){
+  text = text.replace(/^\ufeff/, '');
+  var rows=[], row=[], value='', quoted=false;
+  for(var i=0;i<text.length;i++){
+    var c=text[i];
+    if(c==='"'){ if(quoted && text[i+1]==='"'){ value+='"'; i++; } else quoted=!quoted; }
+    else if(c===',' && !quoted){ row.push(value); value=''; }
+    else if((c==='\n'||c==='\r') && !quoted){ if(c==='\r' && text[i+1]==='\n') i++; row.push(value); if(row.some(function(v){ return v; })) rows.push(row); row=[]; value=''; }
+    else value+=c;
+  }
+  row.push(value); if(row.some(function(v){ return v; })) rows.push(row);
+  if(!rows.length) return [];
+  var headers=rows.shift().map(function(v){ return v.trim().toLowerCase(); });
+  return rows.map(function(values){ var obj={}; headers.forEach(function(header,k){ obj[header]=values[k]||''; }); return obj; });
+}
+function exportRoutine(routine){
+  var exercises={};
+  routine.items.forEach(function(item){
+    var exercise=exById(item.exId);
+    if(exercise && !exercises[item.exId]) exercises[item.exId]={name:exercise.name,muscle:muscleId(exercise),unilateral:!!exercise.unilateral};
+  });
+  var payload={format:'sobrecarga-routine',version:1,name:routine.name,items:routine.items,exercises:exercises};
+  var url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+  var link=document.createElement('a'); link.href=url; link.download='rutina-'+routine.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'.json';
+  document.body.appendChild(link); link.click(); link.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },1000); toast('Rutina exportada');
+}
+function importRoutine(payload){
+  if(!payload || payload.format!=='sobrecarga-routine' || !Array.isArray(payload.items) || !isObject(payload.exercises)) throw new Error('invalid routine');
+  var oldToNew={};
+  Object.keys(payload.exercises).forEach(function(oldId){
+    var info=payload.exercises[oldId], existing=Object.keys(S.profile.exercises).map(function(id){ return S.profile.exercises[id]; }).find(function(e){ return e.name.toLowerCase()===(info.name||'').toLowerCase(); });
+    var exercise=existing || {id:uid('ex'),name:String(info.name||'Ejercicio'),sets:3,min:1,max:20,inc:2.5,muscle:info.muscle||'unassigned',unilateral:!!info.unilateral};
+    if(!existing) S.profile.exercises[exercise.id]=exercise; oldToNew[oldId]=exercise.id;
+  });
+  var id=uid('rut');
+  S.profile.routines[id]={id:id,name:String(payload.name||'Rutina compartida'),items:payload.items.map(function(item){ item=clone(item); item.exId=oldToNew[item.exId]||item.exId; return item; }),programId:''};
+  Store.saveProfile(); S.selectedRoutine=id; S.librarySection='rutinas'; S.tab='rutinas'; render(); toast('Rutina importada');
+}
+function importSessionsCsv(text){
+  var records=parseCsv(text), grouped={};
+  records.forEach(function(r){
+    var date=(r.fecha||r.date||'').trim(), name=(r.ejercicio||r.exercise||'').trim();
+    var weight=num(r.peso_kg||r.peso||r.weight), reps=num(r.repeticiones||r.reps);
+    if(!validDate(date) || !name || !(weight>0) || !(reps>0)) return;
+    var effort=num(r.esfuerzo||r.rir||r.effort);
+    if(!grouped[date]) grouped[date]={};
+    if(!grouped[date][name]) grouped[date][name]=[];
+    grouped[date][name].push({w:weight,r:reps,rir:effort, type:['warmup','normal','drop','failure','restpause'].includes(r.tipo||r.type)?(r.tipo||r.type||'normal'):'normal'});
+  });
+  var imported=0;
+  Object.keys(grouped).forEach(function(date){
+    var entries=[];
+    Object.keys(grouped[date]).forEach(function(name){
+      var exercise=Object.keys(S.profile.exercises).map(function(id){ return S.profile.exercises[id]; }).find(function(e){ return e.name.toLowerCase()===name.toLowerCase(); });
+      if(!exercise){ exercise={id:uid('ex'),name:name,sets:3,min:1,max:20,inc:2.5,muscle:'unassigned'}; S.profile.exercises[exercise.id]=exercise; }
+      entries.push({exId:exercise.id,sets:grouped[date][name]});
+    });
+    S.sessions.push({id:uid('ses'),date:date,ts:new Date(date+'T12:00:00').getTime(),startedAt:new Date(date+'T12:00:00').getTime(),finishedAt:new Date(date+'T13:00:00').getTime(),durationMs:3600000,entries:entries,csvImport:true}); imported++;
+  });
+  if(!imported){ toast('No se encontraron entrenos válidos'); return; }
+  Store.saveProfile(); S.sessions.forEach(function(s){ Store.saveSession(s); }); render(); toast(imported+' entreno'+(imported===1?'':'s')+' importado'+(imported===1?'':'s')+' desde CSV');
 }
 
 /* ---------- presentación de series ---------- */
@@ -1263,7 +1347,7 @@ function routineLibraryDetail(routine){
     '<div class="library-routine-summary"><span>' + routine.items.length + ' ejercicio' + (routine.items.length === 1 ? '' : 's') + '</span>' +
     (program ? '<span>' + esc(program.name) + '</span>' : '') + '</div>' +
     '<div class="library-exercises">' + (exercises || '<p class="muted">Añade ejercicios a esta rutina desde Editar.</p>') + '</div>' +
-    '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn ghost" data-act="rut-duplicate" data-id="' + esc(routine.id) + '">Duplicar rutina</button></div>';
+    '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn ghost" data-act="rut-duplicate" data-id="' + esc(routine.id) + '">Duplicar rutina</button><button class="btn ghost" data-act="rut-export" data-id="' + esc(routine.id) + '">Compartir rutina</button></div>';
 }
 function routineItemsForEdit(routine){
   return clone(routine.items).map(function(item){
@@ -1422,6 +1506,31 @@ function viewHist(){
           : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</div>') + '</section>';
   }).join('') + '</div>';
 }
+function goalProgress(goal){
+  var current=Number(goal.current)||0;
+  if(goal.type==='exercise-weight' && goal.exerciseId){
+    var records=personalRecords(exById(goal.exerciseId)||{}); current=records.weight?Number(records.weight.value):0;
+  } else if(goal.type==='sessions'){
+    current=S.sessions.length;
+  } else if(goal.type==='weekly'){
+    var from=new Date(); from.setDate(from.getDate()-7); var threshold=iso(from);
+    current=S.sessions.filter(function(s){ return s.date>=threshold; }).length;
+  }
+  var target=Number(goal.target)||0, start=Number(goal.start)||0;
+  if(!target) return {current:current,percent:0};
+  var percent=Math.max(0,Math.min(100,Math.round((current-start)/(target-start)*100)));
+  if(current>=target) percent=100;
+  return {current:current,percent:percent};
+}
+function goalsHtml(){
+  var goals=Object.keys(S.profile.goals||{}).map(function(id){ return S.profile.goals[id]; });
+  var cards=goals.map(function(goal){
+    var progress=goalProgress(goal); var unit=goal.unit||'';
+    return '<div class="goal-card"><div class="goal-row"><strong>'+esc(goal.name)+'</strong><button class="mini" data-act="goal-delete" data-id="'+esc(goal.id)+'" aria-label="Eliminar objetivo">×</button></div><div class="goal-row"><span class="small muted">'+fmt(progress.current)+' '+esc(unit)+' de '+fmt(goal.target)+' '+esc(unit)+' · '+progress.percent+'%</span></div><div class="progress" role="progressbar" aria-label="Progreso de '+esc(goal.name)+'" aria-valuenow="'+progress.percent+'" aria-valuemin="0" aria-valuemax="100"><span style="width:'+progress.percent+'%"></span></div></div>';
+  }).join('');
+  var form=S.goalNew ? '<div class="goal-form"><div class="fields"><div class="field"><label class="lab" for="goal-name">Nombre</label><input id="goal-name" class="txt" maxlength="60" placeholder="Ej. Alcanzar 80 kg en press banca"></div><div class="field"><label class="lab" for="goal-type">Tipo</label><select id="goal-type" class="txt"><option value="exercise-weight">Peso máximo en ejercicio</option><option value="sessions">Entrenos totales</option><option value="weekly">Entrenos en la última semana</option><option value="custom">Objetivo personalizado</option></select></div><div class="field"><label class="lab" for="goal-target">Meta</label><input id="goal-target" class="txt" inputmode="decimal"></div><div class="field"><label class="lab" for="goal-unit">Unidad</label><input id="goal-unit" class="txt" placeholder="kg, entrenos..."></div></div><div class="row"><button class="btn sm" data-act="goal-save">Guardar objetivo</button><button class="btn ghost sm" data-act="goal-cancel">Cancelar</button></div></div>' : '';
+  return '<section class="card"><p class="sec-title">Objetivos</p>'+ (cards||'<p class="small muted">Todavía no tienes objetivos.</p>') + form + (S.goalNew?'':'<button class="btn ghost sm" data-act="goal-new">Añadir objetivo</button>')+'</section>';
+}
 function viewSet(){
   var st = S.profile.settings, tr = st.targetRir;
   var hasDemo = S.sessions.some(function(s){ return s.demo; });
@@ -1446,12 +1555,16 @@ function viewSet(){
     '<li>Si sobran muchas repeticiones (RIR alto), la app te sugiere subir antes.</li>' +
     '<li>Dos entrenos seguidos bajo el mínimo con el mismo peso sugieren bajar cerca de 10%.</li>' +
     '<li>Las series marcadas con C son calentamiento y no cuentan.</li></ul></details></section>';
+  out += goalsHtml();
   out += '<section class="card"><p class="sec-title">Tus datos</p><p class="small">' +
     (S.kind === 'db' ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : 'Se guardan solo en este navegador. Abre la app con tu sesión de Claude para tenerlos en todos tus dispositivos.') + '</p><div class="row">' +
+    '<button class="btn ghost sm" data-act="auto-restore">Restaurar última copia automática</button>' +
     '<button class="btn ghost sm" data-act="export">Descargar respaldo</button><button class="btn ghost sm" data-act="import">Restaurar respaldo</button>' +
+    '<button class="btn ghost sm" data-act="export-csv">Exportar CSV</button><button class="btn ghost sm" data-act="import-csv">Importar CSV</button>' +
+    '<button class="btn ghost sm" data-act="import-routine">Importar rutina</button>' +
     (hasDemo ? '<button class="btn ghost sm" data-act="demo-clear">Quitar datos de ejemplo</button>' : '<button class="btn ghost sm" data-act="demo-load">Cargar datos de ejemplo</button>') +
     (S.confirm === 'wipe' ? '<button class="btn danger sm" data-act="wipe-ok">Confirmar: borrar todo</button>' : '<button class="btn danger sm" data-act="wipe">Borrar todo</button>') +
-    '</div><input id="backup-file" type="file" accept="application/json,.json" hidden>' +
+    '</div><input id="backup-file" type="file" accept="application/json,.json" hidden><input id="csv-file" type="file" accept="text/csv,.csv" hidden><input id="routine-file" type="file" accept="application/json,.json" hidden>' +
     (S.pendingImport ? '<div class="restore-confirm"><p class="small">El respaldo contiene ' + Object.keys(S.pendingImport.profile.exercises).length + ' ejercicios, ' + Object.keys(S.pendingImport.profile.routines).length + ' rutinas y ' + S.pendingImport.sessions.length + ' entrenos. Restaurarlo reemplazará los datos actuales.</p><div class="row"><button class="btn danger sm" data-act="import-confirm">Confirmar restauración</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>' : '') +
     '</section>';
   return out;
@@ -1798,15 +1911,29 @@ function onClick(ev){
     case 'set-mode': st.mode = t.dataset.mode; Store.saveProfile(); render(); break;
     case 'tr-minus': st.targetRir = Math.max(0, st.targetRir - 1); Store.saveProfile(); render(); break;
     case 'tr-plus': st.targetRir = Math.min(4, st.targetRir + 1); Store.saveProfile(); render(); break;
+    case 'goal-new': S.goalNew=true; render(); break;
+    case 'goal-cancel': S.goalNew=false; render(); break;
+    case 'goal-save':
+      var goalName=$('#goal-name')&&$('#goal-name').value.trim(), goalTarget=$('#goal-target')?num($('#goal-target').value):null;
+      if(!goalName || !(goalTarget>0)){ toast('Completa el nombre y una meta válida'); break; }
+      var goal={id:uid('goal'),name:goalName,type:$('#goal-type').value,target:goalTarget,start:0,current:0,unit:$('#goal-unit').value.trim()};
+      S.profile.goals=S.profile.goals||{}; S.profile.goals[goal.id]=goal; S.goalNew=false; Store.saveProfile(); render(); toast('Objetivo añadido'); break;
+    case 'goal-delete': delete S.profile.goals[t.dataset.id]; Store.saveProfile(); render(); toast('Objetivo eliminado'); break;
     case 'demo-load': loadDemo(); break;
     case 'demo-clear': clearDemo(); break;
     case 'wipe': S.confirm = 'wipe'; render(); break;
     case 'wipe-ok':
       var ids = S.sessions.map(function(s){ return s.id; });
-      S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
+      S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.goals = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
       S.restEndsAt = null; saveRestEnd(); Store.saveProfile(); Store.deleteSessions(ids); S.confirm = null; S.justSaved = null; render(); toast('Datos borrados'); break;
+    case 'auto-restore': restoreAutoBackup(); break;
     case 'export': downloadBackup(); break;
     case 'import': $('#backup-file').click(); break;
+    case 'export-csv': downloadSessionsCsv(); break;
+    case 'import-csv': $('#csv-file').click(); break;
+    case 'import-routine': $('#routine-file').click(); break;
+    case 'rut-export':
+      var sharedRoutine=S.profile.routines[t.dataset.id]; if(sharedRoutine) exportRoutine(sharedRoutine); break;
     case 'import-confirm': restoreBackup(); break;
     case 'import-cancel': S.pendingImport = null; render(); break;
   }
@@ -1883,6 +2010,18 @@ function onChange(ev){
     if(!Array.isArray(percentItem.warmupPercents)) percentItem.warmupPercents = warmupSettings(percentItem).warmupPercents;
     percentItem.warmupPercents[+t.dataset.k] = routinePercent;
     render(); return;
+  }
+  if(t.id === 'routine-file'){
+    var routineFile=t.files&&t.files[0]; if(!routineFile)return;
+    var routineReader=new FileReader(); routineReader.onload=function(){ try{ importRoutine(JSON.parse(String(routineReader.result))); }catch(e){toast('El archivo no contiene una rutina válida de Sobrecarga');} t.value=''; }; routineReader.readAsText(routineFile); return;
+  }
+  if(t.id === 'csv-file'){
+    var csvFile = t.files && t.files[0];
+    if(!csvFile) return;
+    var csvReader = new FileReader();
+    csvReader.onload = function(){ importSessionsCsv(String(csvReader.result)); t.value=''; };
+    csvReader.onerror = function(){ toast('No se pudo leer el CSV'); t.value=''; };
+    csvReader.readAsText(csvFile); return;
   }
   if(t.id === 'backup-file'){
     var file = t.files && t.files[0];
@@ -2025,11 +2164,33 @@ function onChange(ev){
   Store.saveProfile(); render();
 }
 
+var AUTO_BACKUP_KEY='sobrecarga:auto-backup:v1';
+function createAutoBackup(){
+  try { localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify({savedAt:Date.now(),profile:S.profile,sessions:S.sessions})); } catch(e){ toast('No se pudo crear la copia automática'); }
+}
+function restoreAutoBackup(){
+  try {
+    var backup=JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY));
+    if(!backup || !validBackup({format:'sobrecarga-backup',version:1,profile:backup.profile,sessions:backup.sessions})) throw new Error('invalid');
+    Store.replaceAll(normProfile(backup.profile),backup.sessions).then(function(){ S.sessions=backup.sessions; S.profile=normProfile(backup.profile); render(); toast('Copia automática restaurada'); }).catch(function(){ toast('No se pudo restaurar la copia automática'); });
+  } catch(e){ toast('No hay una copia automática válida'); }
+}
+function anomalyWarnings(){
+  if(!S.ready || !S.draft.entries.length) return;
+  var suspicious=[];
+  S.draft.entries.forEach(function(entry){ entry.rows&&entry.rows.forEach(function(row){ Object.keys(row.right||{}).forEach(function(){ }); var sets=[row]; if(row.left||row.right){ sets=[]; if(row.left)sets.push(row.left); if(row.right)sets.push(row.right); } sets.forEach(function(set){ if(num(set.w)>500 || num(set.r)>100 || num(set.w)<0 || num(set.r)<0) suspicious.push(true); }); }); });
+  if(suspicious.length) toast('Revisa pesos o repeticiones inusuales antes de guardar');
+}
+window.addEventListener('beforeunload', function(event){ if(S.draft.entries.length && !S.justSaved){ event.preventValue=''; event.returnValue=''; } });
+
 document.addEventListener('click', onClick);
 document.addEventListener('input', onInput);
 document.addEventListener('change', onChange);
 setInterval(updateWorkoutClock, 1000);
 setInterval(updateRestTimer, 250);
+setInterval(createAutoBackup, 6*60*60*1000);
+setInterval(anomalyWarnings, 30000);
+createAutoBackup();
 var rz; window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(function(){ if(S.ready && S.tab === 'ejercicios' && S.openEx) render(); }, 200); });
 
 render();
