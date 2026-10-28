@@ -345,12 +345,9 @@ var Store = {
   signIn:function(){
     if(!Store.firebaseAuth) return Promise.reject(new Error('Firebase no inicializado'));
     var provider=new firebase.auth.GoogleAuthProvider();
-    if(location.hostname.endsWith('github.io')){
-      try{ sessionStorage.setItem('sobrecarga-google-redirect','1'); }catch(e){}
-      return Store.firebaseAuth.signInWithRedirect(provider);
-    }
+    provider.setCustomParameters({prompt:'select_account'});
     return Store.firebaseAuth.signInWithPopup(provider).catch(function(error){
-      if(error && ['auth/popup-blocked','auth/popup-closed-by-user'].includes(error.code)){
+      if(error && ['auth/popup-blocked','auth/popup-closed-by-user','auth/web-storage-unsupported','auth/operation-not-supported-in-this-environment'].includes(error.code)){
         try{ sessionStorage.setItem('sobrecarga-google-redirect','1'); }catch(e){}
         return Store.firebaseAuth.signInWithRedirect(provider);
       }
