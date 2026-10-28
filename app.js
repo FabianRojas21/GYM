@@ -1160,16 +1160,26 @@ function sessionEditorHtml(session){
       }).join('');
       return '<div class="session-set-edit"><strong>Serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1) + esc(side) + '</strong>' +
         input('weight', 'Kg', set.w, 'decimal') + input('reps', 'Reps', set.r, 'numeric') + input('effort', S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR', effort, 'decimal') +
-        '<select class="txt session-set-type" data-session-edit="type" data-entry="' + entryIndex + '" data-set="' + setIndex + '" aria-label="Tipo de serie"' + (edit.saving ? ' disabled' : '') + '>' + options + '</select></div>';
+        '<select class="txt session-set-type" data-session-edit="type" data-entry="' + entryIndex + '" data-set="' + setIndex + '" aria-label="Tipo de serie"' + (edit.saving ? ' disabled' : '') + '>' + options + '</select>' +
+        input('rest', 'Descanso s', Number.isFinite(set.restMs) ? Math.round(set.restMs/1000) : '', 'numeric') +
+        '<button class="btn ghost sm" data-act="session-remove-set" data-entry="'+entryIndex+'" data-set="'+setIndex+'"'+(edit.saving?' disabled':'')+'>Quitar serie</button></div>';
     }).join('');
-    return '<div class="session-entry-edit"><p class="sec-title">' + esc(exercise) + '</p>' + rows + '</div>';
+    var tools='<div class="row"><button class="btn ghost sm" data-act="session-add-set" data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>Añadir serie</button>' +
+      (edit.confirmEntry===entryIndex
+        ? '<button class="btn danger sm" data-act="session-remove-exercise-ok" data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>Confirmar quitar ejercicio</button><button class="btn ghost sm" data-act="session-remove-exercise-cancel"'+(edit.saving?' disabled':'')+'>Cancelar</button>'
+        : '<button class="btn ghost sm" data-act="session-remove-exercise" data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>Quitar ejercicio</button>') + '</div>';
+    var replaceOptions='<option value="'+esc(entry.exId)+'">'+esc(exercise)+'</option>'+Object.keys(S.profile.exercises).filter(function(id){return id!==entry.exId && !S.profile.exercises[id].archived;}).map(function(id){return '<option value="'+esc(id)+'">'+esc(S.profile.exercises[id].name)+'</option>';}).join('');
+    var replace='<label class="field"><span class="lab">Cambiar ejercicio</span><select class="txt" data-session-replace-exercise data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>'+replaceOptions+'</select></label>';
+    return '<div class="session-entry-edit"><p class="sec-title">' + esc(exercise) + '</p>' + replace + rows + tools + '</div>';
   }).join('');
+  var addPicker=edit.addPicker ? '<div class="field"><label class="lab" for="session-add-exercise">Ejercicio</label><select id="session-add-exercise" class="txt" data-session-add-exercise>'+
+    '<option value="">Seleccionar ejercicio</option>'+Object.keys(S.profile.exercises).filter(function(id){return !S.profile.exercises[id].archived;}).map(function(id){var ex=S.profile.exercises[id];return '<option value="'+esc(id)+'">'+esc(ex.name)+'</option>';}).join('')+'</select></div><button class="btn ghost sm" data-act="session-add-exercise-cancel"'+(edit.saving?' disabled':'')+'>Cancelar</button>' : '<button class="btn ghost sm" data-act="session-add-exercise-picker"'+(edit.saving?' disabled':'')+'>Añadir ejercicio</button>';
   return '<section class="card"><p class="sec-title">Editar entrenamiento</p>' +
     '<div class="fields"><div class="field"><label class="lab" for="session-edit-date">Día del entrenamiento</label><input class="txt" id="session-edit-date" data-session-meta="date" type="date" required value="' + esc(date) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
     '<div class="field"><label class="lab" for="session-edit-hours">Horas</label><input class="txt" id="session-edit-hours" data-session-meta="hours" type="number" min="0" max="999" step="1" inputmode="numeric" required value="' + esc(editHours) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
     '<div class="field"><label class="lab" for="session-edit-minutes">Minutos</label><input class="txt" id="session-edit-minutes" data-session-meta="minutes" type="number" min="0" max="59" step="1" inputmode="numeric" required value="' + esc(editMinutes) + '"' + (edit.saving ? ' disabled' : '') + '></div></div>' +
     '<p class="small muted">La duración se guarda con precisión de minutos. Corrige aquí peso, reps o esfuerzo de cada serie; también puedes cambiar el tipo. La fecha corregida actualiza el resumen semanal.</p>' +
-    setsHtml +
+    setsHtml + addPicker +
     '<div class="row"><button class="btn sm" data-act="session-edit-save"' + (edit.saving ? ' disabled' : '') + '>Guardar cambios</button><button class="btn ghost sm" data-act="session-edit-cancel"' + (edit.saving ? ' disabled' : '') + '>Cancelar</button></div></section>';
 }
 function saveSessionEdit(){
@@ -1182,7 +1192,9 @@ function saveSessionEdit(){
   if(hoursText.trim() === '' || minutesText.trim() === '' || !Number.isInteger(hours) || hours < 0 || hours > 999 || !Number.isInteger(minutes) || minutes < 0 || minutes > 59){
     toast('Indica horas y minutos válidos'); return;
   }
+  if(!edit.session.entries.length){ toast('El entrenamiento debe conservar al menos un ejercicio'); return; }
   var validSets = edit.session.entries.every(function(entry){
+    if(!entry.sets || !entry.sets.length) return false;
     return entry.sets.every(function(set){
       return Number.isFinite(set.w) && set.w > 0 && Number.isInteger(set.r) && set.r > 0 &&
         (set.rir === null || set.rir === undefined || (Number.isFinite(set.rir) && set.rir >= 0 && set.rir <= 10));
@@ -1949,12 +1961,37 @@ function onClick(ev){
       var editSession = S.sessions.find(function(s){ return s.id === t.dataset.id; });
       if(editSession){
         var editDuration = Math.max(0, Math.floor((Number(editSession.durationMs) || 0) / 60000));
-        S.sessionEdit = {id:editSession.id, session:clone(editSession), date:editSession.date, hours:String(Math.floor(editDuration / 60)), minutes:String(editDuration % 60), saving:false};
+        S.sessionEdit = {id:editSession.id, session:clone(editSession), date:editSession.date, hours:String(Math.floor(editDuration / 60)), minutes:String(editDuration % 60), saving:false, addPicker:false, confirmEntry:null};
         S.confirm = null; render();
       }
       break;
     case 'session-edit-save': saveSessionEdit(); break;
     case 'session-edit-cancel': S.sessionEdit = null; render(); break;
+    case 'session-add-exercise-picker': if(S.sessionEdit){ S.sessionEdit.addPicker=true; render(); } break;
+    case 'session-add-exercise-cancel': if(S.sessionEdit){ S.sessionEdit.addPicker=false; render(); } break;
+    case 'session-remove-exercise': if(S.sessionEdit){ S.sessionEdit.confirmEntry=+t.dataset.entry; render(); } break;
+    case 'session-remove-exercise-cancel': if(S.sessionEdit){ S.sessionEdit.confirmEntry=null; render(); } break;
+    case 'session-remove-exercise-ok': if(S.sessionEdit){ S.sessionEdit.session.entries.splice(+t.dataset.entry,1); S.sessionEdit.confirmEntry=null; render(); } break;
+    case 'session-add-set': if(S.sessionEdit){
+      var addEntry=S.sessionEdit.session.entries[+t.dataset.entry];
+      if(addEntry){
+        var exerciseForEntry=S.profile.exercises[addEntry.exId];
+        if(exerciseForEntry && exerciseForEntry.unilateral){
+          var pairIndex=addEntry.sets.reduce(function(max,set){return Math.max(max,Number.isFinite(set.pair)?set.pair+1:0);},0);
+          addEntry.sets.push({w:null,r:null,rir:null,type:'normal',pair:pairIndex,side:'left'});
+          addEntry.sets.push({w:null,r:null,rir:null,type:'normal',pair:pairIndex,side:'right'});
+        }else addEntry.sets.push({w:null,r:null,rir:null,type:'normal'});
+        render();
+      }
+    } break;
+    case 'session-remove-set': if(S.sessionEdit){
+      var removeEntry=S.sessionEdit.session.entries[+t.dataset.entry]; if(removeEntry){
+        var removedPair=removeEntry.sets[+t.dataset.set]&&removeEntry.sets[+t.dataset.set].pair;
+        removeEntry.sets.splice(+t.dataset.set,1);
+        if(removedPair!==undefined) removeEntry.sets=removeEntry.sets.filter(function(set){return set.pair!==removedPair;});
+        render();
+      }
+    } break;
     case 'set-mode': st.mode = t.dataset.mode; Store.saveProfile(); render(); break;
     case 'tr-minus': st.targetRir = Math.max(0, st.targetRir - 1); Store.saveProfile(); render(); break;
     case 'tr-plus': st.targetRir = Math.min(4, st.targetRir + 1); Store.saveProfile(); render(); break;
@@ -2006,6 +2043,7 @@ function onInput(ev){
       var value = t.value.trim() === '' ? null : num(t.value);
       set.rir = value === null ? null : (S.profile.settings.mode === 'rpe' ? 10 - value : value);
     }
+    if(t.dataset.sessionEdit === 'rest'){ set.restMs = t.value.trim() === '' ? undefined : Math.max(0, Number(t.value))*1000; }
     return;
   }
   if(t.id === 'pk-q'){ $('#pk-list').innerHTML = pickerList(t.value, S.redit && S.redit.pick ? 'routine' : 'day'); return; }
@@ -2028,6 +2066,43 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.sessionReplaceExercise!==undefined){
+    var replaceEntry=S.sessionEdit&&S.sessionEdit.session.entries[+t.dataset.entry], replacement=S.profile.exercises[t.value];
+    if(replaceEntry && replacement){
+      var replacementSets;
+      replaceEntry.exId=t.value;
+      if(replacement.unilateral){
+        replacementSets=replaceEntry.sets.filter(function(set){return set.side==='left' || set.pair===undefined;});
+        if(!replacementSets.length) replacementSets=replaceEntry.sets.slice();
+        var unilateralSets=[];
+        replacementSets.forEach(function(set,pair){ unilateralSets.push(Object.assign({},set,{pair:pair,side:'left'})); unilateralSets.push(Object.assign({},set,{pair:pair,side:'right'})); });
+        replaceEntry.sets=unilateralSets;
+      }else{
+        replacementSets=replaceEntry.sets.filter(function(set){return set.side!=='right';});
+        replacementSets.forEach(function(set){ delete set.pair; delete set.side; });
+        replaceEntry.sets=replacementSets;
+      }
+      render();
+    }
+    return;
+  }
+  if(t.dataset.sessionAddExercise!==undefined){
+    var editExId=t.value, sessionEdit=S.sessionEdit;
+    if(!sessionEdit || !editExId || !S.profile.exercises[editExId]) return;
+    var exercise=S.profile.exercises[editExId], setCount=Math.max(1,Math.min(20,Number(exercise.sets)||3)), newSets=[];
+    if(exercise.unilateral){
+      for(var pair=0;pair<setCount;pair++){
+        newSets.push({w:null,r:null,rir:null,type:'normal',pair:pair,side:'left'});
+        newSets.push({w:null,r:null,rir:null,type:'normal',pair:pair,side:'right'});
+      }
+    }else{
+      for(var i=0;i<setCount;i++) newSets.push({w:null,r:null,rir:null,type:'normal'});
+    }
+    sessionEdit.session.entries.push({exId:editExId,sets:newSets});
+    sessionEdit.addPicker=false;
+    render();
+    return;
+  }
   if(t.dataset.sessionEdit === 'type'){
     var edit = S.sessionEdit, entry = edit && edit.session.entries[+t.dataset.entry], set = entry && entry.sets[+t.dataset.set];
     if(!set || !Object.prototype.hasOwnProperty.call(SET_TYPES, t.value)) return;
