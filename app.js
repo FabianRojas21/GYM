@@ -430,7 +430,8 @@ function validBackup(data){
         entry.sets.every(function(set){
           return isObject(set) && validPositiveNumber(set.w) && validPositiveNumber(set.r) &&
             (set.rir === undefined || set.rir === null || validNumber(set.rir)) &&
-            (set.type === undefined || Object.prototype.hasOwnProperty.call(SET_TYPES, set.type));
+            (set.type === undefined || Object.prototype.hasOwnProperty.call(SET_TYPES, set.type)) &&
+            (set.restMs === undefined || validPositiveNumber(set.restMs));
         });
     });
   });
@@ -625,11 +626,15 @@ function rowsToSets(rows, unilateral){
     if(unilateral){
       ['right','left'].forEach(function(side){
         var values = r[side], effort = String(values.rir).trim() === '' ? null : num(values.rir);
-        all.push({w:num(values.w), r:num(values.r), rir:effort, type:setType(r), side:side, pair:i});
+        var unilateralSet={w:num(values.w), r:num(values.r), rir:effort, type:setType(r), side:side, pair:i};
+        if(r.restMs > 0) unilateralSet.restMs=Number(r.restMs);
+        all.push(unilateralSet);
       });
     } else {
       var rir = String(r.rir).trim() === '' ? null : num(r.rir);
-      all.push({w:num(r.w), r:num(r.r), rir:rir, type:setType(r)});
+      var bilateralSet={w:num(r.w), r:num(r.r), rir:rir, type:setType(r)};
+      if(r.restMs > 0) bilateralSet.restMs=Number(r.restMs);
+      all.push(bilateralSet);
     }
     return all;
   }, []);
@@ -1493,7 +1498,9 @@ function viewHist(){
       else total += e.sets.length;
     });
     var body = s.entries.map(function(e){
-      return '<div><strong>' + esc(exName(e.exId)) + '</strong><div class="small muted">' + esc(setsText(e.sets, true)) + '</div></div>';
+      var rests=e.sets.map(function(set){ return set.restMs; }).filter(function(value){ return Number(value)>0; });
+      var avg=rests.length ? Math.round(rests.reduce(function(sum,value){ return sum+Number(value); },0)/rests.length/1000) : 0;
+      return '<div><strong>' + esc(exName(e.exId)) + '</strong><div class="small muted">' + esc(setsText(e.sets, true)) + (avg ? ' · descanso medio ' + humanDuration(avg*1000) : '') + '</div></div>';
     }).join('');
     var editing = S.sessionEdit && S.sessionEdit.id === s.id;
     var duration = Number(s.durationMs) > 0 ? humanDuration(s.durationMs) : 'Sin duración';
@@ -1772,6 +1779,7 @@ function finish(updateRoutine){
     var sets = rowsToSets(en.rows, ex.unilateral).filter(function(s){ return s.w > 0 && s.r > 0; })
       .map(function(s){
         var set = {w:s.w, r:s.r, rir:s.rir, type:setType(s)};
+        if(s.restMs > 0){ set.restMs = Math.round(s.restMs); }
         if(ex.unilateral){ set.side = s.side; set.pair = s.pair; }
         return set;
       });
@@ -2051,10 +2059,18 @@ function onChange(ev){
     S.profile.settings.warmupRestSeconds = warmupSeconds; Store.saveProfile(); render(); return;
   }
   if(t.dataset.f === 'r' || t.dataset.f === 'w'){
-    var autoEntry = S.draft.entries[+t.dataset.ei], autoRow = autoEntry && autoEntry.rows[+t.dataset.ri];
+    var autoEntry = S.draft.entries[+t.dataset.ei], autoRi=+t.dataset.ri;
+    if(autoRi > 0){
+      var previousRestRow=autoEntry.rows[autoRi-1];
+      if(previousRestRow && previousRestRow.restCompletedAt && !autoEntry.rows[autoRi].restMs){
+        autoEntry.rows[autoRi].restMs=Math.max(0,Date.now()-previousRestRow.restCompletedAt);
+      }
+    }
+    var autoRow = autoEntry && autoEntry.rows[autoRi];
     var autoEx = autoEntry && effEx(autoEntry);
     if(autoRow && autoEx && autoRestEligible(autoRow) && rowComplete(autoRow, autoEx.unilateral) && !autoRow.restTriggered){
       autoRow.restTriggered = true;
+      autoRow.restCompletedAt = Date.now();
       var duration = restSecondsFor(autoRow);
       if(duration){ startRest(duration); saveDraft(); }
     }
