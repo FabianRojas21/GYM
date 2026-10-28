@@ -118,3 +118,20 @@ test('el motor usa ajustes explícitos para formatear RIR/RPE y objetivos', () =
   const result = analyzeCore(baseExercise, [set(10), set(10), set(10)], null, {mode:'rpe', targetRir:2});
   assert.match(result.detail, /RPE 8/);
 });
+
+test('la carga corporal y los músculos secundarios están integrados en la interfaz', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  assert.match(app,/loadMode !== 'bodyweight'/);
+  assert.match(app,/Peso corporal \+ carga añadida/);
+  assert.match(app,/effectiveWeight\(/);
+  assert.match(app,/normalizedSecondaryMuscles/);
+  assert.match(app,/factor:0\.5/);
+});
+
+test('la carga corporal se convierte una sola vez y también en récords y gráficos', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  assert.match(app,/entriesFor\(exId\)[\s\S]*?sets\.concat\(e\.sets\)/);
+  assert.match(app,/var sets = effectiveSetsFor\(ex, entry\.sets, session\.date\)/);
+  assert.match(app,/effectiveSetsFor\(ex,h\.sets,h\.date\)/);
+  assert.doesNotMatch(app,/sets\.concat\(effectiveSetsFor\(exById/);
+});
