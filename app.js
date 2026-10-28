@@ -237,7 +237,13 @@ var Store = {
         Store.firebaseAuth = firebase.auth(firebaseApp);
         Store.firebaseDb = firebase.firestore(firebaseApp);
         Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){ });
-        Store.firebaseAuth.onAuthStateChanged(function(user){ if(user) Store.startFirebase(user); else { S.cloudUser=null; Store.startLocal(); } });
+        var authResolved=false;
+        Store.firebaseAuth.onAuthStateChanged(function(user){
+          authResolved=true;
+          if(user) Store.startFirebase(user);
+          else { S.cloudUser=null; Store.startLocal(); }
+        });
+        setTimeout(function(){ if(!authResolved && !S.ready){ Store.startLocal(); } }, 8000);
         return;
       }catch(error){ console.warn('Firebase no disponible', error); }
     }
@@ -321,8 +327,10 @@ var Store = {
   },
   signIn:function(){
     if(!Store.firebaseAuth) return Promise.reject(new Error('Firebase no inicializado'));
-    return Store.firebaseAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(error){
-      if(error && ['auth/popup-blocked','auth/popup-closed-by-user'].includes(error.code)) return Store.firebaseAuth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
+    var provider=new firebase.auth.GoogleAuthProvider();
+    if(location.hostname.endsWith('github.io')) return Store.firebaseAuth.signInWithRedirect(provider);
+    return Store.firebaseAuth.signInWithPopup(provider).catch(function(error){
+      if(error && ['auth/popup-blocked','auth/popup-closed-by-user'].includes(error.code)) return Store.firebaseAuth.signInWithRedirect(provider);
       throw error;
     });
   },
