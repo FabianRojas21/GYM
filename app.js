@@ -376,7 +376,7 @@ function validBackup(data){
   if(!isObject(data) || !isObject(data.profile) || !Array.isArray(data.sessions)) return false;
   var profile = data.profile;
   if((profile.settings !== undefined && !isObject(profile.settings)) || !isObject(profile.exercises || {}) ||
-    !isObject(profile.routines || {}) || !isObject(profile.programs || {})) return false;
+    !isObject(profile.routines || {}) || !isObject(profile.programs || {}) || !isObject(profile.goals || {})) return false;
   var validNumber = function(value){ return typeof value === 'number' && isFinite(value); };
   var validPositiveNumber = function(value){ return validNumber(value) && value >= 0; };
   var validDate = function(value){
@@ -415,6 +415,13 @@ function validBackup(data){
   for(var p=0;p<programIds.length;p++){
     var program = profile.programs[programIds[p]];
     if(!isObject(program) || typeof program.name !== 'string') return false;
+  }
+  var goalIds = Object.keys(profile.goals || {});
+  for(var g=0;g<goalIds.length;g++){
+    var goal=profile.goals[goalIds[g]];
+    if(!isObject(goal) || typeof goal.id !== 'string' || typeof goal.name !== 'string' ||
+      !(validNumber(goal.target) && goal.target > 0) || !validNumber(goal.start) ||
+      (goal.exerciseId !== null && goal.exerciseId !== undefined && typeof goal.exerciseId !== 'string')) return false;
   }
   var sessionIds = {};
   return data.sessions.every(function(session){
@@ -527,7 +534,7 @@ function importSessionsCsv(text){
     if(!grouped[date][name]) grouped[date][name]=[];
     grouped[date][name].push({w:weight,r:reps,rir:effort, type:['warmup','normal','drop','failure','restpause'].includes(r.tipo||r.type)?(r.tipo||r.type||'normal'):'normal'});
   });
-  var imported=0;
+  var imported=0, importedSessions=[];
   Object.keys(grouped).forEach(function(date){
     var entries=[];
     Object.keys(grouped[date]).forEach(function(name){
@@ -535,10 +542,16 @@ function importSessionsCsv(text){
       if(!exercise){ exercise={id:uid('ex'),name:name,sets:3,min:1,max:20,inc:2.5,muscle:'unassigned'}; S.profile.exercises[exercise.id]=exercise; }
       entries.push({exId:exercise.id,sets:grouped[date][name]});
     });
-    S.sessions.push({id:uid('ses'),date:date,ts:new Date(date+'T12:00:00').getTime(),startedAt:new Date(date+'T12:00:00').getTime(),finishedAt:new Date(date+'T13:00:00').getTime(),durationMs:3600000,entries:entries,csvImport:true}); imported++;
+    var signature=JSON.stringify(entries.map(function(entry){ return {exId:Object.keys(S.profile.exercises).find(function(id){ return id===entry.exId; })?entry.exId:entry.exId,sets:entry.sets.map(function(set){ return [set.w,set.r,set.rir,set.type]; })}; }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }));
+    var duplicate=S.sessions.some(function(session){
+      return session.date===date && session.csvImport && JSON.stringify(session.entries.map(function(entry){ return {exId:entry.exId,sets:entry.sets.map(function(set){ return [set.w,set.r,set.rir,set.type]; })}; }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }))===signature;
+    });
+    if(duplicate) return;
+    var session={id:uid('ses'),date:date,ts:new Date(date+'T12:00:00').getTime(),startedAt:new Date(date+'T12:00:00').getTime(),finishedAt:new Date(date+'T13:00:00').getTime(),durationMs:3600000,entries:entries,csvImport:true};
+    S.sessions.push(session); importedSessions.push(session); imported++;
   });
-  if(!imported){ toast('No se encontraron entrenos válidos'); return; }
-  Store.saveProfile(); S.sessions.forEach(function(s){ Store.saveSession(s); }); render(); toast(imported+' entreno'+(imported===1?'':'s')+' importado'+(imported===1?'':'s')+' desde CSV');
+  if(!imported){ toast('No se encontraron entrenos nuevos válidos'); return; }
+  Store.saveProfile(); importedSessions.forEach(function(session){ Store.saveSession(session); }); render(); toast(imported+' entreno'+(imported===1?'':'s')+' importado'+(imported===1?'':'s')+' desde CSV');
 }
 
 /* ---------- presentación de series ---------- */
