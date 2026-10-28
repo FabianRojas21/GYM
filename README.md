@@ -152,6 +152,19 @@ La sección **Yo** separa la información personal en tres áreas:
 Las medidas se incluyen en perfiles, respaldos JSON y copias automáticas. Se
 mantienen separadas de los entrenamientos para no mezclarlas con el historial de series.
 
+## Carga corporal y músculos secundarios
+
+En un ejercicio configurado como **Peso corporal + carga añadida**, el peso
+registrado en cada serie se interpreta como carga extra. La carga efectiva usa
+la medición corporal más cercana anterior a ese entreno; un valor de `0 kg`
+representa peso corporal sin carga añadida.
+
+Los músculos secundarios se estiman automáticamente según el músculo principal
+permitiendo usar la app sin configuraciones adicionales. La participación
+ponderada es de 0,5 series frente a 1 serie completa del músculo principal.
+El volumen efectivo sigue usando peso corporal más carga añadida y no cuenta
+aproximaciones como volumen progresivo.
+
 ## Instalación y publicación móvil
 
 La aplicación incluye un Service Worker y un manifiesto PWA. Para instalarla,
@@ -167,3 +180,24 @@ un aviso para instalarla.
 Los datos locales siguen vinculados al navegador y origen usados. Antes de
 cambiar de dirección, navegador o teléfono, descarga un respaldo JSON desde
 **Ajustes → Tus datos**.
+
+## Sincronización con Firebase
+
+La app puede sincronizar perfil, entrenamientos, rutinas, mediciones y el
+entreno en curso mediante Firebase Authentication y Firestore. La
+configuración pública ya está en `firebase-config.js`.
+
+1. En Firebase Console abre **Authentication → Sign-in method** y habilita
+   **Google**.
+2. En **Authentication → Settings → Authorized domains** añade `localhost` y
+   el dominio de GitHub Pages (por ejemplo, `usuario.github.io`).
+3. Crea Firestore Database en modo producción.
+4. Publica `firestore.rules` desde Firebase CLI con `firebase deploy --rules
+   firestore.rules`, o pega su contenido en Reglas de Firestore.
+5. Abre Ajustes, pulsa **Continuar con Google** y autoriza la cuenta. La primera
+   vez, los datos locales existentes se suben si la cuenta aún está vacía.
+
+Las reglas restringen cada documento bajo `/users/{uid}` al usuario autenticado
+con ese UID. Firebase Hosting no es obligatorio; GitHub Pages puede usar los
+SDK web compatibles con la app estática. La configuración Firebase es pública;
+no se deben incluir claves privadas ni credenciales de cuenta de servicio.

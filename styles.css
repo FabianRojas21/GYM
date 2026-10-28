@@ -319,6 +319,8 @@ details.how ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:col
 .rt-line .s{color:var(--muted);white-space:nowrap}
 .efforts{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px}
 .efforts .field .in{height:44px}
+.check-inline{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:.92rem}
+.check-inline input{width:auto;margin:0}
 .mini{width:36px;height:36px;border:1px solid var(--line);background:transparent;border-radius:4px;color:var(--muted);font:600 18px/1 var(--font-display)}
 .mini:hover{color:var(--ink)}
 .mini[disabled]{opacity:.35;cursor:not-allowed}

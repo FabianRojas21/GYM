@@ -70,6 +70,50 @@ function muscleOptions(selected){
     return '<option value="' + id + '"' + (muscleId({muscle:selected}) === id ? ' selected' : '') + '>' + MUSCLES[id] + '</option>';
   }).join('');
 }
+function normalizedSecondaryMuscles(ex){
+  var primary = muscleId(ex);
+  var name = String(ex.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  var inferred = [];
+  var matches = function(words){ return words.some(function(word){ return name.includes(word); }); };
+  if(primary === 'chest') {
+    inferred = ['triceps', 'shoulders'];
+  } else if(primary === 'back') {
+    inferred = matches(['remo', 'jalon', 'dominada', 'pull', 'row']) ? ['biceps'] : ['biceps'];
+    if(matches(['peso muerto', 'traccion', 'dominada'])) inferred.push('glutes');
+  } else if(primary === 'shoulders') {
+    inferred = ['triceps', 'core'];
+  } else if(primary === 'biceps' || primary === 'triceps') {
+    inferred = [primary === 'biceps' ? 'back' : 'chest'];
+  } else if(primary === 'quads') {
+    inferred = ['glutes', 'core'];
+    if(matches(['sentadilla', 'squat', 'prensa'])) inferred.push('hamstrings');
+  } else if(primary === 'hamstrings') {
+    inferred = ['glutes', 'core'];
+  } else if(primary === 'glutes') {
+    inferred = ['hamstrings', 'core'];
+  } else if(primary === 'core') {
+    inferred = primary === 'core' ? [] : [];
+  }
+  return inferred.filter(function(id, index){ return MUSCLES[id] && id !== primary && inferred.indexOf(id) === index; });
+}
+function muscleAssignments(ex){
+  var primary = muscleId(ex);
+  var assignments = [{id:primary, factor:1}];
+  normalizedSecondaryMuscles(ex).forEach(function(id){ assignments.push({id:id, factor:0.5}); });
+  return assignments;
+}
+function latestBodyWeight(date){
+  var matches=(S.profile.measurements||[]).filter(function(m){ return m.values && Number(m.values.weight)>=0 && typeof m.date==='string' && (!date || m.date<=date); }).sort(function(a,b){ return b.date.localeCompare(a.date); });
+  return matches.length ? Number(matches[0].values.weight) : null;
+}
+function effectiveWeight(ex, set, date){
+  if(ex.loadMode !== 'bodyweight') return Number(set.w);
+  var added = Number(set.w); if(!isFinite(added) || added < 0) return Number(set.w);
+  var bodyWeight = latestBodyWeight(date); return bodyWeight === null ? added : bodyWeight + added;
+}
+function effectiveSetsFor(ex, sets, date){
+  return sets.map(function(set){ var copy=clone(set); copy.w=effectiveWeight(ex,set,date); return copy; });
+}
 function blankDraft(){ return {date:null, startedAt:null, routineId:null, entries:[]}; }
 function loadDraft(){
   try { var d = JSON.parse(localStorage.getItem(DK)); if(d && Array.isArray(d.entries)) return Object.assign(blankDraft(), d); } catch(e){}
@@ -91,6 +135,15 @@ function saveDraft(){
   try {
     localStorage.setItem(DK, JSON.stringify(S.draft));
     draftSaveWarningShown = false;
+    if(['cloud'].includes(S.kind) && Store.firebaseDb && Store.firebaseUser){
+      clearTimeout(cloudDraftTimer);
+      cloudDraftTimer=setTimeout(function(){
+        var payload=clone(S.draft); payload.updatedAt=Date.now(); payload.restEndsAt=S.restEndsAt || null;
+        Store.firebaseDb.collection('users').doc(Store.firebaseUser.uid).collection('app').doc('draft').set(payload).catch(function(){
+          toast('No se pudo sincronizar el entreno en curso');
+        });
+      }, 350);
+    }
     return true;
   } catch(e){
     if(!draftSaveWarningShown){ toast('No se pudo guardar el entreno en curso. Copia tus datos antes de salir'); draftSaveWarningShown = true; }
@@ -114,6 +167,7 @@ function saveRestEnd(){
   try {
     if(S.restEndsAt) localStorage.setItem(RTK, String(S.restEndsAt));
     else localStorage.removeItem(RTK);
+    if(['cloud'].includes(S.kind)) saveDraft();
   } catch(e){ toast('No se pudo guardar el temporizador'); }
 }
 function startRest(seconds){
@@ -172,18 +226,88 @@ function toast(msg, actionLabel, action){
 
 /* ---------- almacenamiento: cuenta (db) o este navegador ---------- */
 var profTimer = null, profBusy = false, profDirty = false;
+var cloudDraftTimer = null;
 var Store = {
-  ref:null, col:null,
+  ref:null, col:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null,
   init:function(){
-    return Promise.all([use('user'), use('db')]).then(function(r){
+    use('downloads').then(function(d){ S.canDownload = !!d; if(S.ready) render(); }).catch(function(){});
+    if(window.firebase && window.SOBRECARGA_FIREBASE_CONFIG){
+      try{
+        var firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(window.SOBRECARGA_FIREBASE_CONFIG);
+        Store.firebaseAuth = firebase.auth(firebaseApp);
+        Store.firebaseDb = firebase.firestore(firebaseApp);
+        Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){ });
+        Store.firebaseAuth.onAuthStateChanged(function(user){ if(user) Store.startFirebase(user); else { S.cloudUser=null; Store.startLocal(); } });
+        return;
+      }catch(error){ console.warn('Firebase no disponible', error); }
+    }
+    Promise.all([use('user'), use('db')]).then(function(r){
       var user = r[0], db = r[1];
       if(!user || !db) return null;
       return user.id().then(function(id){ return id ? {db:db, id:id} : null; });
     }).catch(function(){ return null; }).then(function(ok){
-      use('downloads').then(function(d){ S.canDownload = !!d; if(S.ready) render(); }).catch(function(){});
       if(ok) Store.startDb(ok.db, ok.id); else Store.startLocal();
     });
   },
+  startFirebase:function(user){
+    S.cloudUser=user;
+    S.kind='cloud';
+    Store.firebaseUser=user;
+    var root=Store.firebaseDb.collection('users').doc(user.uid);
+    Store.ref=root.collection('app').doc('state');
+    Store.col=root.collection('sessions');
+    var localData=null;
+    try{ localData=JSON.parse(localStorage.getItem(LK)); }catch(e){}
+    var migration=Promise.resolve();
+    if(localData && (localData.profile || (localData.sessions && localData.sessions.length))){
+      migration=Store.ref.get().then(function(remoteProfile){
+        var writes=[];
+        if(!remoteProfile.exists && localData.profile){ writes.push(Store.ref.set(clone(localData.profile))); }
+        if(writes.length) return Promise.all(writes);
+      }).then(function(){ return Store.col.get(); }).then(function(remoteSessions){
+        var remoteIds={}; remoteSessions.forEach(function(doc){ remoteIds[doc.id]=true; });
+        return (localData.sessions || []).reduce(function(queue,session){
+          if(remoteIds[session.id]) return queue;
+          return queue.then(function(){ return Store.col.doc(session.id).set(clone(session)); });
+        }, Promise.resolve());
+      }).catch(function(error){ console.warn('Migración local a Firebase fallida', error); });
+    }
+    var gotProfile=false, gotSessions=false;
+    var done=function(){ if(gotProfile && gotSessions){ S.ready=true; createAutoBackup(); render(); } };
+    migration.then(function(){
+      Store.ref.onSnapshot(function(snap){
+        if(!(profDirty || profBusy)){
+          if(snap.exists) S.profile=normProfile(snap.data());
+          else S.profile=defaultProfile();
+        }
+        gotProfile=true; done();
+      }, function(){ toast('No se pudieron descargar tus datos de la cuenta'); Store.startLocal(); });
+      Store.col.onSnapshot(function(snap){
+        S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
+        gotSessions=true; done();
+      }, function(){ toast('No se pudieron descargar tus entrenos'); Store.startLocal(); });
+      root.collection('app').doc('draft').get().then(function(snap){
+        if(snap.exists && snap.data() && Array.isArray(snap.data().entries)){
+          var remoteDraft=Object.assign(blankDraft(), snap.data());
+          if(!S.draft.entries.length || remoteDraft.updatedAt >= (S.draft.updatedAt||0)){
+            S.draft=remoteDraft;
+            if(remoteDraft.restEndsAt) S.restEndsAt=remoteDraft.restEndsAt;
+            saveDraft(false);
+          }
+        }else if(S.draft.entries.length || S.draft.startedAt){
+          saveDraft(false);
+        }
+      }).catch(function(){ });
+    });
+  },
+  signIn:function(){
+    if(!Store.firebaseAuth) return Promise.reject(new Error('Firebase no inicializado'));
+    return Store.firebaseAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(error){
+      if(error && ['auth/popup-blocked','auth/popup-closed-by-user'].includes(error.code)) return Store.firebaseAuth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
+      throw error;
+    });
+  },
+  signOut:function(){ return Store.firebaseAuth ? Store.firebaseAuth.signOut() : Promise.resolve(); },
   startLocal:function(){
     S.kind = 'local';
     try {
@@ -218,7 +342,7 @@ var Store = {
     }
   },
   saveProfile:function(){
-    if(S.kind !== 'db'){ Store.saveLocal(); return; }
+    if(!['db','cloud'].includes(S.kind)){ Store.saveLocal(); return; }
     profDirty = true; clearTimeout(profTimer); profTimer = setTimeout(Store.flush, 350);
   },
   flush:function(){
@@ -236,7 +360,7 @@ var Store = {
     });
   },
   saveSession:function(s){
-    if(S.kind !== 'db'){
+    if(!['db','cloud'].includes(S.kind)){
       var exists = S.sessions.some(function(item){ return item.id === s.id; });
       var sessions = exists ? S.sessions.map(function(item){ return item.id === s.id ? s : item; }) : S.sessions.concat([s]);
       try {
@@ -253,7 +377,7 @@ var Store = {
     });
   },
   updateSession:function(session){
-    if(S.kind === 'db'){
+    if(['db','cloud'].includes(S.kind)){
       return Store.col.doc(session.id).set(clone(session)).catch(function(error){
         toast('No se pudo guardar los cambios del entreno');
         throw error;
@@ -269,12 +393,12 @@ var Store = {
     }
   },
   deleteSessions:function(ids){
-    if(S.kind !== 'db'){ Store.saveLocal(); return Promise.resolve(); }
+    if(!['db','cloud'].includes(S.kind)){ Store.saveLocal(); return Promise.resolve(); }
     return ids.reduce(function(p, id){ return p.then(function(){ return Store.col.doc(id).delete(); }); }, Promise.resolve())
       .catch(function(){ toast('No se pudo borrar'); });
   },
   replaceAll:function(profile, sessions){
-    if(S.kind !== 'db'){
+    if(!['db','cloud'].includes(S.kind)){
       try { localStorage.setItem(LK, JSON.stringify({profile:profile, sessions:sessions})); }
       catch(e){ return Promise.reject(e); }
       S.profile = profile; S.sessions = sessions;
@@ -345,7 +469,7 @@ function planFor(ex){
   var hist = entriesFor(ex.id);
   if(!hist.length) return {status:'nuevo'};
   var last = hist[hist.length-1], prev = hist[hist.length-2];
-  var a = analyze(ex, last.sets, prev ? prev.sets : null, S.profile.settings);
+  var a = analyze(ex, effectiveSetsFor(ex, last.sets, last.date), prev ? effectiveSetsFor(ex, prev.sets, prev.date) : null, S.profile.settings);
   if(!a) return {status:'nuevo'};
   a.last = last;
   return a;
@@ -366,12 +490,13 @@ function personalRecords(ex){
   var records = {weight:null, reps:null, estimated:null};
   S.sessions.forEach(function(session){
     session.entries.filter(function(entry){ return entry.exId === ex.id; }).forEach(function(entry){
-      entry.sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && Number(set.r) > 0; }).forEach(function(set){
+      var sets = effectiveSetsFor(ex, entry.sets, session.date);
+      sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && Number(set.r) > 0; }).forEach(function(set){
         var weight = Number(set.w), reps = Number(set.r);
         if(!records.weight || weight > records.weight.value) records.weight = {value:weight, date:session.date};
         if(!records.reps || reps > records.reps.value) records.reps = {value:reps, date:session.date};
       });
-      var estimated = estimatedEx1rm(ex, entry.sets);
+      var estimated = estimatedEx1rm(ex, sets);
       if(estimated !== null && (!records.estimated || estimated > records.estimated.value)) records.estimated = {value:estimated, date:session.date};
     });
   });
@@ -405,7 +530,9 @@ function validBackup(data){
   for(var i=0;i<exerciseIds.length;i++){
     var ex = profile.exercises[exerciseIds[i]];
     if(!isObject(ex) || typeof ex.name !== 'string' || !validNumber(ex.sets) || !validNumber(ex.min) || !validNumber(ex.max) || !validNumber(ex.inc) ||
-      (ex.warmupSets !== undefined && !validNumber(ex.warmupSets)) || !validWarmupConfig(ex)) return false;
+      (ex.warmupSets !== undefined && !validNumber(ex.warmupSets)) || !validWarmupConfig(ex) ||
+      (ex.loadMode !== undefined && !['external','bodyweight'].includes(ex.loadMode)) ||
+      (ex.secondaryMuscles !== undefined && (!Array.isArray(ex.secondaryMuscles) || !ex.secondaryMuscles.every(function(id){ return MUSCLES[id] && id !== 'unassigned' && id !== ex.muscle; })))) return false;
   }
   var routineIds = Object.keys(profile.routines || {});
   for(var j=0;j<routineIds.length;j++){
@@ -765,7 +892,7 @@ function liveHtml(ei){
   var en = S.draft.entries[ei], ex = effEx(en);
   var sets = rowsToSets(en.rows, ex.unilateral);
   var hist = entriesFor(ex.id), last = hist[hist.length-1];
-  var a = analyze(ex, sets, last ? last.sets : null, S.profile.settings);
+  var a = analyze(ex, effectiveSetsFor(ex, sets, S.draft.date || iso(new Date())), last ? effectiveSetsFor(ex, last.sets, last.date) : null, S.profile.settings);
   if(!a) return '<p class="muted small">' + (ex.unilateral
     ? 'Completa peso y repeticiones en ambos lados para ver tu progreso.'
     : 'Anota tus series y verás cuánto te falta para subir de peso.') + '</p>';
@@ -1051,11 +1178,14 @@ function sessionStats(session){
     entry.sets.forEach(function(set){
       if(setType(set) !== 'warmup' && validWeight(set.w) && set.r > 0) stats.reps += set.r;
     });
-    stats.volume += entryVolume(entry);
+    stats.volume += entryVolume(entry, session.date);
   });
   return stats;
 }
-function entryVolume(entry){
+function entryVolume(entry, sessionDate){
+  var ex = exById(entry.exId);
+  var effectiveSets = ex ? effectiveSetsFor(ex, entry.sets, sessionDate) : entry.sets;
+  entry = Object.assign({}, entry, {sets:effectiveSets});
   if(!entry.unilateral){
     return entry.sets.reduce(function(total, set){
       return total + (setType(set) !== 'warmup' && validWeight(set.w) && set.r > 0 ? set.w * set.r : 0);
@@ -1098,24 +1228,26 @@ function weeklyMuscleSummaryHtml(week){
     session.entries.forEach(function(entry){
       var count = entryEffectiveSets(entry);
       if(!count) return;
-      var exercise = exById(entry.exId), id = muscleId(exercise || {});
-      counts[id] = (counts[id] || 0) + count;
+      var exercise = exById(entry.exId);
+      muscleAssignments(exercise || {}).forEach(function(assignment){
+        counts[assignment.id] = (counts[assignment.id] || 0) + count * assignment.factor;
+      });
     });
   });
   var groups = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || MUSCLES[a].localeCompare(MUSCLES[b], 'es'); });
   var content = groups.length
     ? '<div class="weekly-muscle-list">' + groups.map(function(id){
-        return '<div class="weekly-muscle-row"><span>' + esc(MUSCLES[id]) + '</span><strong>' + counts[id] + '</strong></div>';
+        return '<div class="weekly-muscle-row"><span>' + esc(MUSCLES[id]) + '</span><strong>' + fmt1(counts[id]) + '</strong></div>';
       }).join('') + '</div>'
     : '<p class="home-weekly-note">Aún no hay series efectivas registradas esta semana.</p>';
   var now=new Date(); var recent=new Date(now); recent.setDate(now.getDate()-7);
   var previous=new Date(now); previous.setDate(now.getDate()-28);
   var recentThreshold=iso(recent), previousThreshold=iso(previous);
   var countsRecent={}, countsPrevious={};
-  week.forEach(function(session){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId), id=muscleId(ex||{}); if(count) countsRecent[id]=(countsRecent[id]||0)+count; }); });
-  S.sessions.forEach(function(session){ if(session.date>=previousThreshold && session.date<recentThreshold){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId), id=muscleId(ex||{}); if(count) countsPrevious[id]=(countsPrevious[id]||0)+count; }); } });
+  week.forEach(function(session){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId); if(count) muscleAssignments(ex||{}).forEach(function(a){ countsRecent[a.id]=(countsRecent[a.id]||0)+count*a.factor; }); }); });
+  S.sessions.forEach(function(session){ if(session.date>=previousThreshold && session.date<recentThreshold){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId); if(count) muscleAssignments(ex||{}).forEach(function(a){ countsPrevious[a.id]=(countsPrevious[a.id]||0)+count*a.factor; }); }); } });
   var effortByMuscle={};
-  week.forEach(function(session){ session.entries.forEach(function(entry){ var ex=exById(entry.exId), id=muscleId(ex||{}); entry.sets.forEach(function(set){ if(!countsForProgress(set) || !effortByMuscle[id]) effortByMuscle[id]=effortByMuscle[id]||[]; if(countsForProgress(set) && set.rir!==null && set.rir!==undefined && isFinite(Number(set.rir))) effortByMuscle[id].push(Number(set.rir)); }); }); });
+  week.forEach(function(session){ session.entries.forEach(function(entry){ var ex=exById(entry.exId); entry.sets.forEach(function(set){ if(!countsForProgress(set)) return; muscleAssignments(ex||{}).forEach(function(a){ effortByMuscle[a.id]=effortByMuscle[a.id]||[]; if(set.rir!==null && set.rir!==undefined && isFinite(Number(set.rir))) effortByMuscle[a.id].push(Number(set.rir)); }); }); }); });
   var trends=groups.slice(0,5).map(function(id){
     var current=counts[id]||0, prior=Math.round((countsPrevious[id]||0)/3);
     var trend=prior===0?(current?'Carga nueva':'Sin cambios'):current>prior*1.15?'Carga al alza':current<prior*0.85?'Carga a la baja':'Carga estable';
@@ -1503,11 +1635,11 @@ function exDetail(ex){
     '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' +
     '<div><span>Mejor serie estimada</span><strong>' + fmt1(records.estimated.value) + ' kg</strong><small>' + esc(dFmt(records.estimated.date)) + '</small></div></div>' : '<p class="small muted">Los récords aparecerán después de registrar series normales.</p>';
   var pts = hist.map(function(h){
-    var sets=h.sets.filter(function(s){ return setType(s)==='normal' && Number(s.w)>0 && Number(s.r)>0; });
+    var sets=effectiveSetsFor(ex,h.sets,h.date).filter(function(s){ return setType(s)==='normal' && Number(s.w)>0 && Number(s.r)>0; });
     var y=null;
     if(S.progressMetric==='weight') y=sets.length?Math.max.apply(null,sets.map(function(s){ return Number(s.w); })):null;
     if(S.progressMetric==='volume') y=sets.length?sets.reduce(function(total,s){ return total+Number(s.w)*Number(s.r); },0):null;
-    if(S.progressMetric==='estimated') y=estimatedEx1rm(ex,h.sets);
+    if(S.progressMetric==='estimated') y=estimatedEx1rm(ex,sets);
     return y!==null ? {label:dFmt(h.date),y:y} : null;
   }).filter(Boolean);
   var metricLabels={weight:'Peso máximo',estimated:'1RM estimado',volume:'Volumen'};
@@ -1525,7 +1657,8 @@ function exDetail(ex){
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
       f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('loadStep', 'Peso disponible cada (kg)', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-      '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></div>' + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
+      '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></div>' +
+      '<div class="field"><label class="lab" for="cfg-loadMode">Tipo de carga</label><select id="cfg-loadMode" class="txt" data-cfg="loadMode" data-id="' + esc(ex.id) + '"><option value="external"' + (ex.loadMode !== 'bodyweight' ? ' selected' : '') + '>Peso externo</option><option value="bodyweight"' + (ex.loadMode === 'bodyweight' ? ' selected' : '') + '>Peso corporal + carga añadida</option></select></div>' + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
         return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-cfg="warmupPercent" data-id="' + esc(ex.id) + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
       }).join('') + '</div></div>' : '') + '<div class="fields">' +
       '<div class="field"><label class="lab" for="cfg-unilateral">Ejecución</label><select id="cfg-unilateral" class="txt" data-cfg="unilateral" data-id="' + esc(ex.id) + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div></div>' +
@@ -1626,7 +1759,7 @@ function profileExercises(){
   S.sessions.forEach(function(session){session.entries.forEach(function(entry){
     counts[entry.exId]=(counts[entry.exId]||0)+1;
     if(!last[entry.exId]||session.date>last[entry.exId]) last[entry.exId]=session.date;
-    entry.sets.forEach(function(set){if(validWeight(set.w)&&Number(set.r)>0&&countsForProgress(set)) volumes[entry.exId]=(volumes[entry.exId]||0)+Number(set.w)*Number(set.r);});
+    entry.sets.forEach(function(set){if(validWeight(set.w)&&Number(set.r)>0&&countsForProgress(set)){ var ex=exById(entry.exId); volumes[entry.exId]=(volumes[entry.exId]||0)+effectiveWeight(ex||{},set,session.date)*Number(set.r); }});
   });});
   var ids=Object.keys(S.profile.exercises).filter(function(id){return !S.profile.exercises[id].archived;});
   ids.sort(function(a,b){var ea=exById(a), eb=exById(b);
@@ -1686,8 +1819,15 @@ function viewSet(){
     '<li>Dos entrenos seguidos bajo el mínimo con el mismo peso sugieren bajar cerca de 10%.</li>' +
     '<li>Las series marcadas con C son calentamiento y no cuentan.</li></ul></details></section>';
   out += goalsHtml();
+  var accountHtml='';
+  if(Store.firebaseAuth){
+    accountHtml=S.cloudUser
+      ? '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Conectado como <strong>'+esc(S.cloudUser.email || S.cloudUser.displayName || 'usuario')+'</strong>. Tus datos se sincronizan en todos tus dispositivos.</p><div class="row"><span class="chip ok">Sincronización activa</span><button class="btn ghost sm" data-act="cloud-sync">Sincronizar ahora</button><button class="btn ghost sm" data-act="cloud-signout">Cerrar sesión</button></div></section>'
+      : '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Inicia sesión con Google para mantener tus datos en varios dispositivos y recuperarlos si cambias de navegador.</p><div class="row"><button class="btn sm" data-act="cloud-signin">Continuar con Google</button></div></section>';
+  }
+  out += accountHtml;
   out += '<section class="card"><p class="sec-title">Tus datos</p><p class="small">' +
-    (S.kind === 'db' ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : 'Se guardan solo en este navegador. Abre la app con tu sesión de Claude para tenerlos en todos tus dispositivos.') + '</p><div class="row">' +
+    (['db','cloud'].includes(S.kind) ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : 'Se guardan solo en este navegador. Inicia sesión arriba para sincronizarlos.') + '</p><div class="row">' +
     '<button class="btn ghost sm" data-act="auto-restore">Restaurar última copia automática' + esc(autoBackupLabel()) + '</button>' +
     '<button class="btn ghost sm" data-act="export">Descargar respaldo</button><button class="btn ghost sm" data-act="import">Restaurar respaldo</button>' +
     '<button class="btn ghost sm" data-act="export-csv">Exportar CSV</button><button class="btn ghost sm" data-act="import-csv">Importar CSV</button>' +
@@ -1734,7 +1874,7 @@ function loadDemo(){
   Object.keys(d.routines).forEach(function(k){ S.profile.routines[k] = d.routines[k]; });
   d.sessions.forEach(function(s){ S.sessions = S.sessions.filter(function(x){ return x.id !== s.id; }); S.sessions.push(s); });
   Store.saveProfile();
-  if(S.kind === 'db'){ d.sessions.reduce(function(p, s){ return p.then(function(){ return Store.saveSession(s); }); }, Promise.resolve()); }
+  if(['db','cloud'].includes(S.kind)){ d.sessions.reduce(function(p, s){ return p.then(function(){ return Store.saveSession(s); }); }, Promise.resolve()); }
   else Store.saveLocal();
   S.tab = 'hoy'; render();
   toast('Datos de ejemplo cargados. Quítalos cuando quieras en Ajustes.');
@@ -1937,6 +2077,18 @@ function onClick(ev){
   var act = t.dataset.act, ei = t.dataset.ei !== undefined ? +t.dataset.ei : null, ri = t.dataset.ri !== undefined ? +t.dataset.ri : null;
   var st = S.profile.settings;
   switch(act){
+    case 'cloud-signin':
+      Store.signIn().catch(function(error){ toast('No se pudo iniciar sesión' + (error && error.message ? ': ' + error.message : '')); });
+      break;
+    case 'cloud-signout':
+      Store.signOut();
+      break;
+    case 'cloud-sync':
+      Store.saveProfile();
+      S.sessions.forEach(function(session){ Store.saveSession(session); });
+      saveDraft();
+      toast('Sincronización enviada');
+      break;
     case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
     case 'profile-open-exercise': S.tab='ejercicios'; S.librarySection='ejercicios'; S.openEx=t.dataset.id; try{localStorage.setItem(TK,S.tab);}catch(e){} render(); window.scrollTo(0,0); break;
@@ -2362,6 +2514,10 @@ function onChange(ev){
   }
   var key = t.dataset.cfg; if(!key) return;
   var ex = exById(t.dataset.id); if(!ex) return;
+  if(key === 'loadMode'){
+    if(!['external','bodyweight'].includes(t.value)){ render(); return; }
+    ex.loadMode = t.value; Store.saveProfile(); render(); return;
+  }
   if(key === 'unilateral'){
     if(t.value !== 'true' && t.value !== 'false'){ render(); return; }
     var hadSideData = ex.unilateral && t.value === 'false' && S.draft.entries.some(function(en){
