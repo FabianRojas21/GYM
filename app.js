@@ -1102,10 +1102,14 @@ function weeklyMuscleSummaryHtml(week){
   var countsRecent={}, countsPrevious={};
   week.forEach(function(session){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId), id=muscleId(ex||{}); if(count) countsRecent[id]=(countsRecent[id]||0)+count; }); });
   S.sessions.forEach(function(session){ if(session.date>=previousThreshold && session.date<recentThreshold){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId), id=muscleId(ex||{}); if(count) countsPrevious[id]=(countsPrevious[id]||0)+count; }); } });
+  var effortByMuscle={};
+  week.forEach(function(session){ session.entries.forEach(function(entry){ var ex=exById(entry.exId), id=muscleId(ex||{}); entry.sets.forEach(function(set){ if(!countsForProgress(set) || !effortByMuscle[id]) effortByMuscle[id]=effortByMuscle[id]||[]; if(countsForProgress(set) && set.rir!==null && set.rir!==undefined && isFinite(Number(set.rir))) effortByMuscle[id].push(Number(set.rir)); }); }); });
   var trends=groups.slice(0,5).map(function(id){
     var current=counts[id]||0, prior=Math.round((countsPrevious[id]||0)/3);
     var trend=prior===0?(current?'Carga nueva':'Sin cambios'):current>prior*1.15?'Carga al alza':current<prior*0.85?'Carga a la baja':'Carga estable';
-    return '<div class="weekly-muscle-row"><span>'+esc(MUSCLES[id])+'</span><strong>'+esc(trend)+'</strong></div>';
+    var efforts=effortByMuscle[id]||[], average=efforts.length?efforts.reduce(function(sum,value){return sum+value;},0)/efforts.length:null;
+    var fatigue=average===null?'':average<=1?' · esfuerzo alto':average<=2?' · esfuerzo medio':' · esfuerzo moderado';
+    return '<div class="weekly-muscle-row"><span>'+esc(MUSCLES[id])+'</span><strong>'+esc(trend+fatigue)+'</strong></div>';
   }).join('');
   return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><p>Cuenta series normales completas; no incluye aproximaciones ni técnicas especiales.</p></div>' +
     content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
@@ -1557,7 +1561,8 @@ function goalProgress(goal){
   }
   var target=Number(goal.target)||0, start=Number(goal.start)||0;
   if(!target) return {current:current,percent:0};
-  var percent=Math.max(0,Math.min(100,Math.round((current-start)/(target-start)*100)));
+  var span=target-start;
+  var percent=span>0?Math.max(0,Math.min(100,Math.round((current-start)/span*100))):(current>=target?100:0);
   if(current>=target) percent=100;
   return {current:current,percent:percent};
 }
@@ -1598,7 +1603,7 @@ function viewSet(){
   out += goalsHtml();
   out += '<section class="card"><p class="sec-title">Tus datos</p><p class="small">' +
     (S.kind === 'db' ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : 'Se guardan solo en este navegador. Abre la app con tu sesión de Claude para tenerlos en todos tus dispositivos.') + '</p><div class="row">' +
-    '<button class="btn ghost sm" data-act="auto-restore">Restaurar última copia automática</button>' +
+    '<button class="btn ghost sm" data-act="auto-restore">Restaurar última copia automática' + esc(autoBackupLabel()) + '</button>' +
     '<button class="btn ghost sm" data-act="export">Descargar respaldo</button><button class="btn ghost sm" data-act="import">Restaurar respaldo</button>' +
     '<button class="btn ghost sm" data-act="export-csv">Exportar CSV</button><button class="btn ghost sm" data-act="import-csv">Importar CSV</button>' +
     '<button class="btn ghost sm" data-act="import-routine">Importar rutina</button>' +
@@ -2220,13 +2225,20 @@ function onChange(ev){
 var AUTO_BACKUP_KEY='sobrecarga:auto-backup:v1';
 function createAutoBackup(){
   if(!S.ready) return;
-  try { localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify({savedAt:Date.now(),profile:S.profile,sessions:S.sessions})); } catch(e){ toast('No se pudo crear la copia automática'); }
+  try { localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify({savedAt:Date.now(),profile:S.profile,sessions:S.sessions,draft:S.draft})); } catch(e){ toast('No se pudo crear la copia automática'); }
+}
+function autoBackupLabel(){
+  try { var backup=JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY)); if(!backup || !backup.savedAt) return ''; return ' · última copia: '+new Intl.DateTimeFormat('es-CL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(backup.savedAt)); } catch(e){ return ''; }
 }
 function restoreAutoBackup(){
   try {
     var backup=JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY));
     if(!backup || !validBackup({format:'sobrecarga-backup',version:1,profile:backup.profile,sessions:backup.sessions})) throw new Error('invalid');
-    Store.replaceAll(normProfile(backup.profile),backup.sessions).then(function(){ S.sessions=backup.sessions; S.profile=normProfile(backup.profile); render(); toast('Copia automática restaurada'); }).catch(function(){ toast('No se pudo restaurar la copia automática'); });
+    Store.replaceAll(normProfile(backup.profile),backup.sessions).then(function(){
+      S.sessions=backup.sessions; S.profile=normProfile(backup.profile);
+      if(backup.draft && Array.isArray(backup.draft.entries)) { S.draft=Object.assign(blankDraft(),backup.draft); saveDraft(); }
+      render(); toast('Copia automática restaurada');
+    }).catch(function(){ toast('No se pudo restaurar la copia automática'); });
   } catch(e){ toast('No hay una copia automática válida'); }
 }
 function anomalyWarnings(){
