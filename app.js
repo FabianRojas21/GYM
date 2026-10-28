@@ -237,6 +237,10 @@ var Store = {
         Store.firebaseAuth = firebase.auth(firebaseApp);
         Store.firebaseDb = firebase.firestore(firebaseApp);
         Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){ });
+        Store.firebaseAuth.getRedirectResult().catch(function(error){
+          console.warn('No se pudo completar el inicio de sesión con Google', error);
+          if(error && error.code) toast('Inicio de sesión cancelado o bloqueado: ' + error.code);
+        });
         var authResolved=false;
         Store.firebaseAuth.onAuthStateChanged(function(user){
           authResolved=true;
@@ -256,6 +260,7 @@ var Store = {
     });
   },
   startFirebase:function(user){
+    Store.startLocal();
     S.cloudUser=user;
     S.kind='cloud';
     Store.firebaseUser=user;
