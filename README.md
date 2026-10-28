@@ -23,7 +23,7 @@ con accesos a tus rutinas y a los ejercicios que puedes retomar.
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
 del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes
 corregir el peso, las repeticiones, el esfuerzo y el tipo de las series. La
-fecha corregida también actualiza el resumen de la semana.
+fecha corregida también actualiza el resumen de la semana. En el mismo editor puedes mover ejercicios arriba o abajo, añadirlos o reemplazarlos, quitar ejercicios y administrar las series individuales. En ejercicios con carga corporal, como dominadas sin peso añadido, usa `0` kg; la serie se considera válida.
 
 La **Biblioteca** organiza el contenido en **Programas**, **Rutinas** y
 **Ejercicios**. Un programa agrupa rutinas; al crear o editar una rutina puedes

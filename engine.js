@@ -32,7 +32,7 @@
   }
 
   function analyzeCore(ex, sets, prevSets, settings){
-    var wk = sets.filter(function(set){ return countsForProgress(set) && set.w > 0 && set.r > 0; });
+    var wk = sets.filter(function(set){ return countsForProgress(set) && Number.isFinite(Number(set.w)) && set.w >= 0 && set.r > 0; });
     if(!wk.length) return null;
     var weight = Math.max.apply(null, wk.map(function(set){ return set.w; }));
     var at = wk.filter(function(set){ return set.w === weight; }).slice(0, ex.sets);
@@ -75,7 +75,7 @@
     } else if(avgReps < ex.min){
       var previousLow = false;
       if(prevSets){
-        var previous = prevSets.filter(function(set){ return countsForProgress(set) && set.w > 0 && set.r > 0; });
+        var previous = prevSets.filter(function(set){ return countsForProgress(set) && Number.isFinite(Number(set.w)) && set.w >= 0 && set.r > 0; });
         if(previous.length){
           var previousWeight = Math.max.apply(null, previous.map(function(set){ return set.w; }));
           var previousReps = previous.filter(function(set){ return set.w === previousWeight; }).map(function(set){ return set.r; });
@@ -119,7 +119,8 @@
     Object.keys(pairs).forEach(function(key){
       var pair = pairs[key], right = pair.right, left = pair.left;
       if(right && left && countsForProgress(right) && countsForProgress(left) &&
-        right.w > 0 && right.r > 0 && left.w > 0 && left.r > 0) complete[key] = true;
+        Number.isFinite(Number(right.w)) && right.w >= 0 && right.r > 0 &&
+        Number.isFinite(Number(left.w)) && left.w >= 0 && left.r > 0) complete[key] = true;
     });
     return sets.filter(function(set){ return complete[String(set.pair)]; });
   }

@@ -73,6 +73,12 @@ test('espera ambas partes de cada ronda unilateral', () => {
   assert.equal(analyze(exercise, complete, null, rirSettings).status, 'sube');
 });
 
+test('permite peso cero para ejercicios con carga corporal', () => {
+  const result = analyze(baseExercise, [set(10, 2, 0), set(10, 2, 0), set(10, 2, 0)], null, rirSettings);
+  assert.equal(result.status, 'sube');
+  assert.equal(result.W, 0);
+});
+
 test('el motor usa ajustes explícitos para formatear RIR/RPE y objetivos', () => {
   assert.equal(effTxt(1, {mode:'rpe'}), 'RPE 9');
   const result = analyzeCore(baseExercise, [set(10), set(10), set(10)], null, {mode:'rpe', targetRir:2});
