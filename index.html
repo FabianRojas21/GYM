@@ -29,17 +29,32 @@
   <main id="view" tabindex="-1" aria-live="polite"></main>
 </div>
 <nav class="tabs" aria-label="Secciones"><div class="in">
-  <button class="tab" data-act="tab" data-tab="hoy">Hoy</button>
-  <button class="tab" data-act="tab" data-tab="rutinas">Biblioteca</button>
-  <button class="tab" data-act="tab" data-tab="historial">Historial</button>
-  <button class="tab" data-act="tab" data-tab="ajustes">Ajustes</button>
+  <button class="tab" role="tab" aria-controls="view" data-act="tab" data-tab="hoy">Hoy</button>
+  <button class="tab" role="tab" aria-controls="view" data-act="tab" data-tab="rutinas">Biblioteca</button>
+  <button class="tab" role="tab" aria-controls="view" data-act="tab" data-tab="historial">Historial</button>
+  <button class="tab" role="tab" aria-controls="view" data-act="tab" data-tab="ajustes">Ajustes</button>
 </div></nav>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="engine.js"></script>
 <script src="app.js"></script>
+<div id="pwa-update" hidden><button type="button" id="pwa-update-button">Instalar nueva versión</button></div>
 <script>
-if ('serviceWorker' in navigator) window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){ /* offline mode remains optional */ }); });
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').then(function(registration){
+      if (registration.waiting) document.getElementById('pwa-update').hidden=false;
+      registration.addEventListener('updatefound', function(){
+        var worker=registration.installing;
+        worker.addEventListener('statechange', function(){ if(worker.state==='installed' && navigator.serviceWorker.controller) document.getElementById('pwa-update').hidden=false; });
+      });
+    }).catch(function(){ /* El modo offline es opcional. */ });
+  });
+}
+document.getElementById('pwa-update-button').addEventListener('click', function(){
+  navigator.serviceWorker.getRegistration().then(function(registration){ if(registration&&registration.waiting) registration.waiting.postMessage({type:'SKIP_WAITING'}); });
+});
+navigator.serviceWorker && navigator.serviceWorker.addEventListener && navigator.serviceWorker.addEventListener('controllerchange', function(){ window.location.reload(); });
 </script>
 </body>
 </html>

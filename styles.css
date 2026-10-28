@@ -347,6 +347,7 @@ details.how ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:col
   .set-unilateral .set-type{grid-column:2/3;grid-row:3;height:32px;padding:0 5px;font-size:13px}
   .set-unilateral .set-reference{grid-column:3/5;grid-row:3;overflow:hidden;padding:0 2px;text-align:right;text-overflow:ellipsis;white-space:nowrap}
 }
+#pwa-update{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:1100}#pwa-update-button{border:0;border-radius:999px;padding:12px 18px;background:var(--ink);color:var(--paper);font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}
 @media (max-width:380px){
   .brand{font-size:22px}
   .head-row h2{font-size:30px}

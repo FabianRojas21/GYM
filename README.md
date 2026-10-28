@@ -126,3 +126,33 @@ incremento de redondeo por separado del salto de progresión. Los pesos se
 redondean hacia abajo al múltiplo de ese incremento (por ejemplo, 80 % de
 26 kg con incrementos de 2 kg resulta en 20 kg). Si todavía no registraste un
 peso de trabajo, la aproximación queda vacía hasta que lo indiques.
+
+## Fatiga, anomalías y accesibilidad
+
+En la pantalla principal se muestra la carga semanal por músculo y una fatiga
+estimada según el RIR/RPE registrado. La app compara la carga reciente con el
+promedio anterior y señala esfuerzo alto, medio o bajo.
+
+La entrada de series verifica valores imposibles o saltos superiores al 50 %
+del máximo histórico del ejercicio. Los avisos indican ejercicio, serie y
+motivo para facilitar la corrección.
+
+La interfaz incluye navegación por pestañas con teclado, enlace para saltar al
+contenido, foco visible, estados de pestaña accesibles y movimiento del foco
+al cambiar de sección.
+
+## Instalación y publicación móvil
+
+La aplicación incluye un Service Worker y un manifiesto PWA. Para instalarla,
+la publicación debe servirla por HTTPS; una dirección HTTP por IP local permite
+probarla, pero normalmente no habilita la instalación completa.
+
+Desde el repositorio se puede publicar en GitHub Pages mediante el flujo
+`.github/workflows/pages.yml`. Activa **Settings → Pages → Build and deployment
+→ GitHub Actions**. Cada actualización de la rama `main` desplegará una nueva
+versión y, cuando haya una actualización offline disponible, la app mostrará
+un aviso para instalarla.
+
+Los datos locales siguen vinculados al navegador y origen usados. Antes de
+cambiar de dirección, navegador o teléfono, descarga un respaldo JSON desde
+**Ajustes → Tus datos**.

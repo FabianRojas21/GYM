@@ -78,7 +78,7 @@ var S = {
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null,
-  restEndsAt:loadRestEnd(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated'
+  restEndsAt:loadRestEnd(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:''
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -1109,10 +1109,10 @@ function weeklyMuscleSummaryHtml(week){
     var current=counts[id]||0, prior=Math.round((countsPrevious[id]||0)/3);
     var trend=prior===0?(current?'Carga nueva':'Sin cambios'):current>prior*1.15?'Carga al alza':current<prior*0.85?'Carga a la baja':'Carga estable';
     var efforts=effortByMuscle[id]||[], average=efforts.length?efforts.reduce(function(sum,value){return sum+value;},0)/efforts.length:null;
-    var fatigue=average===null?'':average<=1?' · esfuerzo alto':average<=2?' · esfuerzo medio':' · esfuerzo moderado';
+    var fatigue=average===null?'':average<=1?' · fatiga alta':average<=2?' · fatiga media':' · fatiga baja';
     return '<div class="weekly-muscle-row"><span>'+esc(MUSCLES[id])+'</span><strong>'+esc(trend+fatigue)+'</strong></div>';
   }).join('');
-  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><p>Cuenta series normales completas; no incluye aproximaciones ni técnicas especiales.</p></div>' +
+  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo y fatiga</h3><p>Cuenta series normales completas. La fatiga estimada usa el RIR/RPE registrado esta semana: menor RIR indica mayor fatiga reciente.</p></div>' +
     content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
 }
 function suggestHtml(){
@@ -1687,7 +1687,9 @@ function render(){
   var views = {hoy:viewHoy, rutinas:viewRut, ejercicios:viewRut, historial:viewHist, ajustes:viewSet};
   $('#view').innerHTML = S.ready ? (views[S.tab] || viewHoy)() : loadingView();
   document.querySelectorAll('.tab').forEach(function(b){
-    if(b.dataset.tab === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    var selected=b.dataset.tab === S.tab;
+    b.setAttribute('aria-selected', selected ? 'true' : 'false');
+    if(selected) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   $('#today').textContent = dFmt(iso(new Date()), {weekday:'long', day:'numeric', month:'short'});
   window.scrollTo(0, y);
@@ -1864,7 +1866,7 @@ function onClick(ev){
   var act = t.dataset.act, ei = t.dataset.ei !== undefined ? +t.dataset.ei : null, ri = t.dataset.ri !== undefined ? +t.dataset.ri : null;
   var st = S.profile.settings;
   switch(act){
-    case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); break;
+    case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'library-open-section': S.tab = 'rutinas'; S.librarySection = t.dataset.section; S.selectedProgram = null; S.selectedRoutine = null; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); break;
     case 'library-section': S.librarySection = t.dataset.section; S.selectedProgram = null; S.selectedRoutine = null; S.confirm = null; render(); break;
     case 'program-new': S.pedit = {id:null, name:''}; S.selectedProgram = null; render(); break;
@@ -2327,8 +2329,27 @@ function restoreAutoBackup(){
 function anomalyWarnings(){
   if(!S.ready || !S.draft.entries.length) return;
   var suspicious=[];
-  S.draft.entries.forEach(function(entry){ entry.rows&&entry.rows.forEach(function(row){ Object.keys(row.right||{}).forEach(function(){ }); var sets=[row]; if(row.left||row.right){ sets=[]; if(row.left)sets.push(row.left); if(row.right)sets.push(row.right); } sets.forEach(function(set){ if(num(set.w)>500 || num(set.r)>100 || num(set.w)<0 || num(set.r)<0) suspicious.push(true); }); }); });
-  if(suspicious.length) toast('Revisa pesos o repeticiones inusuales antes de guardar');
+  S.draft.entries.forEach(function(entry){
+    var exercise=exById(entry.exId), exerciseName=exercise ? exercise.name : 'Ejercicio';
+    var historyWeights=[];
+    S.sessions.forEach(function(session){session.entries.forEach(function(oldEntry){if(oldEntry.exId===entry.exId) oldEntry.sets.forEach(function(set){if(validWeight(set.w)&&set.w>0)historyWeights.push(Number(set.w));});});});
+    var historyMax=historyWeights.length?Math.max.apply(null,historyWeights):null;
+    entry.rows&&entry.rows.forEach(function(row, rowIndex){
+      var sets=[];
+      if(row.right||row.left){sets=[{w:row.right&&row.right.w,r:row.right&&row.right.r,label:'derecho'},{w:row.left&&row.left.w,r:row.left&&row.left.r,label:'izquierdo'}];}
+      else sets=[{w:row.w,r:row.r,label:'serie '+(rowIndex+1)}];
+      sets.forEach(function(set){
+        var weight=num(set.w), reps=num(set.r), reasons=[];
+        if(weight!==null&&(weight>500||weight<0)) reasons.push('peso fuera de rango');
+        if(reps!==null&&(reps>100||reps<0)) reasons.push('repeticiones fuera de rango');
+        if(historyMax!==null&&weight!==null&&weight>0&&weight>historyMax*1.5) reasons.push('peso más de 50 % sobre tu récord');
+        if(reasons.length) suspicious.push(exerciseName+' · serie '+(rowIndex+1)+' '+set.label+': '+reasons.join(', '));
+      });
+    });
+  });
+  var signature=suspicious.join('|');
+  if(signature && signature!==S.anomalySignature){S.anomalySignature=signature; toast('Anomalías: '+suspicious.slice(0,2).join('. ')+(suspicious.length>2?' · Revisa '+suspicious.length+' valores':'')+' antes de guardar');}
+  if(!signature) S.anomalySignature='';
 }
 window.addEventListener('beforeunload', function(event){ if(S.draft.entries.length && !S.justSaved){ event.preventDefault(); event.returnValue=''; } });
 
