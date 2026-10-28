@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<a class="skip-link" href="#view">Ir al contenido principal</a>
 <div class="wrap">
   <header class="top">
     <div class="brand">
@@ -25,7 +26,7 @@
     </div>
     <div class="today" id="today"></div>
   </header>
-  <main id="view"></main>
+  <main id="view" tabindex="-1" aria-live="polite"></main>
 </div>
 <nav class="tabs" aria-label="Secciones"><div class="in">
   <button class="tab" data-act="tab" data-tab="hoy">Hoy</button>

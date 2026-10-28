@@ -77,7 +77,7 @@ var S = {
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null,
-  restEndsAt:loadRestEnd(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false
+  restEndsAt:loadRestEnd(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated'
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -184,14 +184,14 @@ var Store = {
       var d = JSON.parse(localStorage.getItem(LK));
       if(d){ S.profile = normProfile(d.profile); S.sessions = d.sessions || []; }
     } catch(e){}
-    S.ready = true; render();
+    S.ready = true; createAutoBackup(); render();
   },
   startDb:function(db, id){
     S.kind = 'db';
     Store.ref = db.doc('data/users/'+id+'/profile');
     Store.col = Store.ref.collection('sessions');
     var gotP = false, gotS = false;
-    var done = function(){ if(gotP && gotS){ S.ready = true; render(); } };
+    var done = function(){ if(gotP && gotS){ S.ready = true; createAutoBackup(); render(); } };
     var fail = function(){ toast('No se pudo conectar con tu cuenta. Uso este navegador.'); Store.startLocal(); };
     Store.ref.onSnapshot(function(snap){
       if(!(profDirty || profBusy)) S.profile = normProfile(snap.exists ? snap.data() : null);
@@ -1083,8 +1083,19 @@ function weeklyMuscleSummaryHtml(week){
         return '<div class="weekly-muscle-row"><span>' + esc(MUSCLES[id]) + '</span><strong>' + counts[id] + '</strong></div>';
       }).join('') + '</div>'
     : '<p class="home-weekly-note">Aún no hay series efectivas registradas esta semana.</p>';
+  var now=new Date(); var recent=new Date(now); recent.setDate(now.getDate()-7);
+  var previous=new Date(now); previous.setDate(now.getDate()-28);
+  var recentThreshold=iso(recent), previousThreshold=iso(previous);
+  var countsRecent={}, countsPrevious={};
+  week.forEach(function(session){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId), id=muscleId(ex||{}); if(count) countsRecent[id]=(countsRecent[id]||0)+count; }); });
+  S.sessions.forEach(function(session){ if(session.date>=previousThreshold && session.date<recentThreshold){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId), id=muscleId(ex||{}); if(count) countsPrevious[id]=(countsPrevious[id]||0)+count; }); } });
+  var trends=groups.slice(0,5).map(function(id){
+    var current=counts[id]||0, prior=Math.round((countsPrevious[id]||0)/3);
+    var trend=prior===0?(current?'Carga nueva':'Sin cambios'):current>prior*1.15?'Carga al alza':current<prior*0.85?'Carga a la baja':'Carga estable';
+    return '<div class="weekly-muscle-row"><span>'+esc(MUSCLES[id])+'</span><strong>'+esc(trend)+'</strong></div>';
+  }).join('');
   return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><p>Cuenta series normales completas; no incluye aproximaciones ni técnicas especiales.</p></div>' +
-    content + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
+    content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
 }
 function suggestHtml(){
   var ids = Object.keys(S.profile.exercises).filter(function(k){
@@ -1410,8 +1421,9 @@ function routineEditor(){
 }
 
 function niceStep(raw){ var c = [0.5,1,2,2.5,5,10,20,25,50,100]; for(var i=0;i<c.length;i++){ if(c[i] >= raw) return c[i]; } return 100; }
-function chartSvg(pts){
-  if(pts.length < 2) return '<p class="muted small">Con dos entrenos aparece la curva de tu 1RM estimado.</p>';
+function chartSvg(pts, unit){
+  unit = unit || 'kg';
+  if(pts.length < 2) return '<p class="muted small">Con dos entrenos aparece la curva de progreso.</p>';
   var W = Math.max(280, Math.min(600, document.documentElement.clientWidth - 64)), H = 190, L = 42, R = 16, T = 18, B = 26;
   var ys = pts.map(function(p){ return p.y; });
   var lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
@@ -1437,8 +1449,8 @@ function chartSvg(pts){
     g += '<circle cx="' + X(k).toFixed(1) + '" cy="' + Y(p.y).toFixed(1) + '" r="' + (lastPt ? 5 : 3.5) + '" fill="' + (lastPt ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="2"/>';
   });
   var lp = pts[pts.length-1];
-  g += '<text class="cv" x="' + X(pts.length-1).toFixed(1) + '" y="' + (Y(lp.y) - 10).toFixed(1) + '" text-anchor="end">' + fmt1(lp.y) + ' kg</text>';
-  return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="1RM estimado por entreno">' + g + '</svg>';
+  g += '<text class="cv" x="' + X(pts.length-1).toFixed(1) + '" y="' + (Y(lp.y) - 10).toFixed(1) + '" text-anchor="end">' + fmt1(lp.y) + (unit === 'kg' ? ' kg' : ' kg·reps') + '</text>';
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Evolución del ejercicio por entreno">' + g + '</svg>';
 }
 function exDetail(ex){
   var hist = entriesFor(ex.id);
@@ -1449,16 +1461,23 @@ function exDetail(ex){
     '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' +
     '<div><span>Mejor serie estimada</span><strong>' + fmt1(records.estimated.value) + ' kg</strong><small>' + esc(dFmt(records.estimated.date)) + '</small></div></div>' : '<p class="small muted">Los récords aparecerán después de registrar series normales.</p>';
   var pts = hist.map(function(h){
-    var estimated = estimatedEx1rm(ex, h.sets);
-    return estimated !== null ? {label:dFmt(h.date), y:estimated} : null;
+    var sets=h.sets.filter(function(s){ return setType(s)==='normal' && Number(s.w)>0 && Number(s.r)>0; });
+    var y=null;
+    if(S.progressMetric==='weight') y=sets.length?Math.max.apply(null,sets.map(function(s){ return Number(s.w); })):null;
+    if(S.progressMetric==='volume') y=sets.length?sets.reduce(function(total,s){ return total+Number(s.w)*Number(s.r); },0):null;
+    if(S.progressMetric==='estimated') y=estimatedEx1rm(ex,h.sets);
+    return y!==null ? {label:dFmt(h.date),y:y} : null;
   }).filter(Boolean);
+  var metricLabels={weight:'Peso máximo',estimated:'1RM estimado',volume:'Volumen'};
+  var chartControls='<div class="seg" role="group" aria-label="Métrica de progreso">'+
+    ['weight','estimated','volume'].map(function(metric){ return '<button data-act="progress-metric" data-metric="'+metric+'" aria-pressed="'+(S.progressMetric===metric)+'">'+esc(metricLabels[metric])+'</button>'; }).join('')+'</div>';
   var rows = hist.slice(-5).reverse().map(function(h){
     return '<tr><td class="num">' + esc(dFmt(h.date)) + '</td><td>' + esc(setsText(h.sets, true)) + '</td></tr>';
   }).join('');
   var f = function(key, label, val, step){
     return '<div class="field"><label class="lab" for="cfg-' + key + '">' + label + '</label><input id="cfg-' + key + '" class="txt" inputmode="decimal" data-cfg="' + key + '" data-id="' + esc(ex.id) + '" value="' + esc(String(val).replace('.', ',')) + '"></div>';
   };
-  return '<div class="list" style="gap:14px"><div><p class="sec-title" style="margin-bottom:6px">Récords personales</p>' + recordHtml + '</div><div><p class="sec-title" style="margin-bottom:6px">1RM estimado</p>' + chartSvg(pts) +
+  return '<div class="list" style="gap:14px"><div><p class="sec-title" style="margin-bottom:6px">Récords personales</p>' + recordHtml + '</div><div><p class="sec-title" style="margin-bottom:6px">Progreso</p>' + chartControls + chartSvg(pts,S.progressMetric==='volume'?'kg·reps':'kg') +
     '<p class="muted small">Peso × (1 + (reps + RIR) ÷ 30), ' + (ex.unilateral ? 'mejor estimado del lado más débil por entreno.' : 'mejor serie de cada entreno.') + '</p></div>' +
     (rows ? '<div class="scroll-x"><table class="table"><thead><tr><th>Fecha</th><th>Series</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
@@ -1535,7 +1554,8 @@ function goalsHtml(){
     var progress=goalProgress(goal); var unit=goal.unit||'';
     return '<div class="goal-card"><div class="goal-row"><strong>'+esc(goal.name)+'</strong><button class="mini" data-act="goal-delete" data-id="'+esc(goal.id)+'" aria-label="Eliminar objetivo">×</button></div><div class="goal-row"><span class="small muted">'+fmt(progress.current)+' '+esc(unit)+' de '+fmt(goal.target)+' '+esc(unit)+' · '+progress.percent+'%</span></div><div class="progress" role="progressbar" aria-label="Progreso de '+esc(goal.name)+'" aria-valuenow="'+progress.percent+'" aria-valuemin="0" aria-valuemax="100"><span style="width:'+progress.percent+'%"></span></div></div>';
   }).join('');
-  var form=S.goalNew ? '<div class="goal-form"><div class="fields"><div class="field"><label class="lab" for="goal-name">Nombre</label><input id="goal-name" class="txt" maxlength="60" placeholder="Ej. Alcanzar 80 kg en press banca"></div><div class="field"><label class="lab" for="goal-type">Tipo</label><select id="goal-type" class="txt"><option value="exercise-weight">Peso máximo en ejercicio</option><option value="sessions">Entrenos totales</option><option value="weekly">Entrenos en la última semana</option><option value="custom">Objetivo personalizado</option></select></div><div class="field"><label class="lab" for="goal-target">Meta</label><input id="goal-target" class="txt" inputmode="decimal"></div><div class="field"><label class="lab" for="goal-unit">Unidad</label><input id="goal-unit" class="txt" placeholder="kg, entrenos..."></div></div><div class="row"><button class="btn sm" data-act="goal-save">Guardar objetivo</button><button class="btn ghost sm" data-act="goal-cancel">Cancelar</button></div></div>' : '';
+  var exerciseOptions=Object.keys(S.profile.exercises).map(function(id){var ex=S.profile.exercises[id]; return '<option value="'+esc(id)+'">'+esc(ex.name)+'</option>';}).join('');
+  var form=S.goalNew ? '<div class="goal-form"><div class="fields"><div class="field"><label class="lab" for="goal-name">Nombre</label><input id="goal-name" class="txt" maxlength="60" placeholder="Ej. Alcanzar 80 kg en press banca"></div><div class="field"><label class="lab" for="goal-type">Tipo</label><select id="goal-type" class="txt"><option value="exercise-weight">Peso máximo en ejercicio</option><option value="sessions">Entrenos totales</option><option value="weekly">Entrenos en la última semana</option><option value="custom">Objetivo personalizado</option></select></div><div class="field"><label class="lab" for="goal-target">Meta</label><input id="goal-target" class="txt" inputmode="decimal"></div><div class="field"><label class="lab" for="goal-exercise">Ejercicio</label><select id="goal-exercise" class="txt"><option value="">Seleccionar ejercicio</option>'+exerciseOptions+'</select></div><div class="field"><label class="lab" for="goal-unit">Unidad</label><input id="goal-unit" class="txt" placeholder="kg, entrenos..."></div></div><div class="row"><button class="btn sm" data-act="goal-save">Guardar objetivo</button><button class="btn ghost sm" data-act="goal-cancel">Cancelar</button></div></div>' : '';
   return '<section class="card"><p class="sec-title">Objetivos</p>'+ (cards||'<p class="small muted">Todavía no tienes objetivos.</p>') + form + (S.goalNew?'':'<button class="btn ghost sm" data-act="goal-new">Añadir objetivo</button>')+'</section>';
 }
 function viewSet(){
@@ -1902,6 +1922,7 @@ function onClick(ev){
     case 'discard-ok': S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null; render(); break;
     case 'dismiss-saved': S.justSaved = null; render(); break;
     case 'toggle-ex': S.openEx = S.openEx === t.dataset.id ? null : t.dataset.id; S.confirm = null; render(); break;
+    case 'progress-metric': if(['weight','estimated','volume'].includes(t.dataset.metric)){ S.progressMetric=t.dataset.metric; render(); } break;
     case 'archive': S.confirm = 'arch:' + t.dataset.id; render(); break;
     case 'archive-ok': S.profile.exercises[t.dataset.id].archived = true; S.draft.entries = S.draft.entries.filter(function(en){ return en.exId !== t.dataset.id; }); saveDraft(); Store.saveProfile(); S.confirm = null; S.openEx = null; render(); break;
     case 'del-sess': S.confirm = 'sess:' + t.dataset.id; render(); break;
@@ -1924,7 +1945,10 @@ function onClick(ev){
     case 'goal-save':
       var goalName=$('#goal-name')&&$('#goal-name').value.trim(), goalTarget=$('#goal-target')?num($('#goal-target').value):null;
       if(!goalName || !(goalTarget>0)){ toast('Completa el nombre y una meta válida'); break; }
-      var goal={id:uid('goal'),name:goalName,type:$('#goal-type').value,target:goalTarget,start:0,current:0,unit:$('#goal-unit').value.trim()};
+      var goalType=$('#goal-type').value, exerciseId=$('#goal-exercise')?$('#goal-exercise').value:'';
+      if(goalType==='exercise-weight' && !exerciseId){ toast('Selecciona un ejercicio para este objetivo'); break; }
+      var records=exerciseId && personalRecords(exById(exerciseId)||{});
+      var goal={id:uid('goal'),name:goalName,type:goalType,target:goalTarget,start:records&&records.weight?Number(records.weight.value):0,current:0,unit:$('#goal-unit').value.trim(),exerciseId:exerciseId||null};
       S.profile.goals=S.profile.goals||{}; S.profile.goals[goal.id]=goal; S.goalNew=false; Store.saveProfile(); render(); toast('Objetivo añadido'); break;
     case 'goal-delete': delete S.profile.goals[t.dataset.id]; Store.saveProfile(); render(); toast('Objetivo eliminado'); break;
     case 'demo-load': loadDemo(); break;
@@ -2182,6 +2206,7 @@ function onChange(ev){
 
 var AUTO_BACKUP_KEY='sobrecarga:auto-backup:v1';
 function createAutoBackup(){
+  if(!S.ready) return;
   try { localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify({savedAt:Date.now(),profile:S.profile,sessions:S.sessions})); } catch(e){ toast('No se pudo crear la copia automática'); }
 }
 function restoreAutoBackup(){
@@ -2197,7 +2222,7 @@ function anomalyWarnings(){
   S.draft.entries.forEach(function(entry){ entry.rows&&entry.rows.forEach(function(row){ Object.keys(row.right||{}).forEach(function(){ }); var sets=[row]; if(row.left||row.right){ sets=[]; if(row.left)sets.push(row.left); if(row.right)sets.push(row.right); } sets.forEach(function(set){ if(num(set.w)>500 || num(set.r)>100 || num(set.w)<0 || num(set.r)<0) suspicious.push(true); }); }); });
   if(suspicious.length) toast('Revisa pesos o repeticiones inusuales antes de guardar');
 }
-window.addEventListener('beforeunload', function(event){ if(S.draft.entries.length && !S.justSaved){ event.preventValue=''; event.returnValue=''; } });
+window.addEventListener('beforeunload', function(event){ if(S.draft.entries.length && !S.justSaved){ event.preventDefault(); event.returnValue=''; } });
 
 document.addEventListener('click', onClick);
 document.addEventListener('input', onInput);
@@ -2206,7 +2231,6 @@ setInterval(updateWorkoutClock, 1000);
 setInterval(updateRestTimer, 250);
 setInterval(createAutoBackup, 6*60*60*1000);
 setInterval(anomalyWarnings, 30000);
-createAutoBackup();
 var rz; window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(function(){ if(S.ready && S.tab === 'ejercicios' && S.openEx) render(); }, 200); });
 
 render();
