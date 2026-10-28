@@ -274,18 +274,37 @@ var Store = {
     }
     var gotProfile=false, gotSessions=false;
     var done=function(){ if(gotProfile && gotSessions){ S.ready=true; createAutoBackup(); render(); } };
+    var cloudLoadingTimeout=setTimeout(function(){
+      if(!S.ready){
+        S.ready=true;
+        createAutoBackup();
+        render();
+        toast('La conexión a la cuenta tardó demasiado; puedes trabajar localmente y restaurar un respaldo');
+      }
+    }, 12000);
+
+    Store.ref.onSnapshot(function(snap){
+      if(!(profDirty || profBusy)){
+        if(snap.exists) S.profile=normProfile(snap.data());
+        else S.profile=defaultProfile();
+      }
+      gotProfile=true; done();
+      if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
+    }, function(){
+      toast('No se pudieron descargar tus datos de la cuenta');
+      clearTimeout(cloudLoadingTimeout);
+      S.ready=true; createAutoBackup(); render();
+    });
+    Store.col.onSnapshot(function(snap){
+      S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
+      gotSessions=true; done();
+      if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
+    }, function(){
+      toast('No se pudieron descargar tus entrenos');
+      clearTimeout(cloudLoadingTimeout);
+      S.ready=true; createAutoBackup(); render();
+    });
     migration.then(function(){
-      Store.ref.onSnapshot(function(snap){
-        if(!(profDirty || profBusy)){
-          if(snap.exists) S.profile=normProfile(snap.data());
-          else S.profile=defaultProfile();
-        }
-        gotProfile=true; done();
-      }, function(){ toast('No se pudieron descargar tus datos de la cuenta'); Store.startLocal(); });
-      Store.col.onSnapshot(function(snap){
-        S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
-        gotSessions=true; done();
-      }, function(){ toast('No se pudieron descargar tus entrenos'); Store.startLocal(); });
       root.collection('app').doc('draft').get().then(function(snap){
         if(snap.exists && snap.data() && Array.isArray(snap.data().entries)){
           var remoteDraft=Object.assign(blankDraft(), snap.data());
