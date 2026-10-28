@@ -398,26 +398,32 @@ var Store = {
       .catch(function(){ toast('No se pudo borrar'); });
   },
   replaceAll:function(profile, sessions){
-    if(!['db','cloud'].includes(S.kind)){
-      try { localStorage.setItem(LK, JSON.stringify({profile:profile, sessions:sessions})); }
-      catch(e){ return Promise.reject(e); }
-      S.profile = profile; S.sessions = sessions;
-      return Promise.resolve();
-    }
+    try { localStorage.setItem(LK, JSON.stringify({profile:profile, sessions:sessions})); }
+    catch(e){ return Promise.reject(e); }
+
+    var oldIds = S.sessions.map(function(session){ return session.id; });
+    S.profile = profile; S.sessions = sessions;
+    if(!['db','cloud'].includes(S.kind)) return Promise.resolve();
+
     var incomingIds = {};
     sessions.forEach(function(session){ incomingIds[session.id] = true; });
-    var oldIds = S.sessions.map(function(session){ return session.id; }).filter(function(id){ return !incomingIds[id]; });
+    oldIds = oldIds.filter(function(id){ return !incomingIds[id]; });
     profDirty = false; clearTimeout(profTimer);
-    return sessions.reduce(function(p, session){
-      return p.then(function(){ return Store.col.doc(session.id).set(clone(session)); });
-    }, Promise.resolve()).then(function(){
-      return Store.ref.set(clone(profile));
+    var withTimeout = function(promise){
+      return Promise.race([
+        promise,
+        new Promise(function(resolve,reject){ setTimeout(function(){ reject(new Error('Firestore no respondió a tiempo')); }, 15000); })
+      ]);
+    };
+    var writes=sessions.reduce(function(p, session){
+      return p.then(function(){ return withTimeout(Store.col.doc(session.id).set(clone(session))); });
+    }, Promise.resolve());
+    return writes.then(function(){
+      return withTimeout(Store.ref.set(clone(profile)));
     }).then(function(){
       return oldIds.reduce(function(p, id){
-        return p.then(function(){ return Store.col.doc(id).delete(); });
+        return p.then(function(){ return withTimeout(Store.col.doc(id).delete()); });
       }, Promise.resolve());
-    }).then(function(){
-      S.profile = profile; S.sessions = sessions;
     });
   }
 };
@@ -597,11 +603,15 @@ function downloadBackup(){
 function restoreBackup(){
   if(!S.pendingImport) return;
   var data = S.pendingImport;
-  Store.replaceAll(normProfile(data.profile), data.sessions).then(function(){
-    S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd();
-    S.pendingImport = null; S.confirm = null; S.justSaved = null;
-    render(); toast('Respaldo restaurado');
-  }).catch(function(){ toast('No se pudo restaurar el respaldo'); });
+  var pending = Store.replaceAll(normProfile(data.profile), data.sessions);
+  S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd();
+  S.pendingImport = null; S.confirm = null; S.justSaved = null;
+  render(); toast('Respaldo restaurado en este navegador');
+  pending.then(function(){
+    if(['db','cloud'].includes(S.kind)) toast('Respaldo sincronizado con tu cuenta');
+  }).catch(function(error){
+    toast('Respaldo restaurado aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
+  });
 }
 function csvCell(value){
   var text = value === null || value === undefined ? '' : String(value);
