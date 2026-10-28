@@ -6,7 +6,8 @@ var $ = function(s, el){ return (el||document).querySelector(s); };
 var esc = function(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
 var fmt = function(n){ return (Math.round(n*100)/100).toString().replace('.', ','); };
 var fmt1 = function(n){ return (Math.round(n*10)/10).toString().replace('.', ','); };
-var num = function(v){ if(v===null||v===undefined) return null; var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
+var num = function(v){ if(v===null||v===undefined||String(v).trim()==='') return null; var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
+var validWeight = function(v){ var n=num(v); return n !== null && n >= 0; };
 var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
 var roundTo = function(x, step){ return Math.round(x/step)*step; };
 var iso = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
@@ -314,9 +315,9 @@ function autoRestEligible(row){ return ['normal','warmup','backoff'].includes(se
 function rowComplete(row, unilateral){
   if(unilateral){
     var sides = ensureRowMode(row, true);
-    return ['right','left'].every(function(side){ return num(sides[side].w) > 0 && num(sides[side].r) > 0; });
+    return ['right','left'].every(function(side){ return validWeight(sides[side].w) && num(sides[side].r) > 0; });
   }
-  return num(row.w) > 0 && num(row.r) > 0;
+  return validWeight(row.w) && num(row.r) > 0;
 }
 /* ejercicio efectivo: ajustes base + ajustes propios de la rutina (solo en esa rutina) */
 function effEx(en){ return Object.assign({}, exById(en.exId), en.cfg || {}); }
@@ -349,7 +350,7 @@ function e1rm(set){
   return set.w * (1 + (set.r + (set.rir === null || set.rir === undefined ? tr : set.rir)) / 30);
 }
 function estimatedEx1rm(ex, sets){
-  var working = sets.filter(function(s){ return countsForProgress(s) && s.w > 0 && s.r > 0; });
+  var working = sets.filter(function(s){ return countsForProgress(s) && validWeight(s.w) && s.r > 0; });
   if(!ex.unilateral) return working.length ? Math.max.apply(null, working.map(e1rm)) : null;
   var right = working.filter(function(s){ return s.side === 'right'; });
   var left = working.filter(function(s){ return s.side === 'left'; });
@@ -360,7 +361,7 @@ function personalRecords(ex){
   var records = {weight:null, reps:null, estimated:null};
   S.sessions.forEach(function(session){
     session.entries.filter(function(entry){ return entry.exId === ex.id; }).forEach(function(entry){
-      entry.sets.filter(function(set){ return countsForProgress(set) && Number(set.w) > 0 && Number(set.r) > 0; }).forEach(function(set){
+      entry.sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && Number(set.r) > 0; }).forEach(function(set){
         var weight = Number(set.w), reps = Number(set.r);
         if(!records.weight || weight > records.weight.value) records.weight = {value:weight, date:session.date};
         if(!records.reps || reps > records.reps.value) records.reps = {value:reps, date:session.date};
@@ -771,12 +772,12 @@ function previousWorkSet(exId, workIndex, unilateral){
   var sets = [];
   entries.forEach(function(entry){ sets = sets.concat(entry.sets); });
   if(!unilateral){
-    var normalSets = sets.filter(function(set){ return setType(set) === 'normal' && set.w > 0 && set.r > 0; });
+    var normalSets = sets.filter(function(set){ return setType(set) === 'normal' && validWeight(set.w) && set.r > 0; });
     return normalSets[workIndex] || null;
   }
   var pairs = {};
   sets.forEach(function(set){
-    if(set.pair === undefined || setType(set) !== 'normal' || !(set.w > 0 && set.r > 0)) return;
+    if(set.pair === undefined || setType(set) !== 'normal' || !(validWeight(set.w) && set.r > 0)) return;
     var key = String(set.pair);
     if(!pairs[key]) pairs[key] = {};
     pairs[key][set.side] = set;
@@ -803,7 +804,7 @@ function workingDone(){
         var row = ensureRowMode(raw, true), right = row.right, left = row.left;
         if(setType(row) === 'normal' && num(right.w) > 0 && num(right.r) > 0 && num(left.w) > 0 && num(left.r) > 0) c++;
       });
-    } else rowsToSets(en.rows, false).forEach(function(s){ if(countsForProgress(s) && s.w > 0 && s.r > 0) c++; });
+    } else rowsToSets(en.rows, false).forEach(function(s){ if(countsForProgress(s) && validWeight(s.w) && s.r > 0) c++; });
   });
   return c;
 }
@@ -1001,16 +1002,16 @@ function savedHtml(){
     if(!ex) return '';
     var effective = entry.unilateral
       ? Object.keys(entry.sets.reduce(function(pairs, set){
-          if(set.pair !== undefined && countsForProgress(set) && set.w > 0 && set.r > 0){
+          if(set.pair !== undefined && countsForProgress(set) && validWeight(set.w) && set.r > 0){
             if(!pairs[set.pair]) pairs[set.pair] = {};
             pairs[set.pair][set.side] = true;
           }
           return pairs;
         }, {})).filter(function(pair){
-          var sides = entry.sets.filter(function(set){ return String(set.pair) === pair && countsForProgress(set) && set.w > 0 && set.r > 0; });
+          var sides = entry.sets.filter(function(set){ return String(set.pair) === pair && countsForProgress(set) && validWeight(set.w) && set.r > 0; });
           return sides.some(function(set){ return set.side === 'right'; }) && sides.some(function(set){ return set.side === 'left'; });
         }).length
-      : entry.sets.filter(function(set){ return countsForProgress(set) && set.w > 0 && set.r > 0; }).length;
+      : entry.sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && set.r > 0; }).length;
     var reps = entry.sets.reduce(function(total, set){ return total + (setType(set) !== 'warmup' ? set.r : 0); }, 0);
     return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' +
       effective + ' serie' + (effective === 1 ? '' : 's') + (effective === 1 ? ' efectiva' : ' efectivas') + (entry.unilateral ? ' · por lado' : '') +
@@ -1037,7 +1038,7 @@ function sessionStats(session){
   session.entries.forEach(function(entry){
     stats.effectiveSets += entryEffectiveSets(entry);
     entry.sets.forEach(function(set){
-      if(setType(set) !== 'warmup' && set.w > 0 && set.r > 0) stats.reps += set.r;
+      if(setType(set) !== 'warmup' && validWeight(set.w) && set.r > 0) stats.reps += set.r;
     });
     stats.volume += entryVolume(entry);
   });
@@ -1046,7 +1047,7 @@ function sessionStats(session){
 function entryVolume(entry){
   if(!entry.unilateral){
     return entry.sets.reduce(function(total, set){
-      return total + (setType(set) !== 'warmup' && set.w > 0 && set.r > 0 ? set.w * set.r : 0);
+      return total + (setType(set) !== 'warmup' && validWeight(set.w) && set.r > 0 ? set.w * set.r : 0);
     }, 0);
   }
   var pairs = {}, volume = 0;
@@ -1054,7 +1055,7 @@ function entryVolume(entry){
     var type = setType(set);
     if(type === 'warmup') return;
     if(type !== 'normal'){
-      if(set.w > 0 && set.r > 0) volume += set.w * set.r;
+      if(validWeight(set.w) && set.r > 0) volume += set.w * set.r;
       return;
     }
     if(set.pair === undefined) return;
@@ -1064,16 +1065,16 @@ function entryVolume(entry){
   });
   return Object.keys(pairs).reduce(function(total, key){
     var pair = pairs[key], right = pair.right, left = pair.left;
-    return right && left && right.w > 0 && right.r > 0 && left.w > 0 && left.r > 0
+    return right && left && validWeight(right.w) && right.r > 0 && validWeight(left.w) && left.r > 0
       ? total + right.w * right.r + left.w * left.r
       : total;
   }, volume);
 }
 function entryEffectiveSets(entry){
-  if(!entry.unilateral) return entry.sets.filter(function(set){ return countsForProgress(set) && set.w > 0 && set.r > 0; }).length;
+  if(!entry.unilateral) return entry.sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && set.r > 0; }).length;
   var pairs = {};
   entry.sets.forEach(function(set){
-    if(set.pair === undefined || !countsForProgress(set) || !(set.w > 0 && set.r > 0)) return;
+    if(set.pair === undefined || !countsForProgress(set) || !(validWeight(set.w) && set.r > 0)) return;
     var key = String(set.pair);
     if(!pairs[key]) pairs[key] = {};
     pairs[key][set.side] = true;
@@ -1170,7 +1171,8 @@ function sessionEditorHtml(session){
         : '<button class="btn ghost sm" data-act="session-remove-exercise" data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>Quitar ejercicio</button>') + '</div>';
     var replaceOptions='<option value="'+esc(entry.exId)+'">'+esc(exercise)+'</option>'+Object.keys(S.profile.exercises).filter(function(id){return id!==entry.exId && !S.profile.exercises[id].archived;}).map(function(id){return '<option value="'+esc(id)+'">'+esc(S.profile.exercises[id].name)+'</option>';}).join('');
     var replace='<label class="field"><span class="lab">Cambiar ejercicio</span><select class="txt" data-session-replace-exercise data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>'+replaceOptions+'</select></label>';
-    return '<div class="session-entry-edit"><p class="sec-title">' + esc(exercise) + '</p>' + replace + rows + tools + '</div>';
+    var orderControls='<div class="row"><button class="btn ghost sm" data-act="session-move-exercise" data-entry="'+entryIndex+'" data-direction="-1"'+(entryIndex===0||edit.saving?' disabled':'')+'>↑ Mover arriba</button><button class="btn ghost sm" data-act="session-move-exercise" data-entry="'+entryIndex+'" data-direction="1"'+(entryIndex===data.entries.length-1||edit.saving?' disabled':'')+'>↓ Mover abajo</button></div>';
+    return '<div class="session-entry-edit"><p class="sec-title">' + esc(exercise) + '</p>' + replace + orderControls + rows + tools + '</div>';
   }).join('');
   var addPicker=edit.addPicker ? '<div class="field"><label class="lab" for="session-add-exercise">Ejercicio</label><select id="session-add-exercise" class="txt" data-session-add-exercise>'+
     '<option value="">Seleccionar ejercicio</option>'+Object.keys(S.profile.exercises).filter(function(id){return !S.profile.exercises[id].archived;}).map(function(id){var ex=S.profile.exercises[id];return '<option value="'+esc(id)+'">'+esc(ex.name)+'</option>';}).join('')+'</select></div><button class="btn ghost sm" data-act="session-add-exercise-cancel"'+(edit.saving?' disabled':'')+'>Cancelar</button>' : '<button class="btn ghost sm" data-act="session-add-exercise-picker"'+(edit.saving?' disabled':'')+'>Añadir ejercicio</button>';
@@ -1196,11 +1198,11 @@ function saveSessionEdit(){
   var validSets = edit.session.entries.every(function(entry){
     if(!entry.sets || !entry.sets.length) return false;
     return entry.sets.every(function(set){
-      return Number.isFinite(set.w) && set.w > 0 && Number.isInteger(set.r) && set.r > 0 &&
+      return Number.isFinite(set.w) && set.w >= 0 && Number.isInteger(set.r) && set.r > 0 &&
         (set.rir === null || set.rir === undefined || (Number.isFinite(set.rir) && set.rir >= 0 && set.rir <= 10));
     });
   });
-  if(!validSets){ toast('Cada serie debe tener peso y reps válidos; el esfuerzo debe estar entre 0 y 10'); return; }
+  if(!validSets){ toast('Cada serie debe tener peso (0 para ejercicios con carga corporal), reps válidos y esfuerzo entre 0 y 10'); return; }
   var durationMs = (hours * 60 + minutes) * 60000;
   var updated = Object.assign({}, edit.session, {date:date, durationMs:durationMs});
   var shiftToDate = function(timestamp){
@@ -1555,7 +1557,7 @@ function viewHist(){
     return '<section class="card"><div class="card-head"><div><h3>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</h3>' +
       '<p class="small muted">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</p></div></div>' +
       '<div class="list" style="gap:8px">' + body + '</div>' +
-      (editing ? sessionEditorHtml(s) : '<div class="row"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar fecha y duración</button>' +
+      (editing ? sessionEditorHtml(s) : '<div class="row"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar entrenamiento</button>' +
         (S.confirm === 'sess:' + s.id
           ? '<button class="btn danger sm" data-act="del-sess-ok" data-id="' + esc(s.id) + '">Confirmar: borrar entreno</button>'
           : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</div>') + '</section>';
@@ -1826,7 +1828,7 @@ function finish(updateRoutine){
   var entries = [], saved = [];
   S.draft.entries.forEach(function(en){
     var ex = effEx(en);
-    var sets = rowsToSets(en.rows, ex.unilateral).filter(function(s){ return s.w > 0 && s.r > 0; })
+    var sets = rowsToSets(en.rows, ex.unilateral).filter(function(s){ return validWeight(s.w) && s.r > 0; })
       .map(function(s){
         var set = {w:s.w, r:s.r, rir:s.rir, type:setType(s)};
         if(s.restMs > 0){ set.restMs = Math.round(s.restMs); }
@@ -1967,6 +1969,12 @@ function onClick(ev){
       break;
     case 'session-edit-save': saveSessionEdit(); break;
     case 'session-edit-cancel': S.sessionEdit = null; render(); break;
+    case 'session-move-exercise': if(S.sessionEdit){
+      var sessionMoveFrom=+t.dataset.entry, sessionMoveTo=sessionMoveFrom+Number(t.dataset.direction), sessionEntries=S.sessionEdit.session.entries;
+      if(sessionMoveTo>=0 && sessionMoveTo<sessionEntries.length){
+        var sessionMoved=sessionEntries.splice(sessionMoveFrom,1)[0]; sessionEntries.splice(sessionMoveTo,0,sessionMoved); render();
+      }
+    } break;
     case 'session-add-exercise-picker': if(S.sessionEdit){ S.sessionEdit.addPicker=true; render(); } break;
     case 'session-add-exercise-cancel': if(S.sessionEdit){ S.sessionEdit.addPicker=false; render(); } break;
     case 'session-remove-exercise': if(S.sessionEdit){ S.sessionEdit.confirmEntry=+t.dataset.entry; render(); } break;
