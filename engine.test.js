@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {analyze, analyzeCore, effTxt} = require('./engine.js');
-const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict} = require('./backup.js');
+const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType} = require('./backup.js');
 
 const rirSettings = {mode:'rir', targetRir:2};
 const baseExercise = {sets:3, min:8, max:10, inc:2, efforts:[2,2,2]};
@@ -161,6 +161,21 @@ test('peso corporal cero nunca recomienda bajar de peso', () => {
   const previous=[set(6,2,0),set(6,2,0),set(6,2,0)];
   const result=analyze(exercise,[set(5,2,0),set(6,2,0),set(6,2,0)],previous,{mode:'rir',targetRir:2});
   assert.notEqual(result.status,'bajar');
+});
+
+test('normaliza tipos de CSV sin cambiar tipos válidos ni producir tipos inválidos', () => {
+  assert.equal(csvSetType('backoff'),'backoff');
+  assert.equal(csvSetType('dropset'),'dropset');
+  assert.equal(csvSetType('drop'),'dropset');
+  assert.equal(csvSetType('failure'),'normal');
+  assert.equal(csvSetType('rest-pause'),'restpause');
+});
+
+test('no baja de peso cuando el siguiente peso disponible es cero o negativo', () => {
+  const exercise={sets:3,min:8,max:10,inc:5,loadStep:5};
+  const previous=[set(6,2,5),set(6,2,5),set(6,2,5)];
+  const result=analyze(exercise,[set(5,2,5),set(6,2,5),set(6,2,5)],previous,{mode:'rir',targetRir:2});
+  assert.equal(result.status,'mantener');
 });
 
 test('los respaldos migran formatos antiguos sin aceptar versiones futuras', () => {

@@ -50,9 +50,17 @@
     var expected=Number(expectedUpdatedAt)||0;
     return actualUpdatedAt>expected;
   }
+  function csvSetType(value){
+    var setTypes={normal:true,warmup:true,backoff:true,dropset:true,restpause:true};
+    var aliases={drop:'dropset','drop set':'dropset','back-off':'backoff','rest-pause':'restpause','rest pause':'restpause',aproximacion:'warmup','warm-up':'warmup',failure:'normal'};
+    var raw=String(value||'normal').trim().toLowerCase();
+    raw=raw.normalize ? raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'') : raw;
+    if(Object.prototype.hasOwnProperty.call(setTypes,raw)) return raw;
+    return Object.prototype.hasOwnProperty.call(aliases,raw) ? aliases[raw] : 'normal';
+  }
   function parseBackup(text){
     try { return migrateBackup(JSON.parse(String(text))); }
     catch(e){ return null; }
   }
-  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict};
+  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict, csvSetType:csvSetType};
 });
