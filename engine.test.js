@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {analyze, analyzeCore, effTxt} = require('./engine.js');
-const {migrateBackup, parseBackup, serializeBackup} = require('./backup.js');
+const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict} = require('./backup.js');
 
 const rirSettings = {mode:'rir', targetRir:2};
 const baseExercise = {sets:3, min:8, max:10, inc:2, efforts:[2,2,2]};
@@ -129,6 +129,18 @@ test('la carga corporal y los músculos secundarios están integrados en la inte
   assert.match(app,/factor:0\.5/);
 });
 
+test('los sellos detectan cambios, dispositivos y sesiones borradas sin sobrescribirlas', () => {
+  assert.equal(hasSessionConflict({updatedAt:20,updatedBy:'device-a'},10,'device-b'),true);
+  assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-a'},10,'device-b'),true);
+  assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-b'},10,'device-b'),false);
+  assert.equal(hasSessionConflict(undefined,10,'device-b',false),true);
+  assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-a'},undefined,'device-b'),true);
+  assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-b'},10,'device-b'),false);
+  const stamped=stampSession({id:'s1',ts:100},'device-a:tab-1',200);
+  assert.equal(stamped.updatedAt,200);
+  assert.equal(stamped.updatedBy,'device-a:tab-1');
+});
+
 test('los respaldos hacen una ida y vuelta sin perder entrenos ni perfil', () => {
   const source={
     format:'sobrecarga-backup', version:1,
@@ -137,7 +149,11 @@ test('los respaldos hacen una ida y vuelta sin perder entrenos ni perfil', () =>
   };
   const restored=parseBackup(serializeBackup(source));
   assert.deepEqual(restored.profile, source.profile);
-  assert.deepEqual(restored.sessions, source.sessions.map(session=>({...session,updatedAt:Number.isFinite(session.updatedAt)?session.updatedAt:restored.sessions[0].updatedAt,updatedBy:restored.sessions[0].updatedBy})));
+  assert.equal(restored.sessions.length,1);
+  assert.equal(restored.sessions[0].id,'s1');
+  assert.deepEqual(restored.sessions[0].entries,source.sessions[0].entries);
+  assert.equal(typeof restored.sessions[0].updatedAt,'number');
+  assert.equal(restored.sessions[0].updatedBy,'backup');
 });
 
 test('los respaldos migran formatos antiguos sin aceptar versiones futuras', () => {
