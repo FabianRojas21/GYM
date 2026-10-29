@@ -8,7 +8,9 @@ App de gimnasio para PC y móvil.
 - `styles.css`: estilos y diseño.
 - `app.js`: interfaz, almacenamiento y flujo de la aplicación.
 - `engine.js`: motor independiente de progresión.
-- `engine.test.js`: pruebas del motor, ejecutables con `node --test`.
+- `backup.js`: migración y serialización de respaldos.
+- `sw.js` y los iconos PNG: instalación offline como PWA.
+- `engine.test.js`: pruebas ejecutables con `node --test`.
 
 Los archivos deben permanecer en la misma carpeta. Para probar la app,
 abre esta carpeta en VS Code, instala la extensión Live Server y elige

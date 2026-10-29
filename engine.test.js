@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {analyze, analyzeCore, effTxt} = require('./engine.js');
+const {migrateBackup, parseBackup, serializeBackup} = require('./backup.js');
 
 const rirSettings = {mode:'rir', targetRir:2};
 const baseExercise = {sets:3, min:8, max:10, inc:2, efforts:[2,2,2]};
@@ -126,6 +127,24 @@ test('la carga corporal y los músculos secundarios están integrados en la inte
   assert.match(app,/effectiveWeight\(/);
   assert.match(app,/normalizedSecondaryMuscles/);
   assert.match(app,/factor:0\.5/);
+});
+
+test('los respaldos hacen una ida y vuelta sin perder entrenos ni perfil', () => {
+  const source={
+    format:'sobrecarga-backup', version:1,
+    profile:{settings:{mode:'rir'}, exercises:{press:{name:'Press'}}, routines:{}, programs:{}, goals:{}, measurements:[{date:'2026-01-01',weight:80}]},
+    sessions:[{id:'s1',date:'2026-01-01',entries:[{exId:'press',sets:[{w:60,r:10,rir:2,type:'normal'}]}]}]
+  };
+  const restored=parseBackup(serializeBackup(source));
+  assert.deepEqual(restored.profile, source.profile);
+  assert.deepEqual(restored.sessions, source.sessions.map(session=>({...session,updatedAt:Number.isFinite(session.updatedAt)?session.updatedAt:restored.sessions[0].updatedAt,updatedBy:restored.sessions[0].updatedBy})));
+});
+
+test('los respaldos migran formatos antiguos sin aceptar versiones futuras', () => {
+  const migrated=migrateBackup({version:1,profile:{},sessions:[{id:'s1',ts:1704067200000}]});
+  assert.equal(migrated.version,1);
+  assert.equal(migrated.sessions[0].updatedBy,'backup');
+  assert.equal(migrateBackup({version:2,profile:{},sessions:[]}),null);
 });
 
 test('la carga corporal se convierte una sola vez y también en récords y gráficos', () => {
