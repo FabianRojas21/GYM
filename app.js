@@ -1187,7 +1187,11 @@ function lastDate(exId){ var h = entriesFor(exId); return h.length ? h[h.length-
 
 /* ---------- vistas ---------- */
 function loadingView(){
-  return '<div class="card"><p class="sec-title">Cargando tu registro</p><div class="bar"><i style="width:35%"></i></div></div>';
+  return '<div class="app-loading" role="status" aria-label="Cargando tu registro">' +
+    '<div class="loading-heading"><span class="loading-mark" aria-hidden="true"></span><span>Cargando tu registro</span></div>' +
+    '<div class="loading-card"><span></span><span></span><span></span></div>' +
+    '<div class="loading-card loading-card-short"><span></span><span></span></div>' +
+    '</div>';
 }
 function savedHtml(){
   if(!S.justSaved) return '';
