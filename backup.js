@@ -32,10 +32,27 @@
     });
     return migrated;
   }
-  function serializeBackup(data){ return JSON.stringify(migrateBackup(data)); }
+  function serializeBackup(data, indent){
+    var migrated=migrateBackup(data);
+    if(!migrated) throw new Error('Respaldo inválido');
+    return JSON.stringify(migrated, null, indent || 0);
+  }
+  function stampSession(session, writer, now){
+    var stamped=clone(session || {});
+    stamped.updatedAt=Math.max(Number(stamped.updatedAt)||0, Number(stamped.ts)||0, Number(now)||Date.now());
+    stamped.updatedBy=writer;
+    return stamped;
+  }
+  function hasSessionConflict(actual, expectedUpdatedAt, writer, exists){
+    if(exists===false) return true;
+    if(!actual) return exists===undefined ? true : false;
+    var actualUpdatedAt=Number(actual.updatedAt)||0;
+    var expected=Number(expectedUpdatedAt)||0;
+    return actualUpdatedAt>expected || (actual.updatedAt!==undefined && actual.updatedBy!==writer && actualUpdatedAt===expected);
+  }
   function parseBackup(text){
     try { return migrateBackup(JSON.parse(String(text))); }
     catch(e){ return null; }
   }
-  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup};
+  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict};
 });

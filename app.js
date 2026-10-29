@@ -20,6 +20,7 @@ var clientDeviceId = (function(){
   try { var saved=localStorage.getItem(key); if(saved) return saved; var id=uid('device'); localStorage.setItem(key,id); return id; }
   catch(e){ return uid('device'); }
 })();
+var clientWriterId=clientDeviceId+':'+uid('tab');
 
 /* ---------- catálogo sugerido ---------- */
 var LIB = [
@@ -429,22 +430,29 @@ var Store = {
       throw error;
     });
   },
-  updateSession:function(session){
+  updateSession:function(session, options){
+    options=options || {};
     if(['db','cloud'].includes(S.kind)){
       var ref=Store.col.doc(session.id);
       var expected=Number(session.updatedAt)||0;
-      var stamped=stampSession(session);
+      var stamped=stampSession(session), written=stamped;
       return Store.firebaseDb.runTransaction(function(transaction){
         return transaction.get(ref).then(function(remote){
           var current=remote.exists ? remote.data() : null;
-          if(current && Number(current.updatedAt||0)>expected && current.updatedBy!==clientDeviceId){
-            var conflict=new Error('Otro dispositivo cambió este entreno mientras lo editabas');
-            conflict.code='session-conflict';
-            throw conflict;
+          var conflict=remote.exists
+            ? SobrecargaBackup.hasSessionConflict(current, expected, clientWriterId)
+            : !options.overwrite && SobrecargaBackup.hasSessionConflict(null, expected, clientWriterId, false);
+          if(conflict){
+            var error=new Error(remote.exists ? 'Otro dispositivo cambió este entreno mientras lo editabas' : 'Este entrenamiento fue borrado en otro dispositivo');
+            error.code='session-conflict'; error.remoteSession=current; error.deleted=!remote.exists; throw error;
           }
-          transaction.set(ref,clone(stamped));
+          written=stamped;
+          if(options.overwrite){
+            written=Object.assign({}, stamped, {updatedAt:Math.max(Date.now(), Number(current&&current.updatedAt||0)+1), updatedBy:clientWriterId});
+          }
+          transaction.set(ref,clone(written));
         });
-      }).then(function(){ return stamped; }).catch(function(error){
+      }).then(function(){ return written; }).catch(function(error){
         toast(error.code==='session-conflict' ? error.message : 'No se pudieron guardar los cambios del entreno');
         throw error;
       });
@@ -577,10 +585,7 @@ function personalRecords(ex){
 }
 function isObject(value){ return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function stampSession(session){
-  var stamped=clone(session);
-  stamped.updatedAt=Math.max(Number(stamped.updatedAt)||0, Number(stamped.ts)||0, Date.now());
-  stamped.updatedBy=clientDeviceId;
-  return stamped;
+  return SobrecargaBackup.stampSession(session, clientWriterId, Date.now());
 }
 function validBackup(data){
   if(!isObject(data) || !isObject(data.profile) || !Array.isArray(data.sessions)) return false;
@@ -662,7 +667,7 @@ function validBackup(data){
   });
 }
 function downloadBackup(){
-  var payload = JSON.stringify(SobrecargaBackup.migrateBackup({format:'sobrecarga-backup', version:1, profile:S.profile, sessions:S.sessions}), null, 2);
+  var payload = SobrecargaBackup.serializeBackup({format:'sobrecarga-backup', version:1, profile:S.profile, sessions:S.sessions}, 2);
   use('downloads').then(function(downloads){
     if(downloads) return downloads.save({filename:'sobrecarga-respaldo-' + iso(new Date()) + '.json', data:payload});
     var url = URL.createObjectURL(new Blob([payload], {type:'application/json'}));
@@ -1412,6 +1417,7 @@ function sessionEditorHtml(session){
     '<div class="field"><label class="lab" for="session-edit-minutes">Minutos</label><input class="txt" id="session-edit-minutes" data-session-meta="minutes" type="number" min="0" max="59" step="1" inputmode="numeric" required value="' + esc(editMinutes) + '"' + (edit.saving ? ' disabled' : '') + '></div></div>' +
     '<p class="small muted">La duración se guarda con precisión de minutos. Corrige aquí peso, reps o esfuerzo de cada serie; también puedes cambiar el tipo. La fecha corregida actualiza el resumen semanal.</p>' +
     setsHtml + addPicker +
+    (edit.conflict ? '<div class="alert warn"><strong>Conflicto de sincronización</strong><p class="small muted">' + esc(edit.conflict.message) + '</p><div class="row"><button class="btn ghost sm" data-act="session-conflict-reload"' + (edit.saving ? ' disabled' : '') + '>Recargar versión remota</button><button class="btn sm" data-act="session-conflict-overwrite"' + (edit.saving ? ' disabled' : '') + '>Sobrescribir</button></div></div>' : '') +
     '<div class="row"><button class="btn sm" data-act="session-edit-save"' + (edit.saving ? ' disabled' : '') + '>Guardar cambios</button><button class="btn ghost sm" data-act="session-edit-cancel"' + (edit.saving ? ' disabled' : '') + '>Cancelar</button></div></section>';
 }
 function saveSessionEdit(){
@@ -1458,13 +1464,18 @@ function saveSessionEdit(){
   }
   updated.ts = updated.finishedAt;
   edit.saving = true; render();
-  Store.updateSession(updated).then(function(saved){
+  Store.updateSession(updated, {overwrite:!!edit.overwrite}).then(function(saved){
     saved=saved || updated;
     var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
     if(index >= 0) S.sessions[index] = saved;
     S.sessionEdit = null; render(); toast('Entrenamiento actualizado');
-  }).catch(function(){
-    if(S.sessionEdit && S.sessionEdit.id === updated.id) S.sessionEdit.saving = false;
+  }).catch(function(error){
+    if(S.sessionEdit && S.sessionEdit.id === updated.id){
+      S.sessionEdit.saving=false;
+      if(error && error.code==='session-conflict'){
+        S.sessionEdit.conflict={message:error.message, remoteSession:error.remoteSession, deleted:!!error.deleted};
+      }
+    }
     render();
   });
 }
@@ -2297,6 +2308,15 @@ function onClick(ev){
       break;
     case 'session-edit-save': saveSessionEdit(); break;
     case 'session-edit-cancel': S.sessionEdit = null; render(); break;
+    case 'session-conflict-reload':
+      if(S.sessionEdit && S.sessionEdit.conflict){
+        var remote=S.sessionEdit.conflict.remoteSession || S.sessions.find(function(s){ return s.id===S.sessionEdit.id; });
+        if(!remote){ toast('El entrenamiento ya no existe en la nube'); S.sessionEdit=null; render(); break; }
+        var remoteDuration=Math.max(0,Math.floor((Number(remote.durationMs)||0)/60000));
+        S.sessionEdit.session=clone(remote); S.sessionEdit.date=remote.date; S.sessionEdit.hours=String(Math.floor(remoteDuration/60)); S.sessionEdit.minutes=String(remoteDuration%60); S.sessionEdit.conflict=null; S.sessionEdit.overwrite=false; render();
+      }
+      break;
+    case 'session-conflict-overwrite': if(S.sessionEdit){ S.sessionEdit.overwrite=true; S.sessionEdit.conflict=null; saveSessionEdit(); } break;
     case 'session-move-exercise': if(S.sessionEdit){
       var sessionMoveFrom=+t.dataset.entry, sessionMoveTo=sessionMoveFrom+Number(t.dataset.direction), sessionEntries=S.sessionEdit.session.entries;
       if(sessionMoveTo>=0 && sessionMoveTo<sessionEntries.length){
