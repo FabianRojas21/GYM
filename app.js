@@ -12,6 +12,11 @@ var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
 var roundTo = function(x, step){ return Math.round(x/step)*step; };
 var iso = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 var parseISO = function(s){ var p = s.split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); };
+function validDate(value){
+  if(typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  var parsed=parseISO(value);
+  return !isNaN(parsed.getTime()) && iso(parsed)===value;
+}
 var dFmt = function(s, o){ return new Intl.DateTimeFormat('es-CL', o || {day:'numeric', month:'short'}).format(parseISO(s)); };
 var use = function(n){ try { return (window.claude && window.claude.use) ? window.claude.use(n) : Promise.resolve(null); } catch(e){ return Promise.resolve(null); } };
 var uid = function(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,5); };
@@ -439,9 +444,9 @@ var Store = {
       return Store.firebaseDb.runTransaction(function(transaction){
         return transaction.get(ref).then(function(remote){
           var current=remote.exists ? remote.data() : null;
-          var conflict=remote.exists
+          var conflict=!options.overwrite && (remote.exists
             ? SobrecargaBackup.hasSessionConflict(current, expected, clientWriterId)
-            : !options.overwrite && SobrecargaBackup.hasSessionConflict(null, expected, clientWriterId, false);
+            : SobrecargaBackup.hasSessionConflict(null, expected, clientWriterId, false));
           if(conflict){
             var error=new Error(remote.exists ? 'Otro dispositivo cambió este entreno mientras lo editabas' : 'Este entrenamiento fue borrado en otro dispositivo');
             error.code='session-conflict'; error.remoteSession=current; error.deleted=!remote.exists; throw error;
@@ -1729,10 +1734,10 @@ function exDetail(ex){
   var hist = entriesFor(ex.id);
   var records = personalRecords(ex);
   var warmCfg = warmupSettings(ex);
-  var recordHtml = records.weight ? '<div class="record-grid">' +
-    '<div><span>Mayor peso</span><strong>' + fmt(records.weight.value) + ' kg</strong><small>' + esc(dFmt(records.weight.date)) + '</small></div>' +
-    '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' +
-    '<div><span>Mejor serie estimada</span><strong>' + fmt1(records.estimated.value) + ' kg</strong><small>' + esc(dFmt(records.estimated.date)) + '</small></div></div>' : '<p class="small muted">Los récords aparecerán después de registrar series normales.</p>';
+  var recordHtml = records.weight || records.reps || (records.estimated && records.estimated.value !== null) ? '<div class="record-grid">' +
+    (records.weight ? '<div><span>Mayor peso</span><strong>' + fmt(records.weight.value) + ' kg</strong><small>' + esc(dFmt(records.weight.date)) + '</small></div>' : '') +
+    (records.reps ? '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' : '') +
+    (records.estimated && records.estimated.value !== null ? '<div><span>Mejor serie estimada</span><strong>' + fmt1(records.estimated.value) + ' kg</strong><small>' + esc(dFmt(records.estimated.date)) + '</small></div>' : '') + '</div>' : '<p class="small muted">Los récords aparecerán después de registrar series normales.</p>';
   var pts = hist.map(function(h){
     var sets=effectiveSetsFor(ex,h.sets,h.date).filter(function(s){ return setType(s)==='normal' && Number(s.w)>0 && Number(s.r)>0; });
     var y=null;
@@ -1995,7 +2000,14 @@ function clearDemo(){
 function render(){
   var y = window.scrollY;
   var views = {hoy:viewHoy, rutinas:viewRut, ejercicios:viewRut, historial:viewHist, yo:viewProfile, ajustes:viewSet};
-  $('#view').innerHTML = S.ready ? (views[S.tab] || viewHoy)() : loadingView();
+  try {
+    $('#view').innerHTML = S.ready ? (views[S.tab] || viewHoy)() : loadingView();
+  } catch(error){
+    console.error('Error al mostrar la interfaz', error);
+    $('#view').innerHTML='<section class="card"><p class="sec-title">No se pudo mostrar esta sección</p><p class="small muted">Los datos siguen guardados. Recarga la página o vuelve a Inicio.</p><div class="row"><button class="btn" data-act="tab" data-tab="hoy">Volver a Inicio</button></div></section>';
+    if(typeof toast==='function') toast('Esta sección tuvo un problema; tus datos siguen guardados');
+    return;
+  }
   document.querySelectorAll('.tab').forEach(function(b){
     var selected=b.dataset.tab === S.tab;
     b.setAttribute('aria-selected', selected ? 'true' : 'false');
