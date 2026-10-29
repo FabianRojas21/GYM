@@ -15,6 +15,11 @@ var parseISO = function(s){ var p = s.split('-').map(Number); return new Date(p[
 var dFmt = function(s, o){ return new Intl.DateTimeFormat('es-CL', o || {day:'numeric', month:'short'}).format(parseISO(s)); };
 var use = function(n){ try { return (window.claude && window.claude.use) ? window.claude.use(n) : Promise.resolve(null); } catch(e){ return Promise.resolve(null); } };
 var uid = function(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,5); };
+var clientDeviceId = (function(){
+  var key='sobrecarga:device-id';
+  try { var saved=localStorage.getItem(key); if(saved) return saved; var id=uid('device'); localStorage.setItem(key,id); return id; }
+  catch(e){ return uid('device'); }
+})();
 
 /* ---------- catálogo sugerido ---------- */
 var LIB = [
@@ -291,7 +296,7 @@ var Store = {
         var remoteIds={}; remoteSessions.forEach(function(doc){ remoteIds[doc.id]=true; });
         return (localData.sessions || []).reduce(function(queue,session){
           if(remoteIds[session.id]) return queue;
-          return queue.then(function(){ return Store.col.doc(session.id).set(clone(session)); });
+          return queue.then(function(){ return Store.col.doc(session.id).set(clone(stampSession(session))); });
         }, Promise.resolve());
       }).catch(function(error){ console.warn('Migración local a Firebase fallida', error); });
     }
@@ -374,7 +379,7 @@ var Store = {
       if(!(profDirty || profBusy)) S.profile = normProfile(snap.exists ? snap.data() : null);
       gotP = true; done();
     }, fail);
-    Store.col.limit(1000).onSnapshot(function(snap){
+    Store.col.onSnapshot(function(snap){
       S.sessions = snap.docs.map(function(d){ return clone(d.data()); });
       gotS = true; done();
     }, fail);
@@ -407,6 +412,7 @@ var Store = {
     });
   },
   saveSession:function(s){
+    s=stampSession(s);
     if(!['db','cloud'].includes(S.kind)){
       var exists = S.sessions.some(function(item){ return item.id === s.id; });
       var sessions = exists ? S.sessions.map(function(item){ return item.id === s.id ? s : item; }) : S.sessions.concat([s]);
@@ -425,15 +431,29 @@ var Store = {
   },
   updateSession:function(session){
     if(['db','cloud'].includes(S.kind)){
-      return Store.col.doc(session.id).set(clone(session)).catch(function(error){
-        toast('No se pudo guardar los cambios del entreno');
+      var ref=Store.col.doc(session.id);
+      var expected=Number(session.updatedAt)||0;
+      var stamped=stampSession(session);
+      return Store.firebaseDb.runTransaction(function(transaction){
+        return transaction.get(ref).then(function(remote){
+          var current=remote.exists ? remote.data() : null;
+          if(current && Number(current.updatedAt||0)>expected && current.updatedBy!==clientDeviceId){
+            var conflict=new Error('Otro dispositivo cambió este entreno mientras lo editabas');
+            conflict.code='session-conflict';
+            throw conflict;
+          }
+          transaction.set(ref,clone(stamped));
+        });
+      }).then(function(){ return stamped; }).catch(function(error){
+        toast(error.code==='session-conflict' ? error.message : 'No se pudieron guardar los cambios del entreno');
         throw error;
       });
     }
+    session=stampSession(session);
     try {
       var sessions = S.sessions.map(function(item){ return item.id === session.id ? session : item; });
       localStorage.setItem(LK, JSON.stringify({profile:S.profile, sessions:sessions}));
-      return Promise.resolve();
+      return Promise.resolve(session);
     } catch(error){
       toast('No se pudo guardar los cambios del entreno');
       return Promise.reject(error);
@@ -556,6 +576,12 @@ function personalRecords(ex){
   return records;
 }
 function isObject(value){ return value !== null && typeof value === 'object' && !Array.isArray(value); }
+function stampSession(session){
+  var stamped=clone(session);
+  stamped.updatedAt=Math.max(Number(stamped.updatedAt)||0, Number(stamped.ts)||0, Date.now());
+  stamped.updatedBy=clientDeviceId;
+  return stamped;
+}
 function validBackup(data){
   if(!isObject(data) || !isObject(data.profile) || !Array.isArray(data.sessions)) return false;
   var profile = data.profile;
@@ -636,7 +662,7 @@ function validBackup(data){
   });
 }
 function downloadBackup(){
-  var payload = JSON.stringify({format:'sobrecarga-backup', version:1, profile:S.profile, sessions:S.sessions}, null, 2);
+  var payload = JSON.stringify(SobrecargaBackup.migrateBackup({format:'sobrecarga-backup', version:1, profile:S.profile, sessions:S.sessions}), null, 2);
   use('downloads').then(function(downloads){
     if(downloads) return downloads.save({filename:'sobrecarga-respaldo-' + iso(new Date()) + '.json', data:payload});
     var url = URL.createObjectURL(new Blob([payload], {type:'application/json'}));
@@ -1432,9 +1458,10 @@ function saveSessionEdit(){
   }
   updated.ts = updated.finishedAt;
   edit.saving = true; render();
-  Store.updateSession(updated).then(function(){
+  Store.updateSession(updated).then(function(saved){
+    saved=saved || updated;
     var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
-    if(index >= 0) S.sessions[index] = updated;
+    if(index >= 0) S.sessions[index] = saved;
     S.sessionEdit = null; render(); toast('Entrenamiento actualizado');
   }).catch(function(){
     if(S.sessionEdit && S.sessionEdit.id === updated.id) S.sessionEdit.saving = false;
@@ -2464,8 +2491,9 @@ function onChange(ev){
     var reader = new FileReader();
     reader.onload = function(){
       try {
-        var data = JSON.parse(String(reader.result));
-        if(!validBackup(data)) throw new Error('invalid backup');
+        var parsed = JSON.parse(String(reader.result));
+        var data = SobrecargaBackup.migrateBackup(parsed);
+        if(!data || !validBackup(data)) throw new Error('invalid backup');
         S.pendingImport = data; render();
         toast('Respaldo listo para restaurar');
       } catch(e){ toast('El archivo no es un respaldo válido de Sobrecarga'); }
@@ -2622,9 +2650,10 @@ function autoBackupLabel(){
 function restoreAutoBackup(){
   try {
     var backup=JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY));
-    if(!backup || !validBackup({format:'sobrecarga-backup',version:1,profile:backup.profile,sessions:backup.sessions})) throw new Error('invalid');
-    Store.replaceAll(normProfile(backup.profile),backup.sessions).then(function(){
-      S.sessions=backup.sessions; S.profile=normProfile(backup.profile);
+    var data=SobrecargaBackup.migrateBackup({format:'sobrecarga-backup',version:1,profile:backup&&backup.profile,sessions:backup&&backup.sessions});
+    if(!backup || !data || !validBackup(data)) throw new Error('invalid');
+    Store.replaceAll(normProfile(data.profile),data.sessions).then(function(){
+      S.sessions=data.sessions; S.profile=normProfile(data.profile);
       if(backup.draft && Array.isArray(backup.draft.entries)) { S.draft=Object.assign(blankDraft(),backup.draft); saveDraft(); }
       render(); toast('Copia automática restaurada');
     }).catch(function(){ toast('No se pudo restaurar la copia automática'); });
