@@ -86,9 +86,15 @@
         var downWeight = Math.max(increment, roundTo(weight * 0.9, increment));
         if(downWeight >= weight) downWeight = Math.max(0, weight - increment);
         downWeight = availableWeight(downWeight, ex.loadStep || increment, 'down');
-        result.status = 'bajar'; result.nextW = downWeight; result.target = fill(ex.min);
-        result.headline = 'Baja a ' + fmt(downWeight) + ' kg';
-        result.detail = 'Dos entrenos seguidos bajo ' + ex.min + ' reps con ' + fmt(weight) + ' kg. Baja un poco y vuelve a construir desde ' + ex.min + ' reps.';
+        if(downWeight <= 0 || downWeight >= weight){
+          result.status='mantener'; result.nextW=weight; result.target=fill(ex.min);
+          result.headline='Mantén ' + fmt(weight) + ' kg';
+          result.detail='No hay un peso inferior disponible y seguro para bajar con el incremento configurado. Mantén el peso y vuelve a buscar ' + ex.min + ' reps.';
+        } else {
+          result.status = 'bajar'; result.nextW = downWeight; result.target = fill(ex.min);
+          result.headline = 'Baja a ' + fmt(downWeight) + ' kg';
+          result.detail = 'Dos entrenos seguidos bajo ' + ex.min + ' reps con ' + fmt(weight) + ' kg. Baja un poco y vuelve a construir desde ' + ex.min + ' reps.';
+        }
       } else {
         result.status = 'mantener'; result.target = fill(ex.min);
         result.headline = 'Mantén ' + fmt(weight) + ' kg';

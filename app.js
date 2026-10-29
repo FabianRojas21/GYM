@@ -517,6 +517,11 @@ var SET_TYPES = {
   normal:'Normal', warmup:'Aproximación', backoff:'Back-off',
   dropset:'Drop set', restpause:'Rest-pause'
 };
+var CSV_TYPE_ALIASES={
+  drop:'dropset', 'drop set':'dropset', 'back-off':'backoff', 'rest-pause':'restpause',
+  'rest pause':'restpause', aproximacion:'warmup', 'warm-up':'warmup', failure:'normal'
+};
+function csvSetType(value){ return SobrecargaBackup.csvSetType(value, SET_TYPES, CSV_TYPE_ALIASES); }
 function setType(s){
   return s && Object.prototype.hasOwnProperty.call(SET_TYPES, s.type) ? s.type : (s && s.warm ? 'warmup' : 'normal');
 }
@@ -701,12 +706,13 @@ function csvCell(value){
   return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
 }
 function downloadSessionsCsv(){
-  var rows = [['fecha','ejercicio','tipo','peso_kg','repeticiones','esfuerzo','serie']];
+  var rows = [['fecha','ejercicio','tipo','peso_kg','repeticiones','esfuerzo','serie','duracion_min','lado','ronda']];
   S.sessions.slice().sort(function(a,b){ return a.date.localeCompare(b.date) || a.ts-b.ts; }).forEach(function(session){
     session.entries.forEach(function(entry){
       var exercise = exById(entry.exId);
       entry.sets.forEach(function(set, index){
-        rows.push([session.date, exercise ? exercise.name : entry.exId, set.type || 'normal', set.w, set.r, set.rir, index+1]);
+        rows.push([session.date, exercise ? exercise.name : entry.exId, setType(set), set.w, set.r, set.rir,
+          index+1, Math.max(0, Math.round((Number(session.durationMs)||0)/60000)), set.side || '', set.pair === undefined ? '' : Number(set.pair)+1]);
       });
     });
   });
@@ -756,15 +762,21 @@ function importRoutine(payload){
   Store.saveProfile(); S.selectedRoutine=id; S.librarySection='rutinas'; S.tab='rutinas'; render(); toast('Rutina importada');
 }
 function importSessionsCsv(text){
-  var records=parseCsv(text), grouped={};
+  var records=parseCsv(text), grouped={}, durations={};
   records.forEach(function(r){
     var date=(r.fecha||r.date||'').trim(), name=(r.ejercicio||r.exercise||'').trim();
     var weight=num(r.peso_kg||r.peso||r.weight), reps=num(r.repeticiones||r.reps);
-    if(!validDate(date) || !name || !(weight>0) || !(reps>0)) return;
+    if(!validDate(date) || !name || !Number.isFinite(weight) || weight < 0 || !(reps>0)) return;
     var effort=num(r.esfuerzo||r.rir||r.effort);
+    var duration=num(r.duracion_min||r.duration_min||r.duration); if(Number.isFinite(duration) && duration>=0) durations[date]=Math.max(durations[date]||0,duration);
+    var side=(r.lado||r.side||'').trim().toLowerCase(), pair=num(r.ronda||r.round||r.pair);
+    var importedSet={w:weight,r:reps,rir:Number.isFinite(effort)?effort:null,type:csvSetType(r.tipo||r.type)};
+    if(side==='derecha'||side==='der'||side==='right'||side==='d') importedSet.side='right';
+    else if(side==='izquierda'||side==='izq'||side==='left'||side==='i'||side==='l') importedSet.side='left';
+    if(Number.isFinite(pair) && pair>=0) importedSet.pair=Math.max(0,Math.floor(pair)-1);
     if(!grouped[date]) grouped[date]={};
     if(!grouped[date][name]) grouped[date][name]=[];
-    grouped[date][name].push({w:weight,r:reps,rir:effort, type:['warmup','normal','drop','failure','restpause'].includes(r.tipo||r.type)?(r.tipo||r.type||'normal'):'normal'});
+    grouped[date][name].push(importedSet);
   });
   var imported=0, importedSessions=[];
   Object.keys(grouped).forEach(function(date){
@@ -779,7 +791,9 @@ function importSessionsCsv(text){
       return session.date===date && session.csvImport && JSON.stringify(session.entries.map(function(entry){ return {exId:entry.exId,sets:entry.sets.map(function(set){ return [set.w,set.r,set.rir,set.type]; })}; }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }))===signature;
     });
     if(duplicate) return;
-    var session={id:uid('ses'),date:date,ts:new Date(date+'T12:00:00').getTime(),startedAt:new Date(date+'T12:00:00').getTime(),finishedAt:new Date(date+'T13:00:00').getTime(),durationMs:3600000,entries:entries,csvImport:true};
+    var durationMinutes=durations[date] || 60;
+    var durationMs=durationMinutes*60000;
+    var session={id:uid('ses'),date:date,ts:new Date(date+'T12:00:00').getTime(),startedAt:new Date(date+'T12:00:00').getTime(),finishedAt:new Date(date+'T12:00:00').getTime()+durationMs,durationMs:durationMs,entries:entries,csvImport:true};
     S.sessions.push(session); importedSessions.push(session); imported++;
   });
   if(!imported){ toast('No se encontraron entrenos nuevos válidos'); return; }
@@ -1873,7 +1887,7 @@ function profileExercises(){
     return (last[b]||'').localeCompare(last[a]||'')||ea.name.localeCompare(eb.name,'es');
   });
   var sort='<label class="field"><span class="lab">Ordenar ejercicios</span><select class="txt" data-profile-exercise-sort><option value="recent"'+(S.exerciseSort==='recent'?' selected':'')+'>Reciente</option><option value="most"'+(S.exerciseSort==='most'?' selected':'')+'>Más realizado</option><option value="volume"'+(S.exerciseSort==='volume'?' selected':'')+'>Mayor volumen</option><option value="name"'+(S.exerciseSort==='name'?' selected':'')+'>Alfabético</option></select></label>';
-  var cards=ids.length?ids.map(function(id){var ex=exById(id), records=personalRecords(ex), lastDateText=last[id]?dFmt(last[id]):'Nunca realizado';
+  var cards=ids.length?ids.map(function(id){var ex=exById(id), lastDateText=last[id]?dFmt(last[id]):'Nunca realizado';
     return '<button class="card profile-exercise-card" data-act="profile-open-exercise" data-id="'+esc(id)+'"><span><strong>'+esc(ex.name)+'</strong><small>'+ (counts[id]||0)+' entrenos · Último: '+esc(lastDateText)+'</small></span><span class="num">'+esc(volumeText(volumes[id]||0))+' kg·reps</span></button>';}).join(''):'<div class="card"><p class="muted">Añade ejercicios desde la biblioteca para verlos aquí.</p></div>';
   return '<section class="card"><p class="sec-title">Tus ejercicios</p>'+sort+'</section><div class="list">'+cards+'</div>';
 }
