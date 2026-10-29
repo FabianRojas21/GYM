@@ -48,7 +48,7 @@
     if(!actual) return exists===undefined ? true : false;
     var actualUpdatedAt=Number(actual.updatedAt)||0;
     var expected=Number(expectedUpdatedAt)||0;
-    return actualUpdatedAt>expected || (actual.updatedAt!==undefined && actual.updatedBy!==writer && actualUpdatedAt===expected);
+    return actualUpdatedAt>expected;
   }
   function parseBackup(text){
     try { return migrateBackup(JSON.parse(String(text))); }

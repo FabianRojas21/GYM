@@ -82,7 +82,7 @@
           previousLow = previousWeight === weight && mean(previousReps) < ex.min;
         }
       }
-      if(previousLow){
+      if(previousLow && weight>0){
         var downWeight = Math.max(increment, roundTo(weight * 0.9, increment));
         if(downWeight >= weight) downWeight = Math.max(0, weight - increment);
         downWeight = availableWeight(downWeight, ex.loadStep || increment, 'down');

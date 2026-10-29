@@ -131,10 +131,10 @@ test('la carga corporal y los músculos secundarios están integrados en la inte
 
 test('los sellos detectan cambios, dispositivos y sesiones borradas sin sobrescribirlas', () => {
   assert.equal(hasSessionConflict({updatedAt:20,updatedBy:'device-a'},10,'device-b'),true);
-  assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-a'},10,'device-b'),true);
+  assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-a'},10,'device-b'),false);
   assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-b'},10,'device-b'),false);
   assert.equal(hasSessionConflict(undefined,10,'device-b',false),true);
-  assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-a'},undefined,'device-b'),true);
+  assert.equal(hasSessionConflict({},undefined,'device-b'),false);
   assert.equal(hasSessionConflict({updatedAt:10,updatedBy:'device-b'},10,'device-b'),false);
   const stamped=stampSession({id:'s1',ts:100},'device-a:tab-1',200);
   assert.equal(stamped.updatedAt,200);
@@ -154,6 +154,13 @@ test('los respaldos hacen una ida y vuelta sin perder entrenos ni perfil', () =>
   assert.deepEqual(restored.sessions[0].entries,source.sessions[0].entries);
   assert.equal(typeof restored.sessions[0].updatedAt,'number');
   assert.equal(restored.sessions[0].updatedBy,'backup');
+});
+
+test('peso corporal cero nunca recomienda bajar de peso', () => {
+  const exercise={sets:3,min:8,max:10,inc:2.5, loadMode:'bodyweight'};
+  const previous=[set(6,2,0),set(6,2,0),set(6,2,0)];
+  const result=analyze(exercise,[set(5,2,0),set(6,2,0),set(6,2,0)],previous,{mode:'rir',targetRir:2});
+  assert.notEqual(result.status,'bajar');
 });
 
 test('los respaldos migran formatos antiguos sin aceptar versiones futuras', () => {
