@@ -344,6 +344,40 @@ test('el resumen del historial compara ventanas exactas y métricas acumuladas',
   assert.match(source,/Comparación con los '\+S\.historyRange\+' días anteriores/);
 });
 
+test('crear una rutina desde historial conserva configuración y cuenta rondas unilaterales', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function routineItemsFromSession\(session,exerciseMap\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={
+    setType:set=>set.type||'normal',
+    exerciseLoadStep:()=>2.5,
+    warmupSettings:()=>({warmupMode:'auto',warmupStep:2.5,warmupPercents:[50]})
+  };
+  vm.runInNewContext(helper[0]+';globalThis.routineItemsForTest=routineItemsFromSession;',context);
+  const session={entries:[
+    {exId:'press',cfg:{min:6,max:10,inc:2,sets:3,efforts:[2,1,1]},sets:[
+      {type:'warmup',w:20,r:8},{type:'normal',w:40,r:8},{type:'normal',w:40,r:8},{type:'normal',w:40,r:7},{type:'drop',w:30,r:5}
+    ]},
+    {exId:'split',sets:[
+      {type:'normal',pair:0,side:'left'},{type:'normal',pair:0,side:'right'},
+      {type:'normal',pair:1,side:'left'},{type:'normal',pair:1,side:'right'},
+      {type:'normal',pair:2,side:'right'}
+    ]}
+  ]};
+  const items=JSON.parse(JSON.stringify(context.routineItemsForTest(session,{
+    press:{sets:4,min:8,max:12,inc:2.5,unilateral:false},
+    split:{sets:3,min:8,max:12,inc:2.5,unilateral:true}
+  })));
+  assert.equal(items.length,2);
+  assert.deepEqual(items.map(item=>item.sets),[3,2]);
+  assert.equal(items[0].warmupSets,1);
+  assert.equal(items[0].min,6);
+  assert.equal(items[0].inc,2);
+  assert.equal(items[1].unilateral,true);
+  assert.match(source,/data-act="session-make-routine"/);
+  assert.match(source,/case 'session-make-routine':[\s\S]*?routineItemsFromSession/);
+});
+
 test('calcula peso corporal ponderado por ejercicio', () => {
   const {effectiveBodyweight}=require('./engine.js');
   assert.equal(effectiveBodyweight(80,0,67),53.6);

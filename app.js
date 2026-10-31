@@ -2236,6 +2236,43 @@ function historySummaryHtml(matches){
   }
   return '<section class="card history-summary"><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' kg·reps</strong><span>volumen</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
 }
+function routineItemsFromSession(session,exerciseMap){
+  return session.entries.reduce(function(items,entry){
+    var exercise=exerciseMap[entry.exId];
+    if(!exercise || exercise.archived) return items;
+    var config=Object.assign({},exercise,entry.cfg||{}), normalSets=entry.sets.filter(function(set){ return setType(set)==='normal'; });
+    var completePairCount=function(sets){
+      var pairs=sets.reduce(function(result,set){
+        if(set.pair===undefined || (set.side!=='left' && set.side!=='right')) return result;
+        var key=String(set.pair);
+        if(!result[key]) result[key]={left:false,right:false};
+        result[key][set.side]=true;
+        return result;
+      },{});
+      return Object.keys(pairs).filter(function(key){ return pairs[key].left && pairs[key].right; }).length;
+    };
+    var workCount=exercise.unilateral
+      ? completePairCount(normalSets)
+      : normalSets.length;
+    if(!workCount) return items;
+    var warmupSets=entry.sets.filter(function(set){ return setType(set)==='warmup'; });
+    if(exercise.unilateral) warmupSets=completePairCount(warmupSets);
+    var item={
+      exId:entry.exId,
+      sets:Math.min(10,Math.max(1,workCount)),
+      warmupSets:Math.min(10,Math.max(0,exercise.unilateral?warmupSets:warmupSets.length)),
+      min:Number(config.min)||1,
+      max:Number(config.max)||20,
+      inc:Number(config.inc)>0?Number(config.inc):2.5,
+      loadStep:Number(config.loadStep)>0?Number(config.loadStep):exerciseLoadStep(exercise),
+      unilateral:!!exercise.unilateral,
+      efforts:Array.isArray(config.efforts)?config.efforts.slice(0,Math.min(10,Math.max(1,workCount))):[]
+    };
+    Object.assign(item,warmupSettings(config));
+    items.push(item);
+    return items;
+  },[]);
+}
 function historyCardHtml(s){
     var total = 0; s.entries.forEach(function(e){
       if(e.unilateral) total += Object.keys(e.sets.reduce(function(pairs, set){ if(set.pair !== undefined) pairs[set.pair] = true; return pairs; }, {})).length;
@@ -2252,6 +2289,7 @@ function historyCardHtml(s){
       '<p class="small muted">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</p></div></div>' +
       '<div class="list" style="gap:8px">' + body + '</div>' +
       (editing ? sessionEditorHtml(s) : '<div class="row"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar entrenamiento</button>' +
+        (!s.demo ? '<button class="btn ghost sm" data-act="session-make-routine" data-id="' + esc(s.id) + '">Guardar como rutina</button>' : '') +
         (S.confirm === 'sess:' + s.id
           ? '<button class="btn danger sm" data-act="del-sess-ok" data-id="' + esc(s.id) + '">Confirmar: borrar entreno</button>'
           : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</div>') + '</section>';
@@ -2761,6 +2799,21 @@ function onClick(ev){
       if(!Object.keys(measurementValues).length){toast('Añade al menos una medida');break;}
       S.profile.measurements.push({id:uid('measure'),date:measurementDate,values:measurementValues,notes:$('#measurement-notes')?$('#measurement-notes').value.trim():''});
       S.measurementForm=false; Store.saveProfile(); render(); toast('Medición guardada'); break;
+    case 'session-make-routine':
+      var sourceSession=S.sessions.find(function(session){ return session.id===t.dataset.id; });
+      if(!sourceSession || sourceSession.demo) break;
+      var templateItems=routineItemsFromSession(sourceSession,S.profile.exercises);
+      if(!templateItems.length){ toast('Este entreno no tiene series normales para crear una rutina'); break; }
+      var sourceRoutine=sourceSession.routineId && S.profile.routines[sourceSession.routineId];
+      S.redit={
+        id:null,
+        name:(sourceSession.routineName || 'Entreno '+dFmt(sourceSession.date))+' (copia)',
+        items:templateItems,
+        pick:false,
+        programId:sourceRoutine && S.profile.programs[sourceRoutine.programId] ? sourceRoutine.programId : ''
+      };
+      S.selectedRoutine=null; S.pedit=null; S.tab='rutinas'; S.librarySection='rutinas'; S.confirm=null;
+      render(); window.scrollTo(0,0); break;
     case 'library-open-section': S.tab = 'rutinas'; S.librarySection = t.dataset.section; S.selectedProgram = null; S.selectedRoutine = null; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); break;
     case 'library-section': S.librarySection = t.dataset.section; S.selectedProgram = null; S.selectedRoutine = null; S.confirm = null; render(); break;
     case 'program-new': S.pedit = {id:null, name:''}; S.selectedProgram = null; render(); break;

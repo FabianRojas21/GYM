@@ -44,6 +44,10 @@ estado de guardado aparece debajo del título. En **Historial** puedes buscar
 por ejercicio, rutina o fecha y filtrar por 7, 30 o 90 días. El resumen del
 periodo muestra entrenos, duración, volumen y series efectivas, comparados con
 el intervalo anterior equivalente; la búsqueda se aplica a ambos intervalos.
+Desde un entrenamiento guardado puedes elegir **Guardar como rutina** para
+crear una plantilla reutilizable con sus ejercicios, series normales,
+aproximaciones y ajustes de progresión. Las series especiales no se convierten
+en series de trabajo de la plantilla.
 
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
 del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes
