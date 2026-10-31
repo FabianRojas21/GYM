@@ -181,6 +181,14 @@ test('la recuperación separa carga objetiva reciente y autoevaluación opcional
   assert.equal(context.ratingForTest(3),'Muy fatigado');
   assert.equal(context.ratingForTest(0),'Sin autoevaluación');
   assert.equal(context.estimateForTest(0),'Ninguna reciente');
+  assert.equal(context.estimateForTest(0.5),'Baja');
+  assert.equal(context.estimateForTest(1.5),'Moderada');
+  assert.equal(context.estimateForTest(4),'Alta');
+  assert.match(source,/Sin datos suficientes/);
+  assert.match(source,/Sin carga reciente/);
+  assert.match(source,/data-level=.*estimateLevel/);
+  assert.match(source,/Tu sensación · autoevaluación de hoy/);
+  assert.match(source,/no mide la recuperación fisiológica/i);
   assert.match(source,/data-recovery-group=/);
   assert.match(source,/S\.profile\.recoveryRatings\[recoveryGroup\]=\{level:Number\(t\.value\),date:iso\(new Date\(\)\)\}/);
 });

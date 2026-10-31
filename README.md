@@ -86,7 +86,10 @@ da menos peso a sesiones más antiguas. La carga y la autoevaluación se muestra
 por separado; son referencias personales, no una medición fisiológica, consejo
 médico ni una indicación para evitar entrenar. La app conserva la última
 autoevaluación por grupo muscular en el perfil y la sincroniza con los demás
-datos.
+datos. La carga se presenta como baja (menos de 1,5 series equivalentes),
+moderada (desde 1,5 y menos de 4) o alta (4 o más). Si no hay series efectivas
+recientes asignadas al músculo, se indica que no hay carga reciente o datos
+suficientes; esto no significa que el músculo esté recuperado.
 
 En las reglas del ejercicio o de cada elemento de una rutina puedes ajustar
 **Peso disponible cada** en la unidad elegida. La app redondea las recomendaciones de subida

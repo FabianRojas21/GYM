@@ -1885,7 +1885,7 @@ function recoveryRatingLabel(level){
   return ({1:'Me siento recuperado',2:'Algo cansado',3:'Muy fatigado'})[Number(level)]||'Sin autoevaluación';
 }
 function recoveryEstimateLabel(load){
-  return load>=4?'Alta':(load>=1.5?'Moderada':(load>0?'Ligera':'Ninguna reciente'));
+  return load>=4?'Alta':(load>=1.5?'Moderada':(load>0?'Baja':'Ninguna reciente'));
 }
 function recoveryHtml(){
   var today=iso(new Date()), summary=muscleRecoverySummary(today);
@@ -1896,16 +1896,23 @@ function recoveryHtml(){
     var item=summary[group], rating=S.profile.recoveryRatings[group];
     var days=item.lastStimulus===null?null:Math.max(0,Math.floor((Date.parse(today+'T00:00:00Z')-Date.parse(item.lastStimulus+'T00:00:00Z'))/86400000));
     var stimulus=days===null?'Sin estímulo registrado':(days===0?'Último estímulo: hoy':(days===1?'Último estímulo: ayer':'Último estímulo: hace '+days+' días'));
+    var hasRecentStimulus=days!==null&&days<7;
+    var estimateLevel=hasRecentStimulus?(item.load>=4?'high':(item.load>=1.5?'moderate':'low')):'none';
+    var estimateLabel=hasRecentStimulus?recoveryEstimateLabel(item.load):(days===null?'Sin datos suficientes':'Sin carga reciente');
+    var estimateDetail=hasRecentStimulus
+      ? fmt1(item.load)+' series equivalentes recientes'
+      : (days===null?'No hay series efectivas asignadas a este músculo.':'No se registran series efectivas de este músculo en los últimos 7 días.');
     var selected=rating&&rating.date===today?rating.level:'';
-    return '<article class="recovery-muscle"><div class="recovery-muscle-head"><strong>'+esc(MUSCLE_GROUPS[group]||group)+'</strong><span class="recovery-load">'+esc(recoveryEstimateLabel(item.load))+'</span></div>'+
-      '<p class="small muted">'+esc(stimulus)+' · '+fmt1(item.load)+' series equivalentes recientes</p>'+
-      '<label class="field"><span class="lab">¿Cómo lo sientes hoy?</span><select class="txt" data-recovery-group="'+esc(group)+'"><option value="">Sin autoevaluación hoy</option><option value="1"'+(selected===1?' selected':'')+'>Me siento recuperado</option><option value="2"'+(selected===2?' selected':'')+'>Algo cansado</option><option value="3"'+(selected===3?' selected':'')+'>Muy fatigado</option></select></label>'+
-      (rating&&rating.date!==today?'<small class="muted">Última autoevaluación: '+esc(recoveryRatingLabel(rating.level))+' · '+esc(dFmt(rating.date))+'</small>':'')+
+    return '<article class="recovery-muscle"><div class="recovery-muscle-head"><strong>'+esc(MUSCLE_GROUPS[group]||group)+'</strong></div>'+
+      '<div class="recovery-estimate" data-level="'+estimateLevel+'"><span class="lab">Carga estimada · últimos 7 días</span><strong>'+esc(estimateLabel)+'</strong><small>'+esc(estimateDetail)+'</small></div>'+
+      '<div class="recovery-self"><label class="field"><span class="lab">Tu sensación · autoevaluación de hoy</span><select class="txt" data-recovery-group="'+esc(group)+'"><option value="">Aún no evaluado hoy</option><option value="1"'+(selected===1?' selected':'')+'>Me siento recuperado</option><option value="2"'+(selected===2?' selected':'')+'>Algo cansado</option><option value="3"'+(selected===3?' selected':'')+'>Muy fatigado</option></select></label>'+
+      (rating&&rating.date!==today?'<small class="muted">Última vez: '+esc(recoveryRatingLabel(rating.level))+' · '+esc(dFmt(rating.date))+'</small>':'')+'</div>'+
+      '<small class="muted recovery-stimulus">'+esc(stimulus)+'</small>'+
       '</article>';
   }).join('');
-  return '<section class="recovery-panel"><div><h3>Recuperación y carga reciente</h3><p class="small muted">La carga es una estimación; tu autoevaluación se muestra aparte. No mide la recuperación fisiológica ni recomienda evitar entrenar.</p></div>'+
+  return '<section class="recovery-panel"><div><h3>Carga muscular y sensación</h3><p class="small muted">La carga es una estimación del entrenamiento reciente y no mide la recuperación fisiológica. Tu sensación es subjetiva, se registra por separado y ninguna de las dos decide si debes entrenar.</p></div>'+
     (rows?'<div class="recovery-grid">'+rows+'</div>':'<p class="home-weekly-note">Registra series efectivas y asigna músculos a tus ejercicios para ver su carga reciente.</p>')+
-    '<details class="volume-help"><summary>Cómo se estima</summary><p>Se consideran las series efectivas de los últimos 7 días: las secundarias cuentan al 50 %, el esfuerzo registrado ajusta ligeramente el aporte y las sesiones más antiguas pesan menos. La autoevaluación es opcional, se guarda por grupo muscular y no cambia tus recomendaciones de peso.</p></details></section>';
+    '<details class="volume-help"><summary>Cómo interpretar estos datos</summary><p>La carga suma series efectivas recientes: las secundarias cuentan al 50 %, el esfuerzo registrado ajusta ligeramente el aporte y las sesiones más antiguas pesan menos. Como referencia visual, menos de 1,5 series equivalentes es carga baja, de 1,5 a menos de 4 es moderada y 4 o más es alta. «Sin carga reciente» o «Sin datos suficientes» no significan que el músculo esté recuperado. La autoevaluación es opcional y no cambia tus recomendaciones de peso.</p></details></section>';
 }
 function weeklyMuscleSummaryHtml(week){
   var counts = {}, directCounts = {}, indirectCounts = {}, groupCounts = {}, groupDirect = {}, groupIndirect = {};
