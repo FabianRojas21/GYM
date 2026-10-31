@@ -317,11 +317,16 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/data-act="repeat-set"/);
   assert.match(app,/data-act="finish-set"/);
-  assert.match(app,/case 'finish-set':[\s\S]*?startRest\(finishRestSeconds\)/);
+  assert.match(app,/case 'finish-set':[\s\S]*?startRest\(finishRestSeconds, finishRow\.restToken\)/);
   assert.match(app,/set-finish-done/);
   assert.match(app,/data-act="toggle-entry"/);
   assert.match(app,/completedSets \+ '\/' \+ targetSets/);
   assert.match(app,/finishControl\.replaceWith\(finishButton\)/);
+  const inputHandler=app.match(/function onInput\(ev\)\{([\s\S]*?)\n\}\nfunction onChange/);
+  assert.ok(inputHandler);
+  assert.doesNotMatch(inputHandler[1],/delete row\.restTriggered/);
+  assert.match(app,/case 'undo-finish-set':[\s\S]*?cancelRestForRow\(undoRow\)/);
+  assert.match(app,/localStorage\.setItem\(RTOK, S\.restOwner\)/);
   assert.doesNotMatch(app,/toast\('Serie terminada · descanso iniciado'\)/);
   assert.match(app,/function onWorkoutKeydown/);
   assert.match(app,/closest\('section\.card\[data-ei\]'\)/);

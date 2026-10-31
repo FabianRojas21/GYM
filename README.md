@@ -123,6 +123,9 @@ el entreno.
 Al terminar una serie, la fila queda marcada con una verificación discreta. El
 encabezado de cada ejercicio muestra el avance de series normales completadas
 (por ejemplo, `2/3 series`); púlsalo para plegar o desplegar el ejercicio.
+Corregir los datos de una serie no quita la marca de realizada. Si la marcaste
+por error, pulsa **Hecha · deshacer**; esto cancela también el descanso activo
+si pertenece a esa serie.
 
 En **Ejercicios**, abre un ejercicio para ver sus récords de peso, repeticiones
 por serie y mejor serie estimada, con la fecha de cada marca. Solo cuentan las
