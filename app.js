@@ -296,41 +296,42 @@ var Store = {
           if(remoteIds[session.id]) return queue;
           return queue.then(function(){ return Store.col.doc(session.id).set(clone(stampSession(session))); });
         }, Promise.resolve());
-      }).catch(function(error){ console.warn('Migración local a Firebase fallida', error); });
+      });
     }
-    var gotProfile=false, gotSessions=false;
-    var done=function(){ if(gotProfile && gotSessions){ S.ready=true; createAutoBackup(); render(); } };
-    var cloudLoadingTimeout=setTimeout(function(){
-      if(!S.ready){
-        S.ready=true;
-        createAutoBackup();
-        render();
-        toast('La conexión a la cuenta tardó demasiado; puedes trabajar localmente y restaurar un respaldo');
-      }
-    }, 12000);
-
-    Store.ref.onSnapshot(function(snap){
-      if(!(profDirty || profBusy)){
-        if(snap.exists) S.profile=normProfile(snap.data());
-        else S.profile=defaultProfile();
-      }
-      gotProfile=true; done();
-      if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
-    }, function(){
-      toast('No se pudieron descargar tus datos de la cuenta');
-      clearTimeout(cloudLoadingTimeout);
-      S.ready=true; createAutoBackup(); render();
-    });
-    Store.col.onSnapshot(function(snap){
-      S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
-      gotSessions=true; done();
-      if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
-    }, function(){
-      toast('No se pudieron descargar tus entrenos');
-      clearTimeout(cloudLoadingTimeout);
-      S.ready=true; createAutoBackup(); render();
-    });
     migration.then(function(){
+      var gotProfile=false, gotSessions=false;
+      var done=function(){ if(gotProfile && gotSessions){ S.ready=true; createAutoBackup(); render(); } };
+      var cloudLoadingTimeout=setTimeout(function(){
+        if(!S.ready){
+          S.ready=true;
+          createAutoBackup();
+          render();
+          toast('La conexión a la cuenta tardó demasiado; puedes trabajar localmente y restaurar un respaldo');
+        }
+      }, 12000);
+      Store.ref.onSnapshot(function(snap){
+        if(!(profDirty || profBusy)){
+          if(snap.exists) S.profile=normProfile(snap.data());
+          else S.profile=defaultProfile();
+        }
+        gotProfile=true; done();
+        if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
+      }, function(error){
+        console.warn('No se pudo descargar el perfil de Firebase',error);
+        toast('No se pudieron descargar tus datos de la cuenta');
+        clearTimeout(cloudLoadingTimeout);
+        S.ready=true; createAutoBackup(); render();
+      });
+      Store.col.onSnapshot(function(snap){
+        S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
+        gotSessions=true; done();
+        if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
+      }, function(error){
+        console.warn('No se pudieron descargar los entrenos de Firebase',error);
+        toast('No se pudieron descargar tus entrenos');
+        clearTimeout(cloudLoadingTimeout);
+        S.ready=true; createAutoBackup(); render();
+      });
       root.collection('app').doc('draft').get().then(function(snap){
         if(snap.exists && snap.data() && Array.isArray(snap.data().entries)){
           var remoteDraft=Object.assign(blankDraft(), snap.data());
@@ -342,7 +343,11 @@ var Store = {
         }else if(S.draft.entries.length || S.draft.startedAt){
           saveDraft(false);
         }
-      }).catch(function(){ });
+      }).catch(function(error){ console.warn('No se pudo sincronizar el borrador',error); });
+    }).catch(function(error){
+      console.warn('Migración local a Firebase fallida',error);
+      toast('No se pudo completar la migración. Se mantienen tus datos en este navegador; no se cargó un perfil remoto vacío.');
+      Store.startLocal();
     });
   },
   signIn:function(){
@@ -393,20 +398,30 @@ var Store = {
   },
   saveProfile:function(){
     if(!['db','cloud'].includes(S.kind)){ Store.saveLocal(); return; }
-    profDirty = true; clearTimeout(profTimer); profTimer = setTimeout(Store.flush, 350);
+    profDirty = true; clearTimeout(profTimer); profTimer = setTimeout(function(){ Store.flush().catch(function(){}); }, 350);
+  },
+  saveProfileNow:function(){
+    if(!['db','cloud'].includes(S.kind)){
+      return Store.saveLocal() ? Promise.resolve() : Promise.reject(new Error('No se pudo guardar el perfil en este navegador'));
+    }
+    profDirty=true; clearTimeout(profTimer);
+    return Store.flush();
   },
   flush:function(){
-    if(profBusy){ profTimer = setTimeout(Store.flush, 200); return; }
-    if(!profDirty) return;
+    if(profBusy) return new Promise(function(resolve,reject){
+      profTimer=setTimeout(function(){ Store.flush().then(resolve,reject); },200);
+    });
+    if(!profDirty) return Promise.resolve();
     profDirty = false; profBusy = true;
-    Store.ref.set(clone(S.profile)).then(function(){
+    return Store.ref.set(clone(S.profile)).then(function(){
       profBusy = false;
-      if(profDirty) profTimer = setTimeout(Store.flush, 200);
-    }).catch(function(){
+      if(profDirty) profTimer = setTimeout(function(){ Store.flush().catch(function(){}); }, 200);
+    }).catch(function(error){
       profBusy = false;
       profDirty = true;
       toast('No se pudieron guardar los cambios; se reintentará');
-      profTimer = setTimeout(Store.flush, 5000);
+      profTimer = setTimeout(function(){ Store.flush().catch(function(){}); }, 5000);
+      throw error;
     });
   },
   saveSession:function(s){
@@ -416,13 +431,13 @@ var Store = {
       var sessions = exists ? S.sessions.map(function(item){ return item.id === s.id ? s : item; }) : S.sessions.concat([s]);
       try {
         localStorage.setItem(LK, JSON.stringify({profile:S.profile, sessions:sessions}));
-        return Promise.resolve();
+        return Promise.resolve(s);
       } catch(e){
         toast('No se pudo guardar el entreno en este navegador');
         return Promise.reject(e);
       }
     }
-    return Store.col.doc(s.id).set(clone(s)).catch(function(error){
+    return Store.col.doc(s.id).set(clone(s)).then(function(){ return s; }).catch(function(error){
       toast('No se pudo guardar el entreno');
       throw error;
     });
@@ -465,9 +480,9 @@ var Store = {
     }
   },
   deleteSessions:function(ids){
-    if(!['db','cloud'].includes(S.kind)){ Store.saveLocal(); return Promise.resolve(); }
+    if(!['db','cloud'].includes(S.kind)) return Promise.resolve();
     return ids.reduce(function(p, id){ return p.then(function(){ return Store.col.doc(id).delete(); }); }, Promise.resolve())
-      .catch(function(){ toast('No se pudo borrar'); });
+      .catch(function(error){ toast('No se pudo borrar el entreno: ' + (error && error.message ? error.message : 'error de sincronización')); throw error; });
   },
   replaceAll:function(profile, sessions){
     try { localStorage.setItem(LK, JSON.stringify({profile:profile, sessions:sessions})); }
@@ -755,6 +770,7 @@ function importRoutine(payload){
   Store.saveProfile(); S.selectedRoutine=id; S.librarySection='rutinas'; S.tab='rutinas'; render(); toast('Rutina importada');
 }
 function importSessionsCsv(text){
+  var previousProfile=clone(S.profile), previousSessions=S.sessions.slice();
   var records=parseCsv(text), grouped={}, durations={};
   records.forEach(function(r){
     var date=(r.fecha||r.date||'').trim(), name=(r.ejercicio||r.exercise||'').trim();
@@ -780,18 +796,50 @@ function importSessionsCsv(text){
       var sets=grouped[date][name];
       entries.push({exId:exercise.id,sets:sets,unilateral:!!exercise.unilateral || SobrecargaEngine.isUnilateralEntry({sets:sets})});
     });
-    var signature=JSON.stringify(entries.map(function(entry){ return {exId:Object.keys(S.profile.exercises).find(function(id){ return id===entry.exId; })?entry.exId:entry.exId,sets:entry.sets.map(function(set){ return [set.w,set.r,set.rir,set.type]; })}; }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }));
+    var signature=SobrecargaBackup.csvSessionSignature(entries);
     var duplicate=S.sessions.some(function(session){
-      return session.date===date && session.csvImport && JSON.stringify(session.entries.map(function(entry){ return {exId:entry.exId,sets:entry.sets.map(function(set){ return [set.w,set.r,set.rir,set.type]; })}; }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }))===signature;
+      return session.date===date && session.csvImport && SobrecargaBackup.csvSessionSignature(session.entries)===signature;
     });
     if(duplicate) return;
     var durationMinutes=durations[date] || 60;
     var durationMs=durationMinutes*60000;
     var session={id:uid('ses'),date:date,ts:new Date(date+'T12:00:00').getTime(),startedAt:new Date(date+'T12:00:00').getTime(),finishedAt:new Date(date+'T12:00:00').getTime()+durationMs,durationMs:durationMs,entries:entries,csvImport:true};
-    S.sessions.push(session); importedSessions.push(session); imported++;
+    importedSessions.push(session); imported++;
   });
-  if(!imported){ toast('No se encontraron entrenos nuevos válidos'); return; }
-  Store.saveProfile(); importedSessions.forEach(function(session){ Store.saveSession(session); }); render(); toast(imported+' entreno'+(imported===1?'':'s')+' importado'+(imported===1?'':'s')+' desde CSV');
+  if(!imported){ S.profile=previousProfile; toast('No se encontraron entrenos nuevos válidos'); return Promise.resolve(false); }
+  if(!['db','cloud'].includes(S.kind)){
+    S.sessions=previousSessions.concat(importedSessions);
+    if(!Store.saveLocal()){
+      S.profile=previousProfile; S.sessions=previousSessions; render(); return Promise.resolve(false);
+    }
+    render(); toast(imported+' entreno'+(imported===1?'':'s')+' importado'+(imported===1?'':'s')+' desde CSV');
+    return Promise.resolve(true);
+  }
+  var persistSessions=function(){
+    return importedSessions.reduce(function(queue,session){
+      return queue.then(function(saved){ return Store.saveSession(session).then(function(persisted){ saved.push(persisted); return saved; }); });
+    },Promise.resolve([]));
+  };
+  return Store.saveProfileNow().then(persistSessions).then(function(savedSessions){
+    var savedById={};
+    S.sessions.concat(savedSessions).forEach(function(session){ savedById[session.id]=session; });
+    S.sessions=Object.keys(savedById).map(function(id){ return savedById[id]; });
+    render(); toast(imported+' entreno'+(imported===1?'':'s')+' importado'+(imported===1?'':'s')+' desde CSV');
+    return true;
+  }).catch(function(error){
+    console.error('Falló la importación CSV; se intentará revertir lo escrito',error);
+    S.profile=previousProfile;
+    return Store.deleteSessions(importedSessions.map(function(session){ return session.id; })).catch(function(rollbackError){
+      console.error('No se pudieron revertir todos los entrenos de la importación CSV',rollbackError);
+    }).then(function(){
+      return Store.saveProfileNow().catch(function(rollbackError){
+        console.error('No se pudo restaurar el perfil previo a la importación CSV',rollbackError);
+      });
+    }).then(function(){
+      render(); toast('No se pudo completar la importación CSV; revisa la conexión y vuelve a intentarlo');
+      return false;
+    });
+  });
 }
 
 /* ---------- presentación de series ---------- */
@@ -1999,15 +2047,32 @@ function loadDemo(){
 }
 function clearDemo(){
   var ids = S.sessions.filter(function(s){ return s.demo; }).map(function(s){ return s.id; });
-  S.sessions = S.sessions.filter(function(s){ return !s.demo; });
-  Object.keys(S.profile.exercises).forEach(function(k){
-    var e = S.profile.exercises[k];
-    if(e.demo && !S.sessions.some(function(s){ return s.entries.some(function(x){ return x.exId === k; }); })) delete S.profile.exercises[k];
+  return Store.deleteSessions(ids).then(function(){
+    S.sessions = S.sessions.filter(function(s){ return !s.demo; });
+    Object.keys(S.profile.exercises).forEach(function(k){
+      var e = S.profile.exercises[k];
+      if(e.demo && !S.sessions.some(function(s){ return s.entries.some(function(x){ return x.exId === k; }); })) delete S.profile.exercises[k];
+    });
+    Object.keys(S.profile.routines).forEach(function(k){ if(S.profile.routines[k].demo) delete S.profile.routines[k]; });
+    S.draft.entries = S.draft.entries.filter(function(en){ return !!exById(en.exId); }); saveDraft();
+    return Store.saveProfileNow();
+  }).then(function(){
+    render(); toast('Datos de ejemplo eliminados'); return true;
+  }).catch(function(error){
+    console.error('No se pudieron eliminar todos los datos de ejemplo',error);
+    render(); return false;
   });
-  Object.keys(S.profile.routines).forEach(function(k){ if(S.profile.routines[k].demo) delete S.profile.routines[k]; });
-  S.draft.entries = S.draft.entries.filter(function(en){ return !!exById(en.exId); }); saveDraft();
-  Store.saveProfile(); Store.deleteSessions(ids);
-  render(); toast('Datos de ejemplo eliminados');
+}
+function deleteSession(id){
+  return Store.deleteSessions([id]).then(function(){
+    var previous=S.sessions;
+    S.sessions=S.sessions.filter(function(session){ return session.id!==id; });
+    if(!['db','cloud'].includes(S.kind) && !Store.saveLocal()){
+      S.sessions=previous;
+      return false;
+    }
+    return true;
+  });
 }
 
 /* ---------- render ---------- */
@@ -2323,7 +2388,14 @@ function onClick(ev){
     case 'archive': S.confirm = 'arch:' + t.dataset.id; render(); break;
     case 'archive-ok': S.profile.exercises[t.dataset.id].archived = true; S.draft.entries = S.draft.entries.filter(function(en){ return en.exId !== t.dataset.id; }); saveDraft(); Store.saveProfile(); S.confirm = null; S.openEx = null; render(); break;
     case 'del-sess': S.confirm = 'sess:' + t.dataset.id; render(); break;
-    case 'del-sess-ok': S.sessions = S.sessions.filter(function(s){ return s.id !== t.dataset.id; }); Store.deleteSessions([t.dataset.id]); if(S.sessionEdit && S.sessionEdit.id === t.dataset.id) S.sessionEdit = null; S.confirm = null; render(); toast('Entreno borrado'); break;
+    case 'del-sess-ok':
+      var deleteId=t.dataset.id;
+      deleteSession(deleteId).then(function(deleted){
+        if(!deleted){ render(); return; }
+        if(S.sessionEdit && S.sessionEdit.id===deleteId) S.sessionEdit=null;
+        S.confirm=null; render(); toast('Entreno borrado');
+      }).catch(function(error){ console.error('No se pudo borrar el entreno',error); render(); });
+      break;
     case 'session-edit':
       var editSession = S.sessions.find(function(s){ return s.id === t.dataset.id; });
       if(editSession){
@@ -2393,8 +2465,17 @@ function onClick(ev){
     case 'wipe': S.confirm = 'wipe'; render(); break;
     case 'wipe-ok':
       var ids = S.sessions.map(function(s){ return s.id; });
-      S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.goals = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
-      S.restEndsAt = null; saveRestEnd(); Store.saveProfile(); Store.deleteSessions(ids); S.confirm = null; S.justSaved = null; render(); toast('Datos borrados'); break;
+      Store.deleteSessions(ids).then(function(){
+        S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.goals = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
+        S.restEndsAt = null; saveRestEnd();
+        return Store.saveProfileNow();
+      }).then(function(){
+        S.confirm = null; S.justSaved = null; render(); toast('Datos borrados');
+      }).catch(function(error){
+        console.error('No se pudieron borrar todos los datos',error);
+        S.confirm=null; render(); toast('No se pudo completar el borrado de datos');
+      });
+      break;
     case 'auto-restore': restoreAutoBackup(); break;
     case 'export': downloadBackup(); break;
     case 'import': $('#backup-file').click(); break;
@@ -2527,7 +2608,18 @@ function onChange(ev){
     var csvFile = t.files && t.files[0];
     if(!csvFile) return;
     var csvReader = new FileReader();
-    csvReader.onload = function(){ importSessionsCsv(String(csvReader.result)); t.value=''; };
+    csvReader.onload = function(){
+      try{
+        Promise.resolve(importSessionsCsv(String(csvReader.result))).catch(function(error){
+          console.error('No se pudo procesar el archivo CSV',error);
+          toast('No se pudo importar el CSV');
+        });
+      }catch(error){
+        console.error('No se pudo procesar el archivo CSV',error);
+        toast('El archivo CSV no tiene un formato válido');
+      }
+      t.value='';
+    };
     csvReader.onerror = function(){ toast('No se pudo leer el CSV'); t.value=''; };
     csvReader.readAsText(csvFile); return;
   }

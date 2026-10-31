@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {analyze, analyzeCore, effTxt} = require('./engine.js');
-const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType} = require('./backup.js');
+const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType, csvSessionSignature} = require('./backup.js');
 
 const rirSettings = {mode:'rir', targetRir:2};
 const baseExercise = {sets:3, min:8, max:10, inc:2, efforts:[2,2,2]};
@@ -172,6 +172,15 @@ test('normaliza tipos de CSV sin cambiar tipos válidos ni producir tipos invál
   assert.equal(csvSetType('rest-pause'),'restpause');
 });
 
+test('la firma CSV distingue esfuerzo y lado de cada ronda', () => {
+  const left=[{exId:'curl',sets:[{w:12,r:10,rir:2,type:'normal',side:'left',pair:0}]}];
+  const right=[{exId:'curl',sets:[{w:12,r:10,rir:2,type:'normal',side:'right',pair:0}]}];
+  const changedEffort=[{exId:'curl',sets:[{w:12,r:10,rir:1,type:'normal',side:'left',pair:0}]}];
+  assert.notEqual(csvSessionSignature(left),csvSessionSignature(right));
+  assert.notEqual(csvSessionSignature(left),csvSessionSignature(changedEffort));
+  assert.equal(csvSessionSignature(left),csvSessionSignature([{exId:'curl',sets:[{w:12,r:10,rir:2,type:'normal',side:'left',pair:0}],unilateral:true}]));
+});
+
 test('no baja de peso cuando el siguiente peso disponible es cero o negativo', () => {
   const exercise={sets:3,min:8,max:10,inc:5,loadStep:5};
   const previous=[set(6,2,5),set(6,2,5),set(6,2,5)];
@@ -278,4 +287,13 @@ test('CSV unilateral mantiene su estado y las tendencias agrupan músculos', () 
   assert.match(source,/groupFactors\(muscleAssignments/);
   assert.match(source,/comparableWeekRange\(today,weekIndex\)/);
   assert.match(source,/indirectLabel\*0\.5/);
+});
+
+test('no confirma la importación CSV antes de persistir y gestiona fallos de migración y borrado', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  assert.match(source,/return Store\.saveProfileNow\(\)\.then\(persistSessions\)/);
+  assert.match(source,/Migración local a Firebase fallida/);
+  assert.match(source,/Se mantienen tus datos en este navegador/);
+  assert.match(source,/No se pudo borrar el entreno:/);
+  assert.match(source,/throw error;\s*\}\);\s*\},\s*replaceAll:/);
 });

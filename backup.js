@@ -58,9 +58,21 @@
     if(Object.prototype.hasOwnProperty.call(setTypes,raw)) return raw;
     return Object.prototype.hasOwnProperty.call(aliases,raw) ? aliases[raw] : 'normal';
   }
+  function csvSessionSignature(entries){
+    return JSON.stringify((entries||[]).map(function(entry){
+      var sets=(entry.sets||[]);
+      return {
+        exId:entry.exId,
+        unilateral:!!entry.unilateral || sets.some(function(set){ return set.side==='right' || set.side==='left' || set.pair!==undefined; }),
+        sets:sets.map(function(set){
+          return [set.w,set.r,set.rir===undefined ? null : set.rir,set.type||'normal',set.side||'',set.pair===undefined ? null : set.pair];
+        }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); })
+      };
+    }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }));
+  }
   function parseBackup(text){
     try { return migrateBackup(JSON.parse(String(text))); }
     catch(e){ return null; }
   }
-  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict, csvSetType:csvSetType};
+  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict, csvSetType:csvSetType, csvSessionSignature:csvSessionSignature};
 });
