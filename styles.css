@@ -363,6 +363,8 @@ details.how ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:col
 .it-tools{display:flex;gap:6px}
 .hint{font-size:14px;color:var(--muted)}
 .session-entry-edit{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.session-entry-edit.is-collapsed{padding-bottom:4px}
+.session-entry-edit .session-set-edit .set-finish{grid-column:1/-1;justify-self:start;min-width:140px}
 .session-set-edit{display:grid;grid-template-columns:minmax(72px,1fr) repeat(3,minmax(56px,1fr)) minmax(110px,1.2fr);gap:6px;align-items:end;margin:8px 0}
 .session-set-edit>strong{font:600 15px/1.1 var(--font-display);color:var(--muted);padding-bottom:12px}
 .session-set-field{gap:3px}

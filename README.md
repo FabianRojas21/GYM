@@ -124,10 +124,17 @@ Al terminar una serie, la fila queda marcada con una verificación discreta. El
 encabezado de cada ejercicio muestra el avance de series normales completadas
 (por ejemplo, `2/3 series`); púlsalo para plegar o desplegar el ejercicio.
 El estado plegado se conserva al recargar el entreno. Corregir los datos de una
-serie no quita la marca de realizada. Si la marcaste por error, pulsa
-**Hecha · deshacer**; esto cancela también el descanso activo si pertenece a esa
-serie. Si quitas por error una serie o ejercicio durante el descanso, **Deshacer**
-restaura la fila y el tiempo restante mientras ese descanso siga vigente.
+serie durante el entreno no quita la marca de realizada. Si la marcaste por
+error, pulsa **Hecha · deshacer**; esto cancela también el descanso activo si
+pertenece a esa serie. Si quitas por error una serie o ejercicio durante el
+descanso, **Deshacer** restaura la fila y el tiempo restante mientras ese
+descanso siga vigente.
+
+Al **editar un entrenamiento del historial**, las series guardadas aparecen
+marcadas como hechas y el encabezado muestra el avance. Puedes plegar cada
+ejercicio desde su encabezado. Si corriges una serie marcada, vuelve a quedar
+pendiente hasta que pulses **Terminar serie**; esto solo actualiza el indicador
+del editor y no inicia un descanso ni muestra un aviso flotante.
 
 En **Ejercicios**, abre un ejercicio para ver sus récords de peso, repeticiones
 por serie y mejor serie estimada, con la fecha de cada marca. Solo cuentan las

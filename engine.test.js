@@ -345,3 +345,18 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.ok(styles.includes('.workout-finish{position:sticky'));
   assert.ok(styles.includes('padding-bottom:calc(124px'));
 });
+
+test('el editor del historial mantiene avance, plegado y estado de series', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
+  const readme=fs.readFileSync('./README.md','utf8');
+  assert.match(app,/function prepareSessionForEdit\(session\)/);
+  assert.match(app,/function sessionEditProgressText\(entry, exercise\)/);
+  assert.match(app,/data-act="session-toggle-entry"/);
+  assert.match(app,/case 'session-finish-set':[\s\S]*?setSessionEditDone\(finishEditEntry,finishEditSet,markDone/);
+  assert.match(app,/function saveSessionEdit\(\)[\s\S]*?delete set\.editorDone/);
+  assert.match(app,/function onInput\(ev\)\{[\s\S]*?setSessionEditDone\(entry,set,false/);
+  assert.match(app,/updateSessionEditFinishControls\(\+t\.dataset\.entry,\+t\.dataset\.set\)/);
+  assert.ok(styles.includes('.session-entry-edit .session-set-edit .set-finish'));
+  assert.match(readme,/Al \*\*editar un entrenamiento del historial\*\*[\s\S]*?no inicia un descanso/);
+});
