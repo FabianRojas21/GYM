@@ -404,3 +404,17 @@ test('la app mantiene el parseo numérico si backup.js está desactualizado', ()
   assert.equal(context.validWeightForTest('0'),true);
   assert.equal(context.validWeightForTest('-1'),false);
 });
+
+test('la sincronización finaliza con error si Firebase deja una escritura pendiente', async () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function withTimeout\(promise, timeoutMs, message\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={setTimeout,clearTimeout,Promise,Error};
+  vm.runInNewContext(helper[0]+';globalThis.withTimeoutForTest=withTimeout;',context);
+  await assert.rejects(
+    context.withTimeoutForTest(new Promise(()=>{}),5,'Firebase sin respuesta'),
+    /Firebase sin respuesta/
+  );
+  assert.match(source,/return withTimeout\([\s\S]*?15000,[\s\S]*?Firebase no respondió en 15 segundos/);
+  assert.match(source,/S\.cloudSyncing=false; render\(\);[\s\S]*?toast\(error && error\.message/);
+});
