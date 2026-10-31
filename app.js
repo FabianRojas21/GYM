@@ -6,7 +6,7 @@ var $ = function(s, el){ return (el||document).querySelector(s); };
 var esc = function(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
 var fmt = function(n){ return (Math.round(n*100)/100).toString().replace('.', ','); };
 var fmt1 = function(n){ return (Math.round(n*10)/10).toString().replace('.', ','); };
-var num = function(v){ if(v===null||v===undefined||String(v).trim()==='') return null; var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
+var num = SobrecargaBackup.parseNumber;
 var validWeight = function(v){ var n=num(v); return n !== null && n >= 0; };
 var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
 var roundTo = function(x, step){ return Math.round(x/step)*step; };
@@ -126,7 +126,7 @@ function loadRestEnd(){
   try { var value = Number(localStorage.getItem(RTK)); return isFinite(value) && value > Date.now() ? value : null; } catch(e){ return null; }
 }
 var S = {
-  ready:false, kind:'local', canDownload:false,
+  ready:false, kind:'local', canDownload:false, syncUnavailable:false, cloudSyncing:false,
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false,
@@ -230,8 +230,42 @@ function toast(msg, actionLabel, action){
 /* ---------- almacenamiento: cuenta (db) o este navegador ---------- */
 var profTimer = null, profBusy = false, profDirty = false;
 var cloudDraftTimer = null;
+var cloudLoadingTimer = null, cloudUnsubs = [];
 var Store = {
-  ref:null, col:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null,
+  ref:null, col:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null, cloudGeneration:0,
+  detachCloudListeners:function(){
+    cloudUnsubs.forEach(function(unsubscribe){ unsubscribe(); });
+    cloudUnsubs=[];
+  },
+  readLocalData:function(){
+    try {
+      var data=JSON.parse(localStorage.getItem(LK));
+      if(data && isObject(data)){
+        S.profile=normProfile(data.profile);
+        S.sessions=Array.isArray(data.sessions) ? data.sessions : [];
+      }
+      return data;
+    } catch(error){
+      console.warn('No se pudieron leer los datos locales',error);
+      return null;
+    }
+  },
+  fallbackToLocal:function(generation, profile, sessions, message){
+    if(generation!==Store.cloudGeneration) return;
+    Store.cloudGeneration++;
+    Store.detachCloudListeners();
+    clearTimeout(cloudLoadingTimer);
+    cloudLoadingTimer=null;
+    S.profile=profile;
+    S.sessions=sessions;
+    S.kind='local';
+    S.syncUnavailable=true;
+    S.ready=true;
+    Store.saveLocal();
+    createAutoBackup();
+    render();
+    toast(message);
+  },
   init:function(){
     use('downloads').then(function(d){ S.canDownload = !!d; if(S.ready) render(); }).catch(function(){});
     if(window.firebase && window.SOBRECARGA_FIREBASE_CONFIG){
@@ -275,15 +309,25 @@ var Store = {
     });
   },
   startFirebase:function(user){
-    Store.startLocal();
+    Store.detachCloudListeners();
+    clearTimeout(cloudLoadingTimer);
+    cloudLoadingTimer=null;
+    Store.cloudGeneration++;
+    var generation=Store.cloudGeneration;
+    S.ready=false;
+    S.syncUnavailable=false;
     S.cloudUser=user;
     S.kind='cloud';
     Store.firebaseUser=user;
+    var localData=Store.readLocalData();
+    var localProfile=clone(S.profile), localSessions=clone(S.sessions);
+    render();
     var root=Store.firebaseDb.collection('users').doc(user.uid);
     Store.ref=root.collection('app').doc('state');
     Store.col=root.collection('sessions');
-    var localData=null;
-    try{ localData=JSON.parse(localStorage.getItem(LK)); }catch(e){}
+    cloudLoadingTimer=setTimeout(function(){
+      Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudo conectar con la cuenta. Los cambios se guardan en este navegador; al recuperar conexión, usa «Sincronizar ahora».');
+    },12000);
     var migration=Promise.resolve();
     if(localData && (localData.profile || (localData.sessions && localData.sessions.length))){
       migration=Store.ref.get().then(function(remoteProfile){
@@ -299,40 +343,36 @@ var Store = {
       });
     }
     migration.then(function(){
+      if(generation!==Store.cloudGeneration) return;
       var gotProfile=false, gotSessions=false;
       var done=function(){ if(gotProfile && gotSessions){ S.ready=true; createAutoBackup(); render(); } };
-      var cloudLoadingTimeout=setTimeout(function(){
-        if(!S.ready){
-          S.ready=true;
-          createAutoBackup();
-          render();
-          toast('La conexión a la cuenta tardó demasiado; puedes trabajar localmente y restaurar un respaldo');
-        }
-      }, 12000);
-      Store.ref.onSnapshot(function(snap){
+      cloudUnsubs.push(Store.ref.onSnapshot(function(snap){
+        if(generation!==Store.cloudGeneration) return;
         if(!(profDirty || profBusy)){
           if(snap.exists) S.profile=normProfile(snap.data());
           else S.profile=defaultProfile();
         }
         gotProfile=true; done();
-        if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
+        if(gotProfile && gotSessions){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
       }, function(error){
+        if(generation!==Store.cloudGeneration) return;
         console.warn('No se pudo descargar el perfil de Firebase',error);
-        toast('No se pudieron descargar tus datos de la cuenta');
-        clearTimeout(cloudLoadingTimeout);
-        S.ready=true; createAutoBackup(); render();
-      });
-      Store.col.onSnapshot(function(snap){
+        clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null;
+        Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudieron descargar los datos de la cuenta. Se seguirá guardando en este navegador; usa «Sincronizar ahora» cuando vuelva la conexión.');
+      }));
+      cloudUnsubs.push(Store.col.onSnapshot(function(snap){
+        if(generation!==Store.cloudGeneration) return;
         S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
         gotSessions=true; done();
-        if(gotProfile && gotSessions) clearTimeout(cloudLoadingTimeout);
+        if(gotProfile && gotSessions){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
       }, function(error){
+        if(generation!==Store.cloudGeneration) return;
         console.warn('No se pudieron descargar los entrenos de Firebase',error);
-        toast('No se pudieron descargar tus entrenos');
-        clearTimeout(cloudLoadingTimeout);
-        S.ready=true; createAutoBackup(); render();
-      });
+        clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null;
+        Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudieron descargar los entrenos. Se seguirá guardando en este navegador; usa «Sincronizar ahora» cuando vuelva la conexión.');
+      }));
       root.collection('app').doc('draft').get().then(function(snap){
+        if(generation!==Store.cloudGeneration) return;
         if(snap.exists && snap.data() && Array.isArray(snap.data().entries)){
           var remoteDraft=Object.assign(blankDraft(), snap.data());
           if(!S.draft.entries.length || remoteDraft.updatedAt >= (S.draft.updatedAt||0)){
@@ -343,11 +383,11 @@ var Store = {
         }else if(S.draft.entries.length || S.draft.startedAt){
           saveDraft(false);
         }
-      }).catch(function(error){ console.warn('No se pudo sincronizar el borrador',error); });
+      }).catch(function(error){ if(generation===Store.cloudGeneration) console.warn('No se pudo sincronizar el borrador',error); });
     }).catch(function(error){
+      if(generation!==Store.cloudGeneration) return;
       console.warn('Migración local a Firebase fallida',error);
-      toast('No se pudo completar la migración. Se mantienen tus datos en este navegador; no se cargó un perfil remoto vacío.');
-      Store.startLocal();
+      Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudo completar la migración. Se mantienen tus datos en este navegador; sincroniza cuando vuelva la conexión.');
     });
   },
   signIn:function(){
@@ -364,12 +404,34 @@ var Store = {
   },
   signOut:function(){ return Store.firebaseAuth ? Store.firebaseAuth.signOut() : Promise.resolve(); },
   startLocal:function(){
+    Store.cloudGeneration++;
+    Store.detachCloudListeners();
+    clearTimeout(cloudLoadingTimer);
+    cloudLoadingTimer=null;
     S.kind = 'local';
-    try {
-      var d = JSON.parse(localStorage.getItem(LK));
-      if(d){ S.profile = normProfile(d.profile); S.sessions = d.sessions || []; }
-    } catch(e){}
+    S.cloudUser=null;
+    Store.firebaseUser=null;
+    S.syncUnavailable=false;
+    Store.readLocalData();
     S.ready = true; createAutoBackup(); render();
+  },
+  syncToCloud:function(){
+    if(!Store.firebaseUser || !Store.ref || !Store.col) return Promise.reject(new Error('No hay una cuenta de Firebase disponible'));
+    var user=Store.firebaseUser, fallback=S.syncUnavailable;
+    var profileWrite=fallback ? Store.ref.set(clone(S.profile)) : Store.saveProfileNow();
+    var sessionsWrite=S.sessions.reduce(function(queue,session){
+      return queue.then(function(){
+        return fallback
+          ? Store.col.doc(session.id).set(clone(stampSession(session)))
+          : Store.saveSession(session);
+      });
+    },Promise.resolve());
+    var draft=clone(S.draft);
+    draft.updatedAt=Date.now(); draft.restEndsAt=S.restEndsAt || null;
+    var draftWrite=Store.firebaseDb.collection('users').doc(user.uid).collection('app').doc('draft').set(draft);
+    return Promise.all([profileWrite,sessionsWrite,draftWrite]).then(function(){
+      if(fallback) Store.startFirebase(user);
+    });
   },
   startDb:function(db, id){
     S.kind = 'db';
@@ -1988,12 +2050,12 @@ function viewSet(){
   var accountHtml='';
   if(Store.firebaseAuth){
     accountHtml=S.cloudUser
-      ? '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Conectado como <strong>'+esc(S.cloudUser.email || S.cloudUser.displayName || 'usuario')+'</strong>. Tus datos se sincronizan en todos tus dispositivos.</p><div class="row"><span class="chip ok">Sincronización activa</span><button class="btn ghost sm" data-act="cloud-sync">Sincronizar ahora</button><button class="btn ghost sm" data-act="cloud-signout">Cerrar sesión</button></div></section>'
+      ? '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Conectado como <strong>'+esc(S.cloudUser.email || S.cloudUser.displayName || 'usuario')+'</strong>.'+(S.syncUnavailable?' La nube no está disponible; los cambios se guardan en este navegador hasta que sincronices.':' Tus datos se sincronizan en todos tus dispositivos.')+'</p><div class="row"><span class="chip '+(S.syncUnavailable?'warn':'ok')+'">'+(S.syncUnavailable?'Guardado local':'Sincronización activa')+'</span><button class="btn ghost sm" data-act="cloud-sync"'+(S.cloudSyncing?' disabled':'')+'>'+(S.cloudSyncing?'Sincronizando…':'Sincronizar ahora')+'</button><button class="btn ghost sm" data-act="cloud-signout">Cerrar sesión</button></div></section>'
       : '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Inicia sesión con Google para mantener tus datos en varios dispositivos y recuperarlos si cambias de navegador.</p><div class="row"><button class="btn sm" data-act="cloud-signin">Continuar con Google</button></div></section>';
   }
   out += accountHtml;
   out += '<section class="card"><p class="sec-title">Tus datos</p><p class="small">' +
-    (['db','cloud'].includes(S.kind) ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : 'Se guardan solo en este navegador. Inicia sesión arriba para sincronizarlos.') + '</p><div class="row">' +
+    (['db','cloud'].includes(S.kind) ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : S.syncUnavailable ? 'Se guardan en este navegador mientras la nube no esté disponible. Usa «Sincronizar ahora» cuando vuelva la conexión.' : 'Se guardan solo en este navegador. Inicia sesión arriba para sincronizarlos.') + '</p><div class="row">' +
     '<button class="btn ghost sm" data-act="auto-restore">Restaurar última copia automática' + esc(autoBackupLabel()) + '</button>' +
     '<button class="btn ghost sm" data-act="export">Descargar respaldo</button><button class="btn ghost sm" data-act="import">Restaurar respaldo</button>' +
     '<button class="btn ghost sm" data-act="export-csv">Exportar CSV</button><button class="btn ghost sm" data-act="import-csv">Importar CSV</button>' +
@@ -2035,15 +2097,44 @@ function buildDemo(){
   return {ex:ex, sessions:sessions, routines:routines};
 }
 function loadDemo(){
+  var previousProfile=clone(S.profile), previousSessions=clone(S.sessions);
+  var previousSessionsById={};
+  previousSessions.forEach(function(session){ previousSessionsById[session.id]=session; });
   var d = buildDemo();
   Object.keys(d.ex).forEach(function(k){ S.profile.exercises[k] = d.ex[k]; });
   Object.keys(d.routines).forEach(function(k){ S.profile.routines[k] = d.routines[k]; });
   d.sessions.forEach(function(s){ S.sessions = S.sessions.filter(function(x){ return x.id !== s.id; }); S.sessions.push(s); });
-  Store.saveProfile();
-  if(['db','cloud'].includes(S.kind)){ d.sessions.reduce(function(p, s){ return p.then(function(){ return Store.saveSession(s); }); }, Promise.resolve()); }
-  else Store.saveLocal();
-  S.tab = 'hoy'; render();
-  toast('Datos de ejemplo cargados. Quítalos cuando quieras en Ajustes.');
+  var persistSessions=function(){
+    if(!['db','cloud'].includes(S.kind)) return Promise.resolve();
+    return d.sessions.reduce(function(queue,session){
+      return queue.then(function(){ return Store.saveSession(session); });
+    },Promise.resolve());
+  };
+  return Store.saveProfileNow().then(persistSessions).then(function(){
+    S.tab='hoy'; render();
+    toast('Datos de ejemplo cargados. Quítalos cuando quieras en Ajustes.');
+    return true;
+  }).catch(function(error){
+    console.error('No se pudieron guardar los datos de ejemplo',error);
+    S.profile=previousProfile; S.sessions=previousSessions;
+    var cleanup=['db','cloud'].includes(S.kind)
+      ? Promise.all(d.sessions.map(function(session){
+          var previous=previousSessionsById[session.id];
+          var rollback=previous ? Store.saveSession(previous) : Store.deleteSessions([session.id]);
+          return rollback.catch(function(rollbackError){
+            console.error('No se pudo revertir el entreno de ejemplo '+session.id,rollbackError);
+          });
+        }))
+      : Promise.resolve();
+    return cleanup.then(function(){
+      return Store.saveProfileNow().catch(function(rollbackError){
+        console.error('No se pudo restaurar el perfil previo a los datos de ejemplo',rollbackError);
+      });
+    }).then(function(){
+      render(); toast('No se pudieron guardar los datos de ejemplo');
+      return false;
+    });
+  });
 }
 function clearDemo(){
   var ids = S.sessions.filter(function(s){ return s.demo; }).map(function(s){ return s.id; });
@@ -2274,10 +2365,17 @@ function onClick(ev){
       Store.signOut();
       break;
     case 'cloud-sync':
-      Store.saveProfile();
-      S.sessions.forEach(function(session){ Store.saveSession(session); });
-      saveDraft();
-      toast('Sincronización enviada');
+      if(S.cloudSyncing) break;
+      S.cloudSyncing=true; render();
+      Store.syncToCloud().then(function(){
+        S.cloudSyncing=false;
+        if(S.ready) render();
+        toast('Sincronización completada');
+      }).catch(function(error){
+        console.error('No se pudo completar la sincronización',error);
+        S.cloudSyncing=false; render();
+        toast('No se pudo completar la sincronización; tus datos locales se conservaron');
+      });
       break;
     case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
