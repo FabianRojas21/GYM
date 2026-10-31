@@ -52,7 +52,7 @@ en series de trabajo de la plantilla.
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
 del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes
 corregir el peso, las repeticiones, el esfuerzo y el tipo de las series. La
-fecha corregida también actualiza el resumen de la semana. En el mismo editor puedes mover ejercicios arriba o abajo, añadirlos o reemplazarlos, quitar ejercicios y administrar las series individuales. En ejercicios con carga corporal, como dominadas sin peso añadido, usa `0` kg; la serie se considera válida.
+fecha corregida también actualiza el resumen de la semana. En el mismo editor puedes mover ejercicios arriba o abajo, añadirlos o reemplazarlos, quitar ejercicios y administrar las series individuales. En ejercicios con carga corporal, como dominadas sin peso añadido, usa `0` en el campo de peso; la serie se considera válida.
 
 La **Biblioteca** organiza el contenido en **Programas**, **Rutinas** y
 **Ejercicios**. Un programa agrupa rutinas; al crear o editar una rutina puedes
@@ -70,11 +70,18 @@ secundarios aportan 0,5 serie estimada y las porciones de un mismo grupo no se
 duplican en el total.
 
 En las reglas del ejercicio o de cada elemento de una rutina puedes ajustar
-**Peso disponible cada (kg)**. La app redondea las recomendaciones de subida
+**Peso disponible cada** en la unidad elegida. La app redondea las recomendaciones de subida
 hacia el siguiente peso disponible y las de bajada hacia uno disponible menor
 o igual. Por ejemplo, un salto progresivo de 2 kg desde 26 kg con mancuernas
 disponibles cada 2 kg propone 28 kg. Los datos y reglas existentes se
 conservan; si no configuras este valor, se usa el salto de progresión actual.
+
+En **Ajustes** puedes elegir si la app muestra y acepta cargas en kg o lb.
+Los pesos se siguen guardando internamente en kg para conservar la
+compatibilidad con entrenamientos, respaldos, rutinas y sincronización; cambiar
+la unidad solo modifica la presentación y la conversión de las nuevas entradas.
+El CSV exportado conserva la columna `peso_kg`; al importar, se aceptan también
+las columnas explícitas `peso_lb` y `weight_lb`, que se convierten a kg.
 
 Durante un entreno, las series normales muestran como referencia el peso y las
 repeticiones de la serie correspondiente de la última sesión. Si quitas una

@@ -17,6 +17,15 @@ test('sube cuando las series requeridas llegan al máximo con esfuerzo razonable
   assert.equal(result.nextW, 62);
 });
 
+test('el motor presenta recomendaciones en la unidad elegida sin cambiar cálculos métricos', () => {
+  const result=analyze(baseExercise,[set(10),set(10),set(10)],null,{...rirSettings,weightUnit:'lb'});
+  assert.equal(result.nextW,62);
+  assert.match(result.headline,/136,69 lb/);
+  assert.match(result.detail,/136,69 lb/);
+  const kgResult=analyze(baseExercise,[set(10),set(10),set(10)],null,rirSettings);
+  assert.match(kgResult.headline,/62 kg/);
+});
+
 test('ajusta la recomendación al incremento disponible del equipo', () => {
   const exercise = {...baseExercise, inc:2, loadStep:2};
   const result = analyze(exercise, [set(10,2,26), set(10,2,26), set(10,2,26)], null, rirSettings);
@@ -404,7 +413,7 @@ test('los objetivos personalizados permiten actualizar progreso y calculan el av
   assert.match(source,/data-act="goal-update"/);
   assert.match(source,/currentGoal\.current=updatedGoalValue/);
   assert.match(source,/data-goal-field="current"/);
-  assert.match(source,/Faltan '\+fmt\(remaining\)/);
+  assert.match(source,/Faltan '\+fmt\(isWeightGoal\?fromKg\(remaining\):remaining\)/);
   assert.match(source,/goalType==='weekly'\?'entrenos\/7 días'/);
 });
 
@@ -540,15 +549,33 @@ test('el error de renderizado muestra sus detalles técnicos sin alterar los dat
 
 test('la app mantiene el parseo numérico si backup.js está desactualizado', () => {
   const source=fs.readFileSync('./app.js','utf8');
-  const parser=source.match(/var num = [\s\S]*?;\nvar validWeight = function\(v\)\{ var n=num\(v\); return n !== null && n >= 0; \};/);
-  assert.ok(parser);
+  const parser=source.match(/var num = [\s\S]*?\n    };/);
+  const validWeight=source.match(/var validWeight = function\(v\)\{ var n=num\(v\); return n !== null && n >= 0; \};/);
+  assert.ok(parser && validWeight);
   const context={SobrecargaBackup:{}};
-  vm.runInNewContext(parser[0]+';globalThis.parseNumberForTest=num;globalThis.validWeightForTest=validWeight;',context);
+  vm.runInNewContext(parser[0]+';'+validWeight[0]+';globalThis.parseNumberForTest=num;globalThis.validWeightForTest=validWeight;',context);
   assert.equal(context.parseNumberForTest('62,5'),62.5);
   assert.equal(context.parseNumberForTest(''),null);
   assert.equal(context.parseNumberForTest('62 kg'),null);
   assert.equal(context.validWeightForTest('0'),true);
   assert.equal(context.validWeightForTest('-1'),false);
+});
+
+test('el selector de unidad convierte valores de entrada a kg sin reescribir datos', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helpers=source.match(/var KG_PER_LB = [\s\S]*?function loadVolume\(value\)\{[^\n]*\}/);
+  assert.ok(helpers);
+  const context={
+    S:{profile:{settings:{weightUnit:'lb'}}},
+    num:value=>value===''?null:Number(String(value).replace(',','.')),
+    fmt:value=>(Math.round(value*100)/100).toString().replace('.',',')
+  };
+  vm.runInNewContext(helpers[0]+';globalThis.toKgForTest=toKg;globalThis.fromKgForTest=fromKg;globalThis.weightTextForTest=weightText;',context);
+  assert.equal(context.toKgForTest('135,58'),61.4981);
+  assert.equal(context.fromKgForTest(60),132.27735731092652);
+  assert.equal(context.weightTextForTest(60),'132,28 lb');
+  assert.match(source,/data-setting="weightUnit"/);
+  assert.match(source,/peso_lb\|\|r\.weight_lb/);
 });
 
 test('la sincronización finaliza con error si Firebase deja una escritura pendiente', async () => {

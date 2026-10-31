@@ -15,6 +15,27 @@ var num = typeof SobrecargaBackup !== 'undefined' && typeof SobrecargaBackup.par
       var number = Number(raw.replace(',', '.'));
       return Number.isFinite(number) ? number : null;
     };
+var KG_PER_LB = 0.45359237;
+function currentWeightUnit(){ return S && S.profile && S.profile.settings.weightUnit === 'lb' ? 'lb' : 'kg'; }
+function fromKg(value){
+  var number=Number(value);
+  return currentWeightUnit()==='lb' ? number/KG_PER_LB : number;
+}
+function toKg(value){
+  var number=num(value);
+  if(number===null) return null;
+  var kilograms=currentWeightUnit()==='lb' ? number*KG_PER_LB : number;
+  return Math.round(kilograms*10000)/10000;
+}
+function weightInput(value){
+  if(value===null || value===undefined || value==='') return '';
+  return fmt(fromKg(value));
+}
+function weightText(value){
+  return weightInput(value)+' '+currentWeightUnit();
+}
+function weightUnitLabel(){ return currentWeightUnit(); }
+function loadVolume(value){ return currentWeightUnit()==='lb' ? Number(value)/KG_PER_LB : Number(value); }
 var validWeight = function(v){ var n=num(v); return n !== null && n >= 0; };
 var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
 var roundTo = function(x, step){ return Math.round(x/step)*step; };
@@ -79,12 +100,13 @@ var LK = 'sobrecarga:data:v1';
 var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
 var RTOK = RTK + ':owner';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[]}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg'}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[]}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
   p = clone(p);
   d.settings = Object.assign(d.settings, p.settings || {});
+  if(!['kg','lb'].includes(d.settings.weightUnit)) d.settings.weightUnit='kg';
   if(![60,90,120,180,300].includes(Number(d.settings.restSeconds))) d.settings.restSeconds = 90;
   if(![0,15,30,45,60,90,120].includes(Number(d.settings.warmupRestSeconds))) d.settings.warmupRestSeconds = 45;
   d.exercises = p.exercises || {};
@@ -990,7 +1012,8 @@ function importSessionsCsv(text){
   var records=parseCsv(text), grouped={}, durations={};
   records.forEach(function(r){
     var date=(r.fecha||r.date||'').trim(), name=(r.ejercicio||r.exercise||'').trim();
-    var weight=num(r.peso_kg||r.peso||r.weight), reps=num(r.repeticiones||r.reps);
+    var weightKg=num(r.peso_kg||r.peso), weightLb=num(r.peso_lb||r.weight_lb);
+    var weight=weightKg!==null?weightKg:(weightLb!==null?weightLb*KG_PER_LB:num(r.weight)), reps=num(r.repeticiones||r.reps);
     if(!validDate(date) || !name || !Number.isFinite(weight) || weight < 0 || !(reps>0)) return;
     var effort=num(r.esfuerzo||r.rir||r.effort);
     var duration=num(r.duracion_min||r.duration_min||r.duration); if(Number.isFinite(duration) && duration>=0) durations[date]=Math.max(durations[date]||0,duration);
@@ -1080,7 +1103,7 @@ function setsText(sets, withWarm){
         var type = setType(s);
         var label = side === 'right' ? 'Der.' : 'Izq.';
         if(type !== 'normal') label += ' ' + SET_TYPES[type];
-        var text = label + ': ' + fmt(s.w) + ' kg × ' + s.r;
+        var text = label + ': ' + weightText(s.w) + ' × ' + s.r;
         if(s.rir !== null && s.rir !== undefined && type !== 'warmup') text += ' · ' + effTxt(s.rir, S.profile.settings);
         parts.push(text);
       });
@@ -1098,7 +1121,7 @@ function setsText(sets, withWarm){
   return groups.map(function(g){
     var prefix = g.side ? (g.side === 'right' ? 'Der. ' : 'Izq. ') : '';
     prefix += g.type === 'warmup' ? 'cal. ' : (g.type === 'normal' ? '' : SET_TYPES[g.type] + ': ');
-    var t = prefix + fmt(g.w) + ' kg × ' + g.reps.join(', ');
+    var t = prefix + weightText(g.w) + ' × ' + g.reps.join(', ');
     if(g.rirs.length && g.type !== 'warmup') t += ' · ' + effTxt(mean(g.rirs), S.profile.settings);
     return t;
   }).join(' | ');
@@ -1109,13 +1132,13 @@ function barHtml(a, ex){
       var plan = a.sidePlans[side], name = side === 'right' ? 'Derecho' : 'Izquierdo';
       var p = Math.round(Math.min(1, plan.progress) * 100);
       return '<div class="barwrap"><div class="small muted">' + name + '</div><div class="bar" role="img" aria-label="Avance del lado ' + name.toLowerCase() + ': ' + p + '%"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + p + '%"></i></div>' +
-        '<div class="barlab"><span>' + fmt(plan.W) + ' kg</span><span>' + fmt(plan.progressTarget || plan.W + ex.inc) + ' kg</span></div></div>';
+        '<div class="barlab"><span>' + weightText(plan.W) + '</span><span>' + weightText(plan.progressTarget || plan.W + ex.inc) + '</span></div></div>';
     }).join('') + '</div>';
   }
   var p = Math.round(Math.min(1, a.progress) * 100);
   var targetWeight = a.progressTarget || a.W + ex.inc;
-  return '<div class="barwrap"><div class="bar" role="img" aria-label="Avance hacia ' + fmt(targetWeight) + ' kg: ' + p + '%"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + p + '%"></i></div>' +
-    '<div class="barlab"><span>' + fmt(a.W) + ' kg</span><span>' + fmt(targetWeight) + ' kg</span></div></div>';
+  return '<div class="barwrap"><div class="bar" role="img" aria-label="Avance hacia ' + weightText(targetWeight) + ': ' + p + '%"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + p + '%"></i></div>' +
+    '<div class="barlab"><span>' + weightText(a.W) + '</span><span>' + weightText(targetWeight) + '</span></div></div>';
 }
 
 /* ---------- borrador del entreno de hoy ---------- */
@@ -1219,11 +1242,11 @@ function refreshAutoWarmupInputs(ei, en, ex){
     if(ex.unilateral){
       ['right','left'].forEach(function(side){
         var input = $('[data-f="w"][data-ei="' + ei + '"][data-ri="' + ri + '"][data-side="' + side + '"]');
-        if(input) input.value = row[side].w;
+        if(input) input.value = weightInput(row[side].w);
       });
     } else {
       var input = $('[data-f="w"][data-ei="' + ei + '"][data-ri="' + ri + '"]');
-      if(input) input.value = row.w;
+      if(input) input.value = weightInput(row.w);
     }
   });
 }
@@ -1294,8 +1317,8 @@ function previousReferenceHtml(exId, workIndex, unilateral){
   var previous = previousWorkSet(exId, workIndex, unilateral);
   if(!previous) return '';
   var value = unilateral
-    ? 'Anterior: der. ' + fmt(previous.right.w) + ' kg × ' + previous.right.r + ' · izq. ' + fmt(previous.left.w) + ' kg × ' + previous.left.r
-    : 'Anterior: ' + fmt(previous.w) + ' kg × ' + previous.r;
+    ? 'Anterior: der. ' + weightText(previous.right.w) + ' × ' + previous.right.r + ' · izq. ' + weightText(previous.left.w) + ' × ' + previous.left.r
+    : 'Anterior: ' + weightText(previous.w) + ' × ' + previous.r;
   return '<span class="set-reference">' + esc(value) + '</span>';
 }
 function workingDone(){
@@ -1313,12 +1336,12 @@ function workingDone(){
 }
 function goalHtml(ex){
   var p = planFor(ex);
-  var plan = '<p class="muted small">' + ex.sets + (ex.unilateral ? ' rondas · cada lado: ' : ' series × ') + ex.min + '–' + ex.max + ' reps · esfuerzo por serie: ' + esc(tgtText(ex, S.profile.settings)) + ' · salto ' + fmt(ex.inc) + ' kg</p>';
+  var plan = '<p class="muted small">' + ex.sets + (ex.unilateral ? ' rondas · cada lado: ' : ' series × ') + ex.min + '–' + ex.max + ' reps · esfuerzo por serie: ' + esc(tgtText(ex, S.profile.settings)) + ' · salto ' + weightText(ex.inc) + '</p>';
   if(p.status === 'nuevo'){
     return '<div class="goal"><div class="goal-row">' + chip('nuevo') + '<strong>Primera vez</strong></div>' +
       '<p class="small">Elige un peso con el que llegues a ' + ex.min + '–' + ex.max + ' reps con ' + esc(tgtText(ex, S.profile.settings)) + (ex.unilateral ? ' en cada lado' : '') + '. Con eso te armo el objetivo del próximo entreno.</p>' + plan + '</div>';
   }
-  return '<div class="goal"><div class="goal-row">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (fmt(p.nextW) + ' kg × ' + p.target.join(' · '))) + '</span></div>' +
+  return '<div class="goal"><div class="goal-row">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</span></div>' +
     barHtml(p, ex) +
     '<details class="goal-more"><summary>Ver recomendación y último resultado</summary><p class="muted small">Última vez, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div>';
 }
@@ -1353,10 +1376,10 @@ function entryHtml(en, ei){
       var sideTarget = type === 'normal' && p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[wi] !== undefined
         ? String(p.sidePlans[side].target[wi]) : tgt;
       return '<div class="side-inputs"><span class="side-label">' + (side === 'right' ? 'Der.' : 'Izq.') + '</span>' +
-        '<input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="kg" aria-label="Peso lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.w) + '">' +
+        '<input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + weightUnitLabel() + '" aria-label="Peso (' + weightUnitLabel() + ') lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(weightInput(sideData.w)) + '">' +
         '<input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '">' +
         '<input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '"></div>';
-    }).join('') : '<input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="kg" aria-label="Peso de la serie ' + (ri+1) + '" value="' + esc(r.w) + '">' +
+    }).join('') : '<input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + weightUnitLabel() + '" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '">' +
       '<input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '">' +
       '<input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '">';
     return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + '">' +
@@ -1370,8 +1393,8 @@ function entryHtml(en, ei){
           (!rowComplete(r, ex.unilateral) ? ' disabled' : '') + '>Terminar serie</button>') + '</div>';
   }).join('');
   var head = ex.unilateral
-    ? '<div class="set head unilateral-head"><span>#</span><span class="side-type-head">Lado · kg · reps · ' + effLab + '</span></div>'
-    : '<div class="set head"><span>#</span><span>kg</span><span>Reps</span><span>' + effLab + '</span><span></span><span class="set-type-head">Tipo de serie</span></div>';
+    ? '<div class="set head unilateral-head"><span>#</span><span class="side-type-head">Lado · ' + weightUnitLabel() + ' · reps · ' + effLab + '</span></div>'
+    : '<div class="set head"><span>#</span><span>' + weightUnitLabel() + '</span><span>Reps</span><span>' + effLab + '</span><span></span><span class="set-type-head">Tipo de serie</span></div>';
   var orderControls = S.draft.entries.length > 1
     ? '<div class="workout-card-tools"><button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="-1"' + (ei === 0 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' arriba" title="Mover arriba">↑</button>' +
       '<button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="1"' + (ei === S.draft.entries.length - 1 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' abajo" title="Mover abajo">↓</button></div>'
@@ -1398,15 +1421,16 @@ function cfgPanel(en, ei){
   var warmCfg = warmupSettings(ex);
   var rt = en.cfg && S.draft.routineId && S.profile.routines[S.draft.routineId];
   var f = function(key, label, val){
-    return '<div class="field"><label class="lab" for="hc-' + key + '-' + ei + '">' + label + '</label><input id="hc-' + key + '-' + ei + '" class="txt" inputmode="decimal" data-hc="' + key + '" data-ei="' + ei + '" value="' + esc(String(val).replace('.', ',')) + '"></div>';
+    var weightSetting=['inc','loadStep','warmupStep'].includes(key);
+    return '<div class="field"><label class="lab" for="hc-' + key + '-' + ei + '">' + label + '</label><input id="hc-' + key + '-' + ei + '" class="txt" inputmode="decimal" data-hc="' + key + '" data-ei="' + ei + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
   };
   var ef = '';
   for(var k=0;k<ex.sets;k++){
     ef += '<div class="field"><label class="lab" for="hef-' + ei + '-' + k + '">Serie ' + (k+1) + '</label><input id="hef-' + ei + '-' + k + '" class="in" inputmode="decimal" data-hef="1" data-ei="' + ei + '" data-k="' + k + '" value="' + esc(effInputVal(effortTarget(ex, k, S.profile.settings))) + '"></div>';
   }
-  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('loadStep', 'Peso disponible cada (kg)', exerciseLoadStep(ex)) +
+  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) +
     '<div class="field"><label class="lab" for="hc-warmupMode-' + ei + '">Peso de aproximación</label><select id="hc-warmupMode-' + ei + '" class="txt" data-hc="warmupMode" data-ei="' + ei + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-    f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
+    f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
     '<div class="field"><label class="lab" for="hc-unilateral-' + ei + '">Ejecución</label><select id="hc-unilateral-' + ei + '" class="txt" data-hc="unilateral" data-ei="' + ei + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
     ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
       return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-hc="warmupPercent" data-ei="' + ei + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
@@ -1545,14 +1569,14 @@ function savedHtml(){
     if(!exById(it.exId)) return '';
     var ex = Object.assign({}, exById(it.exId), it.cfg || {});
     var p = planFor(ex); if(p.status === 'nuevo') return '';
-    return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' + esc(p.displayTarget || (fmt(p.nextW) + ' kg × ' + p.target.join(' · '))) + '</div></div>' + chip(p.status) + '</div>';
+    return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</div></div>' + chip(p.status) + '</div>';
   }).join('');
   return '<section class="card workout-summary"><div class="card-head"><div><h3>Resumen del entreno</h3><p class="small muted">' + esc(dFmt(session.date, {weekday:'long', day:'numeric', month:'long'})) + '</p></div><button class="icon" data-act="dismiss-saved" aria-label="Cerrar resumen">×</button></div>' +
     '<div class="summary-stats"><div><strong>' + formatDuration(session.durationMs || 0) + '</strong><span>Duración</span></div>' +
       '<div><strong>' + session.entries.length + '</strong><span>Ejercicios</span></div>' +
       '<div><strong>' + stats.effectiveSets + '</strong><span>Series efectivas</span></div>' +
       '<div><strong>' + stats.reps + '</strong><span>Reps sin aproximaciones</span></div>' +
-      '<div><strong>' + fmt(stats.volume) + ' kg</strong><span>Volumen sin aprox.</span></div></div>' +
+      '<div><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '</strong><span>Volumen sin aprox.</span></div></div>' +
     '<div class="list"><p class="sec-title">Lo que hiciste</p>' + exercises + '</div>' +
     '<div class="list"><p class="sec-title">Objetivo para la próxima sesión</p>' +
       (items || '<p class="small muted">Registra otro entreno para obtener sugerencias.</p>') + '</div></section>';
@@ -1653,7 +1677,7 @@ function suggestHtml(){
   if(!ids.length) return '';
   return '<div class="list"><p class="sec-title">Retomar desde tu último entreno</p>' + ids.map(function(id){
     var ex = exById(id), p = planFor(ex);
-    var goal = p.status === 'nuevo' ? '' : (p.displayTarget || (fmt(p.nextW) + ' kg × ' + p.target.join(' · ')));
+    var goal = p.status === 'nuevo' ? '' : (p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · ')));
     return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' + goal + '</div></div>' +
       '<div class="line">' + chip(p.status) + '<button class="btn sm" data-act="pick" data-id="' + esc(id) + '" aria-label="Añadir ' + esc(ex.name) + ' a hoy">Añadir</button></div></div>';
   }).join('') + '</div>';
@@ -1696,7 +1720,7 @@ function sessionEditorHtml(session){
         ? '<button class="set-finish set-finish-done" data-act="session-undo-finish-set" data-entry="' + entryIndex + '" data-set="' + setIndex + '" aria-label="Deshacer fin de la serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1) + '"' + (edit.saving ? ' disabled' : '') + '><span aria-hidden="true">✓</span> Hecha</button>'
         : '<button class="btn ghost sm set-finish" data-act="session-finish-set" data-entry="' + entryIndex + '" data-set="' + setIndex + '"' + (!sessionEditSetCanFinish(entry, set, exerciseConfig) || edit.saving ? ' disabled' : '') + '>Terminar serie</button>';
       return '<div class="session-set-edit" data-entry="' + entryIndex + '" data-set="' + setIndex + '"><strong>Serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1) + esc(side) + '</strong>' +
-        input('weight', 'Kg', set.w, 'decimal') + input('reps', 'Reps', set.r, 'numeric') + input('effort', S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR', effort, 'decimal') +
+        input('weight', weightUnitLabel(), weightInput(set.w), 'decimal') + input('reps', 'Reps', set.r, 'numeric') + input('effort', S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR', effort, 'decimal') +
         '<select class="txt session-set-type" data-session-edit="type" data-entry="' + entryIndex + '" data-set="' + setIndex + '" aria-label="Tipo de serie"' + (edit.saving ? ' disabled' : '') + '>' + options + '</select>' +
         input('rest', 'Descanso s', Number.isFinite(set.restMs) ? Math.round(set.restMs/1000) : '', 'numeric') +
         finishControl + '<button class="btn ghost sm" data-act="session-remove-set" data-entry="'+entryIndex+'" data-set="'+setIndex+'"'+(edit.saving?' disabled':'')+'>Quitar serie</button></div>';
@@ -1865,7 +1889,7 @@ function saveSessionEdit(){
     render();
   });
 }
-function volumeText(volume){ return new Intl.NumberFormat('es-CL', {maximumFractionDigits:0}).format(Math.round(volume)); }
+function volumeText(volume){ return new Intl.NumberFormat('es-CL', {maximumFractionDigits:0}).format(Math.round(loadVolume(volume))); }
 function homeDashboard(){
   var start = new Date(), mondayOffset = (start.getDay() + 6) % 7;
   start.setDate(start.getDate() - mondayOffset); start.setHours(0, 0, 0, 0);
@@ -1883,7 +1907,7 @@ function homeDashboard(){
     '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
-    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' kg</strong><span>volumen · sin aprox.</span></div></div>' +
+    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '</strong><span>volumen · sin aprox.</span></div></div>' +
     '<button class="btn home-start" data-act="start"><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
     weeklyMuscleSummaryHtml(week);
   if(latest){
@@ -1895,7 +1919,7 @@ function homeDashboard(){
     }).join('');
     out += '<section class="latest-workout"><div class="latest-head"><div><span class="home-eyebrow">Tu actividad reciente</span><h3>' + esc(latest.routineName || (latest.demo ? 'Entreno de ejemplo' : 'Entrenamiento')) + '</h3><span class="latest-date">' + esc(dFmt(latest.date, {weekday:'long', day:'numeric', month:'long'})) + '</span></div>' +
       '<button class="text-button" data-act="tab" data-tab="historial">Ver historial</button></div>' +
-      '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' kg</strong> volumen sin aprox.</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
+      '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' ' + weightUnitLabel() + '</strong> volumen sin aprox.</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
       (exercises ? '<div class="home-exercises">' + exercises + (latest.entries.length > 6 ? '<span class="more-exercises">+' + (latest.entries.length - 6) + ' más</span>' : '') + '</div>' : '') +
       '</section>';
   } else {
@@ -2051,11 +2075,12 @@ function routineEditor(){
     '<div class="field"><label class="lab" for="r-program">Programa</label><select id="r-program" class="txt" data-routine-program><option value="">Sin programa</option>' +
     Object.keys(S.profile.programs || {}).map(function(id){ var program = S.profile.programs[id]; return '<option value="' + esc(id) + '"' + (r.programId === id ? ' selected' : '') + '>' + esc(program.name) + '</option>'; }).join('') +
     '</select></div>' +
-    '<p class="hint">Los ajustes de cada ejercicio valen solo en esta rutina. Con mancuernas, el salto es por mancuerna: un salto de 2 kg lleva de 26 a 28 kg.</p></section>';
+    '<p class="hint">Los ajustes de cada ejercicio valen solo en esta rutina. Con mancuernas, el salto es por mancuerna. Los datos se guardan internamente en kg y se convierten según la unidad elegida.</p></section>';
   r.items.forEach(function(it, i){
     var warmCfg = warmupSettings(it);
     var f = function(key, label, val){
-      return '<div class="field"><label class="lab" for="it-' + key + '-' + i + '">' + label + '</label><input id="it-' + key + '-' + i + '" class="txt" inputmode="decimal" data-it="' + key + '" data-i="' + i + '" value="' + esc(String(val).replace('.', ',')) + '"></div>';
+      var weightSetting=['inc','loadStep','warmupStep'].includes(key);
+      return '<div class="field"><label class="lab" for="it-' + key + '-' + i + '">' + label + '</label><input id="it-' + key + '-' + i + '" class="txt" inputmode="decimal" data-it="' + key + '" data-i="' + i + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
     };
     var ef = '';
     for(var k=0;k<it.sets;k++){
@@ -2066,15 +2091,15 @@ function routineEditor(){
       '<button class="mini" data-act="rut-up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Subir ejercicio">↑</button>' +
       '<button class="mini" data-act="rut-down" data-i="' + i + '"' + (i === r.items.length-1 ? ' disabled' : '') + ' aria-label="Bajar ejercicio">↓</button>' +
       '<button class="mini" data-act="rut-rm-item" data-i="' + i + '" aria-label="Quitar ejercicio">×</button></div></div>' +
-      '<div class="fields">' + f('sets', 'Series de trabajo', it.sets) + f('warmupSets', 'Series de aproximación', Number(it.warmupSets) || 0) + f('min', 'Reps mín.', it.min) + f('max', 'Reps máx.', it.max) + f('inc', 'Salto de progresión (kg)', it.inc) + f('loadStep', 'Peso disponible cada (kg)', Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId) || it)) +
+      '<div class="fields">' + f('sets', 'Series de trabajo', it.sets) + f('warmupSets', 'Series de aproximación', Number(it.warmupSets) || 0) + f('min', 'Reps mín.', it.min) + f('max', 'Reps máx.', it.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', it.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId) || it)) +
       '<div class="field"><label class="lab" for="it-warmupMode-' + i + '">Peso de aproximación</label><select id="it-warmupMode-' + i + '" class="txt" data-it="warmupMode" data-i="' + i + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-      f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
+      f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="it-unilateral-' + i + '">Ejecución</label><select id="it-unilateral-' + i + '" class="txt" data-it="unilateral" data-i="' + i + '"><option value="false"' + (it.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (it.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
       ((Number(it.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
         return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-it="warmupPercent" data-i="' + i + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
       }).join('') + '</div></div>' : '') +
       '<div class="field"><span class="lab">Esfuerzo objetivo por serie (' + lab + ')</span><div class="efforts">' + ef + '</div></div>' +
-      '<p class="small muted">' + ((Number(it.warmupSets) || 0) ? it.warmupSets + (it.warmupSets === 1 ? ' serie de aproximación + ' : ' series de aproximación + ') + (warmCfg.warmupMode === 'auto' ? ' calculada desde el peso de trabajo y redondeada hacia abajo en saltos de ' + fmt(warmCfg.warmupStep) + ' kg. ' : 'con peso manual. ') : '') + it.sets + ' series de trabajo × ' + it.min + '–' + it.max + ' reps. Subes ' + fmt(it.inc) + ' kg cuando todas las series de trabajo lleguen a ' + it.max + ' reps con el esfuerzo pedido.</p></section>';
+      '<p class="small muted">' + ((Number(it.warmupSets) || 0) ? it.warmupSets + (it.warmupSets === 1 ? ' serie de aproximación + ' : ' series de aproximación + ') + (warmCfg.warmupMode === 'auto' ? ' calculada desde el peso de trabajo y redondeada hacia abajo en saltos de ' + weightText(warmCfg.warmupStep) + '. ' : 'con peso manual. ') : '') + it.sets + ' series de trabajo × ' + it.min + '–' + it.max + ' reps. Subes ' + weightText(it.inc) + ' cuando todas las series de trabajo lleguen a ' + it.max + ' reps con el esfuerzo pedido.</p></section>';
   });
   if(r.pick) out += pickerHtml('routine');
   else out += '<button class="btn ghost block" data-act="rut-add">+ Añadir ejercicio</button>';
@@ -2111,7 +2136,7 @@ function chartSvg(pts, unit){
     g += '<circle cx="' + X(k).toFixed(1) + '" cy="' + Y(p.y).toFixed(1) + '" r="' + (lastPt ? 5 : 3.5) + '" fill="' + (lastPt ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="2"/>';
   });
   var lp = pts[pts.length-1];
-  g += '<text class="cv" x="' + X(pts.length-1).toFixed(1) + '" y="' + (Y(lp.y) - 10).toFixed(1) + '" text-anchor="end">' + fmt1(lp.y) + (unit === 'kg' ? ' kg' : ' kg·reps') + '</text>';
+  g += '<text class="cv" x="' + X(pts.length-1).toFixed(1) + '" y="' + (Y(lp.y) - 10).toFixed(1) + '" text-anchor="end">' + fmt1(lp.y) + ' ' + unit + '</text>';
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Evolución del ejercicio por entreno">' + g + '</svg>';
 }
 function exDetail(ex){
@@ -2119,15 +2144,15 @@ function exDetail(ex){
   var records = personalRecords(ex);
   var warmCfg = warmupSettings(ex);
   var recordHtml = records.weight || records.reps || (records.estimated && records.estimated.value !== null) ? '<div class="record-grid">' +
-    (records.weight ? '<div><span>Mayor peso</span><strong>' + fmt(records.weight.value) + ' kg</strong><small>' + esc(dFmt(records.weight.date)) + '</small></div>' : '') +
+    (records.weight ? '<div><span>Mayor peso</span><strong>' + weightText(records.weight.value) + '</strong><small>' + esc(dFmt(records.weight.date)) + '</small></div>' : '') +
     (records.reps ? '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' : '') +
-    (records.estimated && records.estimated.value !== null ? '<div><span>Mejor serie estimada</span><strong>' + fmt1(records.estimated.value) + ' kg</strong><small>' + esc(dFmt(records.estimated.date)) + '</small></div>' : '') + '</div>' : '<p class="small muted">Los récords aparecerán después de registrar series normales.</p>';
+    (records.estimated && records.estimated.value !== null ? '<div><span>Mejor serie estimada</span><strong>' + weightText(records.estimated.value) + '</strong><small>' + esc(dFmt(records.estimated.date)) + '</small></div>' : '') + '</div>' : '<p class="small muted">Los récords aparecerán después de registrar series normales.</p>';
   var pts = hist.map(function(h){
     var sets=effectiveSetsFor(ex,h.sets,h.date).filter(function(s){ return setType(s)==='normal' && Number(s.w)>0 && Number(s.r)>0; });
     var y=null;
-    if(S.progressMetric==='weight') y=sets.length?Math.max.apply(null,sets.map(function(s){ return Number(s.w); })):null;
-    if(S.progressMetric==='volume') y=sets.length?sets.reduce(function(total,s){ return total+Number(s.w)*Number(s.r); },0):null;
-    if(S.progressMetric==='estimated') y=estimatedEx1rm(ex,sets);
+    if(S.progressMetric==='weight') y=sets.length?fromKg(Math.max.apply(null,sets.map(function(s){ return Number(s.w); }))):null;
+    if(S.progressMetric==='volume') y=sets.length?loadVolume(sets.reduce(function(total,s){ return total+Number(s.w)*Number(s.r); },0)):null;
+    if(S.progressMetric==='estimated'){ var estimated=estimatedEx1rm(ex,sets); y=estimated===null?null:fromKg(estimated); }
     return y!==null ? {label:dFmt(h.date),y:y} : null;
   }).filter(Boolean);
   var metricLabels={weight:'Peso máximo',estimated:'1RM estimado',volume:'Volumen'};
@@ -2137,13 +2162,14 @@ function exDetail(ex){
     return '<tr><td class="num">' + esc(dFmt(h.date)) + '</td><td>' + esc(setsText(h.sets, true)) + '</td></tr>';
   }).join('');
   var f = function(key, label, val, step){
-    return '<div class="field"><label class="lab" for="cfg-' + key + '">' + label + '</label><input id="cfg-' + key + '" class="txt" inputmode="decimal" data-cfg="' + key + '" data-id="' + esc(ex.id) + '" value="' + esc(String(val).replace('.', ',')) + '"></div>';
+    var weightSetting=['inc','loadStep','warmupStep'].includes(key);
+    return '<div class="field"><label class="lab" for="cfg-' + key + '">' + label + '</label><input id="cfg-' + key + '" class="txt" inputmode="decimal" data-cfg="' + key + '" data-id="' + esc(ex.id) + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
   };
-  return '<div class="list" style="gap:14px"><div><p class="sec-title" style="margin-bottom:6px">Récords personales</p>' + recordHtml + '</div><div><p class="sec-title" style="margin-bottom:6px">Progreso</p>' + chartControls + chartSvg(pts,S.progressMetric==='volume'?'kg·reps':'kg') +
+  return '<div class="list" style="gap:14px"><div><p class="sec-title" style="margin-bottom:6px">Récords personales</p>' + recordHtml + '</div><div><p class="sec-title" style="margin-bottom:6px">Progreso</p>' + chartControls + chartSvg(pts,S.progressMetric==='volume'?weightUnitLabel()+'·reps':weightUnitLabel()) +
     '<p class="muted small">Peso × (1 + (reps + RIR) ÷ 30), ' + (ex.unilateral ? 'mejor estimado del lado más débil por entreno.' : 'mejor serie de cada entreno.') + '</p></div>' +
     (rows ? '<div class="scroll-x"><table class="table"><thead><tr><th>Fecha</th><th>Series</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
-      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('loadStep', 'Peso disponible cada (kg)', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
+      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
       '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div>' +
       '<fieldset class="field"><legend class="lab">Músculos secundarios estimados</legend><p class="small muted">Aportan aproximadamente 0,5 serie efectiva. Puedes desmarcarlos si no participan en este ejercicio.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
@@ -2167,7 +2193,7 @@ function viewEj(){
   }
   return out + '<div class="list">' + ids.map(function(id){
     var ex = exById(id), p = planFor(ex), open = S.openEx === id;
-    var goal = p.status === 'nuevo' ? 'Sin registros todavía' : 'Próximo: ' + (p.displayTarget || (fmt(p.nextW) + ' kg × ' + p.target.join(' · ')));
+    var goal = p.status === 'nuevo' ? 'Sin registros todavía' : 'Próximo: ' + (p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · ')));
     return '<section class="card"><button class="exrow" data-act="toggle-ex" data-id="' + esc(id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
       '<div class="top2"><h3>' + esc(ex.name) + '</h3>' + chip(p.status) + '</div>' +
       '<span class="small muted">' + esc(goal) + ' · ' + ex.sets + '×' + ex.min + '–' + ex.max + ' reps' + (ex.unilateral ? ' por lado' : '') + '</span>' +
@@ -2234,7 +2260,7 @@ function historySummaryHtml(matches){
     var previous=historyAggregate(historySessionsInWindow(window.previousStart,window.previousEnd,S.historyQuery.trim().toLocaleLowerCase('es')));
     trendHtml='<p class="small muted">Comparación con los '+S.historyRange+' días anteriores · entrenos: '+esc(historyTrend(current.sessions,previous.sessions))+' · series efectivas: '+esc(historyTrend(current.effectiveSets,previous.effectiveSets))+' · volumen: '+esc(historyTrend(current.volume,previous.volume))+'</p>';
   }
-  return '<section class="card history-summary"><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' kg·reps</strong><span>volumen</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
+  return '<section class="card history-summary"><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' '+weightUnitLabel()+'·reps</strong><span>volumen</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
 }
 function routineItemsFromSession(session,exerciseMap){
   return session.entries.reduce(function(items,entry){
@@ -2326,15 +2352,19 @@ function goalsHtml(){
   var cards=goals.map(function(goal){
     var progress=goalProgress(goal), unit=goal.unit||'', complete=progress.current>=Number(goal.target);
     var remaining=Math.max(0,Number(goal.target)-progress.current);
+    var isWeightGoal=goal.type==='exercise-weight';
+    var currentDisplay=isWeightGoal?fromKg(progress.current):progress.current;
+    var targetDisplay=isWeightGoal?fromKg(goal.target):Number(goal.target);
+    if(isWeightGoal) unit=weightUnitLabel();
     return '<div class="goal-card"><div class="goal-row"><strong>'+esc(goal.name)+'</strong><button class="mini" data-act="goal-delete" data-id="'+esc(goal.id)+'" aria-label="Eliminar objetivo">×</button></div>' +
-      '<div class="goal-row"><span class="small muted">'+fmt(progress.current)+(unit?' '+esc(unit):'')+' de '+fmt(goal.target)+(unit?' '+esc(unit):'')+' · '+progress.percent+'%</span></div>' +
+      '<div class="goal-row"><span class="small muted">'+fmt(currentDisplay)+(unit?' '+esc(unit):'')+' de '+fmt(targetDisplay)+(unit?' '+esc(unit):'')+' · '+progress.percent+'%</span></div>' +
       '<div class="progress" role="progressbar" aria-label="Progreso de '+esc(goal.name)+'" aria-valuenow="'+progress.percent+'" aria-valuemin="0" aria-valuemax="100"><span style="width:'+progress.percent+'%"></span></div>' +
-      '<p class="small '+(complete?'goal-complete':'muted')+'">'+(complete?'Meta alcanzada':'Faltan '+fmt(remaining)+(unit?' '+esc(unit):'')+' para alcanzar la meta')+'</p>' +
+      '<p class="small '+(complete?'goal-complete':'muted')+'">'+(complete?'Meta alcanzada':'Faltan '+fmt(isWeightGoal?fromKg(remaining):remaining)+(unit?' '+esc(unit):'')+' para alcanzar la meta')+'</p>' +
       (goal.type==='custom' ? '<div class="goal-update"><label class="field"><span class="lab">Progreso actual'+(unit?' · '+esc(unit):'')+'</span><input class="txt" inputmode="decimal" data-goal-current="'+esc(goal.id)+'" value="'+esc(String(progress.current).replace('.',','))+'"></label><button class="btn ghost sm" data-act="goal-update" data-id="'+esc(goal.id)+'">Actualizar progreso</button></div>' : '') +
       '</div>';
   }).join('');
   var exerciseOptions=Object.keys(S.profile.exercises).map(function(id){var ex=S.profile.exercises[id]; return '<option value="'+esc(id)+'">'+esc(ex.name)+'</option>';}).join('');
-  var form=S.goalNew ? '<div class="goal-form"><div class="fields"><div class="field"><label class="lab" for="goal-name">Nombre</label><input id="goal-name" class="txt" maxlength="60" placeholder="Ej. Alcanzar 80 kg en press banca"></div><div class="field"><label class="lab" for="goal-type">Tipo</label><select id="goal-type" class="txt"><option value="exercise-weight">Peso máximo en ejercicio</option><option value="sessions">Entrenos totales</option><option value="weekly">Entrenos en la última semana</option><option value="custom">Objetivo personalizado</option></select></div><div class="field"><label class="lab" for="goal-target">Meta</label><input id="goal-target" class="txt" inputmode="decimal"></div><div class="field" data-goal-field="exercise"><label class="lab" for="goal-exercise">Ejercicio</label><select id="goal-exercise" class="txt"><option value="">Seleccionar ejercicio</option>'+exerciseOptions+'</select></div><div class="field" data-goal-field="unit" hidden><label class="lab" for="goal-unit">Unidad</label><input id="goal-unit" class="txt" placeholder="Ej. cm, kg o minutos"></div><div class="field" data-goal-field="current" hidden><label class="lab" for="goal-current">Progreso actual</label><input id="goal-current" class="txt" inputmode="decimal" value="0"></div></div><div class="row"><button class="btn sm" data-act="goal-save">Guardar objetivo</button><button class="btn ghost sm" data-act="goal-cancel">Cancelar</button></div></div>' : '';
+  var form=S.goalNew ? '<div class="goal-form"><div class="fields"><div class="field"><label class="lab" for="goal-name">Nombre</label><input id="goal-name" class="txt" maxlength="60" placeholder="Ej. Alcanzar 80 '+weightUnitLabel()+' en press banca"></div><div class="field"><label class="lab" for="goal-type">Tipo</label><select id="goal-type" class="txt"><option value="exercise-weight">Peso máximo en ejercicio</option><option value="sessions">Entrenos totales</option><option value="weekly">Entrenos en la última semana</option><option value="custom">Objetivo personalizado</option></select></div><div class="field"><label class="lab" for="goal-target">Meta</label><input id="goal-target" class="txt" inputmode="decimal"></div><div class="field" data-goal-field="exercise"><label class="lab" for="goal-exercise">Ejercicio</label><select id="goal-exercise" class="txt"><option value="">Seleccionar ejercicio</option>'+exerciseOptions+'</select></div><div class="field" data-goal-field="unit" hidden><label class="lab" for="goal-unit">Unidad</label><input id="goal-unit" class="txt" placeholder="Ej. cm, kg o minutos"></div><div class="field" data-goal-field="current" hidden><label class="lab" for="goal-current">Progreso actual</label><input id="goal-current" class="txt" inputmode="decimal" value="0"></div></div><div class="row"><button class="btn sm" data-act="goal-save">Guardar objetivo</button><button class="btn ghost sm" data-act="goal-cancel">Cancelar</button></div></div>' : '';
   return '<section class="card"><p class="sec-title">Objetivos</p>'+ (cards||'<p class="small muted">Todavía no tienes objetivos.</p>') + form + (S.goalNew?'':'<button class="btn ghost sm" data-act="goal-new">Añadir objetivo</button>')+'</section>';
 }
 function updateGoalFormFields(){
@@ -2362,8 +2392,8 @@ function profileSummary(){
   return '<section class="card"><p class="sec-title">Resumen personal</p><div class="weekly-stats">'+
     '<div class="weekly-stat"><span>Entrenos</span><strong>'+S.sessions.length+'</strong><small>'+recent.length+' últimos 7 días</small></div>'+
     '<div class="weekly-stat"><span>Ejercicios usados</span><strong>'+Object.keys(uniqueExercises).length+'</strong><small>'+effectiveSets+' series efectivas totales</small></div>'+
-    '<div class="weekly-stat"><span>Volumen total</span><strong>'+volumeText(totalVolume)+' kg</strong><small>'+humanDuration(totalDuration)+' acumulados</small></div>'+
-    '<div class="weekly-stat"><span>Peso corporal</span><strong>'+ (latestWeight?fmt(latestWeight.values.weight)+' kg':'—')+'</strong><small>'+ (latestWeight?esc(dFmt(latestWeight.date)):'Sin medir')+'</small></div></div></section>'+weeklyMuscleSummaryHtml(week)+goalsHtml();
+    '<div class="weekly-stat"><span>Volumen total</span><strong>'+volumeText(totalVolume)+' '+weightUnitLabel()+'</strong><small>'+humanDuration(totalDuration)+' acumulados</small></div>'+
+    '<div class="weekly-stat"><span>Peso corporal</span><strong>'+ (latestWeight?weightText(latestWeight.values.weight):'—')+'</strong><small>'+ (latestWeight?esc(dFmt(latestWeight.date)):'Sin medir')+'</small></div></div></section>'+weeklyMuscleSummaryHtml(week)+goalsHtml();
 }
 function profileExercises(){
   var counts={}, last={}, volumes={};
@@ -2381,19 +2411,19 @@ function profileExercises(){
   });
   var sort='<label class="field"><span class="lab">Ordenar ejercicios</span><select class="txt" data-profile-exercise-sort><option value="recent"'+(S.exerciseSort==='recent'?' selected':'')+'>Reciente</option><option value="most"'+(S.exerciseSort==='most'?' selected':'')+'>Más realizado</option><option value="volume"'+(S.exerciseSort==='volume'?' selected':'')+'>Mayor volumen</option><option value="name"'+(S.exerciseSort==='name'?' selected':'')+'>Alfabético</option></select></label>';
   var cards=ids.length?ids.map(function(id){var ex=exById(id), lastDateText=last[id]?dFmt(last[id]):'Nunca realizado';
-    return '<button class="card profile-exercise-card" data-act="profile-open-exercise" data-id="'+esc(id)+'"><span><strong>'+esc(ex.name)+'</strong><small>'+ (counts[id]||0)+' entrenos · Último: '+esc(lastDateText)+'</small></span><span class="num">'+esc(volumeText(volumes[id]||0))+' kg·reps</span></button>';}).join(''):'<div class="card"><p class="muted">Añade ejercicios desde la biblioteca para verlos aquí.</p></div>';
+    return '<button class="card profile-exercise-card" data-act="profile-open-exercise" data-id="'+esc(id)+'"><span><strong>'+esc(ex.name)+'</strong><small>'+ (counts[id]||0)+' entrenos · Último: '+esc(lastDateText)+'</small></span><span class="num">'+esc(volumeText(volumes[id]||0))+' '+weightUnitLabel()+'·reps</span></button>';}).join(''):'<div class="card"><p class="muted">Añade ejercicios desde la biblioteca para verlos aquí.</p></div>';
   return '<section class="card"><p class="sec-title">Tus ejercicios</p>'+sort+'</section><div class="list">'+cards+'</div>';
 }
 function measurementChart(field){
-  var pts=S.profile.measurements.filter(function(m){return m.values[field]!==undefined&&m.values[field]!==null&&Number.isFinite(Number(m.values[field]));}).sort(function(a,b){return a.date.localeCompare(b.date);}).map(function(m){return {label:dFmt(m.date),y:Number(m.values[field])};});
+  var pts=S.profile.measurements.filter(function(m){return m.values[field]!==undefined&&m.values[field]!==null&&Number.isFinite(Number(m.values[field]));}).sort(function(a,b){return a.date.localeCompare(b.date);}).map(function(m){return {label:dFmt(m.date),y:field==='weight'?fromKg(m.values[field]):Number(m.values[field])};});
   if(pts.length<2) return '';
-  var unit=field==='weight'?'kg':(field==='bodyFat'?'%':'cm');
+  var unit=field==='weight'?weightUnitLabel():(field==='bodyFat'?'%':'cm');
   return chartSvg(pts,unit);
 }
 function profileMeasurements(){
   var latest=S.profile.measurements.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
-  var form=S.measurementForm?'<section class="card"><p class="sec-title">Nueva medición</p><div class="fields"><div class="field"><label class="lab" for="measurement-date">Fecha</label><input id="measurement-date" class="txt" type="date" value="'+esc(iso(new Date()))+'"></div>'+Object.keys(MEASUREMENT_FIELDS).map(function(key){return '<div class="field"><label class="lab" for="measurement-'+key+'">'+esc(MEASUREMENT_FIELDS[key])+' '+((key==='weight'?'(kg)':(key==='bodyFat'?'(%)':'(cm)')))+'</label><input id="measurement-'+key+'" class="txt" inputmode="decimal" data-measurement-field="'+key+'"></div>';}).join('')+'</div><div class="field"><label class="lab" for="measurement-notes">Notas</label><textarea id="measurement-notes" class="txt" rows="3"></textarea></div><div class="row"><button class="btn sm" data-act="measurement-save">Guardar medición</button><button class="btn ghost sm" data-act="measurement-cancel">Cancelar</button></div></section>':'';
-  var rows=latest.map(function(m){var values=Object.keys(m.values).map(function(key){return '<span>'+esc(MEASUREMENT_FIELDS[key]||key)+': <strong>'+fmt(m.values[key])+(key==='bodyFat'?' %':' '+(key==='weight'?'kg':'cm'))+'</strong></span>';}).join(' · ');
+  var form=S.measurementForm?'<section class="card"><p class="sec-title">Nueva medición</p><div class="fields"><div class="field"><label class="lab" for="measurement-date">Fecha</label><input id="measurement-date" class="txt" type="date" value="'+esc(iso(new Date()))+'"></div>'+Object.keys(MEASUREMENT_FIELDS).map(function(key){return '<div class="field"><label class="lab" for="measurement-'+key+'">'+esc(MEASUREMENT_FIELDS[key])+' '+((key==='weight'?'('+weightUnitLabel()+')':(key==='bodyFat'?'(%)':'(cm)')))+'</label><input id="measurement-'+key+'" class="txt" inputmode="decimal" data-measurement-field="'+key+'"></div>';}).join('')+'</div><div class="field"><label class="lab" for="measurement-notes">Notas</label><textarea id="measurement-notes" class="txt" rows="3"></textarea></div><div class="row"><button class="btn sm" data-act="measurement-save">Guardar medición</button><button class="btn ghost sm" data-act="measurement-cancel">Cancelar</button></div></section>':'';
+  var rows=latest.map(function(m){var values=Object.keys(m.values).map(function(key){return '<span>'+esc(MEASUREMENT_FIELDS[key]||key)+': <strong>'+(key==='weight'?weightInput(m.values[key]):fmt(m.values[key]))+(key==='bodyFat'?' %':' '+(key==='weight'?weightUnitLabel():'cm'))+'</strong></span>';}).join(' · ');
     return '<section class="card"><div class="row" style="justify-content:space-between"><p class="sec-title">'+esc(dFmt(m.date))+'</p><button class="icon" data-act="measurement-delete" data-id="'+esc(m.id)+'" aria-label="Eliminar medición">×</button></div><p class="small">'+(values||'Sin datos')+'</p>'+ (m.notes?'<p class="small muted">'+esc(m.notes)+'</p>':'')+'</section>';}).join('');
   var currentWeight=latest.filter(function(m){return m.values.weight!==undefined;})[0];
   var chart=currentWeight?measurementChart('weight'):'';
@@ -2409,6 +2439,7 @@ function viewSet(){
   var st = S.profile.settings, tr = st.targetRir;
   var hasDemo = S.sessions.some(function(s){ return s.demo; });
   var out = '<div class="head-row"><h2>Ajustes</h2></div>';
+  out += '<section class="card"><p class="sec-title">Unidades de peso</p><label class="field"><span class="lab">Mostrar e ingresar pesos en</span><select class="txt" data-setting="weightUnit"><option value="kg"' + (st.weightUnit==='kg'?' selected':'') + '>Kilogramos (kg)</option><option value="lb"' + (st.weightUnit==='lb'?' selected':'') + '>Libras (lb)</option></select></label><p class="small muted">Cambiar esta opción solo convierte lo que ves y escribes. Los datos se conservan en kg para mantener la sincronización, el historial y la progresión consistentes.</p></section>';
   out += '<section class="card"><p class="sec-title">Escala de esfuerzo</p><div class="seg" role="group" aria-label="Escala de esfuerzo">' +
     '<button data-act="set-mode" data-mode="rir" aria-pressed="' + (st.mode === 'rir') + '">RIR</button>' +
     '<button data-act="set-mode" data-mode="rpe" aria-pressed="' + (st.mode === 'rpe') + '">RPE</button></div>' +
@@ -2792,7 +2823,7 @@ function onClick(ev){
     case 'measurement-save':
       var measurementDate=$('#measurement-date')&&$('#measurement-date').value;
       var measurementValues={}, measurementValid=true;
-      Object.keys(MEASUREMENT_FIELDS).forEach(function(key){var input=$('#measurement-'+key), value=input&&num(input.value); if(input&&input.value.trim()!==''){if(value===null||value<0||!Number.isFinite(value)){measurementValid=false;}else measurementValues[key]=value;}});
+      Object.keys(MEASUREMENT_FIELDS).forEach(function(key){var input=$('#measurement-'+key), value=input&&(key==='weight'?toKg(input.value):num(input.value)); if(input&&input.value.trim()!==''){if(value===null||value<0||!Number.isFinite(value)){measurementValid=false;}else measurementValues[key]=value;}});
       var validMeasurementDate=/^\d{4}-\d{2}-\d{2}$/.test(measurementDate||'')&&iso(parseISO(measurementDate))===measurementDate;
       if(!validMeasurementDate){toast('Elige una fecha válida');break;}
       if(!measurementValid){toast('Revisa los valores de las medidas');break;}
@@ -3081,12 +3112,13 @@ function onClick(ev){
     case 'goal-new': S.goalNew=true; render(); break;
     case 'goal-cancel': S.goalNew=false; render(); break;
     case 'goal-save':
-      var goalName=$('#goal-name')&&$('#goal-name').value.trim(), goalTarget=$('#goal-target')?num($('#goal-target').value):null;
+      var goalName=$('#goal-name')&&$('#goal-name').value.trim(), goalTargetInput=$('#goal-target')?num($('#goal-target').value):null;
+      var goalTarget=goalTargetInput===null?null:($('#goal-type')&&$('#goal-type').value==='exercise-weight'?toKg(goalTargetInput):goalTargetInput);
       if(!goalName || !(goalTarget>0)){ toast('Completa el nombre y una meta válida'); break; }
       var goalType=$('#goal-type').value, exerciseId=$('#goal-exercise')?$('#goal-exercise').value:'';
       if(!['exercise-weight','sessions','weekly','custom'].includes(goalType)){ toast('Elige un tipo de objetivo válido'); break; }
       if(goalType==='exercise-weight' && !exerciseId){ toast('Selecciona un ejercicio para este objetivo'); break; }
-      var goalUnit=goalType==='exercise-weight'?'kg':(goalType==='sessions'?'entrenos':(goalType==='weekly'?'entrenos/7 días':($('#goal-unit').value.trim())));
+      var goalUnit=goalType==='exercise-weight'?weightUnitLabel():(goalType==='sessions'?'entrenos':(goalType==='weekly'?'entrenos/7 días':($('#goal-unit').value.trim())));
       if(goalType==='custom' && !goalUnit){ toast('Indica la unidad de tu objetivo personalizado'); break; }
       var currentGoalValue=goalType==='custom'?num($('#goal-current').value):0;
       if(goalType==='custom' && (currentGoalValue===null || currentGoalValue<0)){ toast('Indica un progreso actual válido (0 o más)'); break; }
@@ -3145,7 +3177,7 @@ function onInput(ev){
     if(!edit || edit.saving) return;
     var entry = edit.session.entries[+t.dataset.entry], set = entry && entry.sets[+t.dataset.set];
     if(!set) return;
-    if(t.dataset.sessionEdit === 'weight') set.w = num(t.value);
+    if(t.dataset.sessionEdit === 'weight') set.w = t.value.trim()===''?null:toKg(t.value);
     if(t.dataset.sessionEdit === 'reps') set.r = num(t.value);
     if(t.dataset.sessionEdit === 'effort'){
       var value = t.value.trim() === '' ? null : num(t.value);
@@ -3163,7 +3195,10 @@ function onInput(ev){
   var ei = +t.dataset.ei, ri = +t.dataset.ri;
   var row = S.draft.entries[ei] && S.draft.entries[ei].rows[ri]; if(!row) return;
   var target = t.dataset.side ? (ensureRowMode(row, true)[t.dataset.side]) : row;
-  if(f === 'w') target.w = t.value;
+  if(f === 'w'){
+    var kilograms=t.value.trim()===''?null:toKg(t.value);
+    target.w=kilograms===null?'':String(kilograms);
+  }
   else if(f === 'r') target.r = t.value;
   else if(f === 'e'){
     var v = num(t.value);
@@ -3326,6 +3361,10 @@ function onChange(ev){
     if(![0,15,30,45,60,90,120].includes(warmupSeconds)){ render(); return; }
     S.profile.settings.warmupRestSeconds = warmupSeconds; Store.saveProfile(); render(); return;
   }
+  if(t.dataset.setting === 'weightUnit'){
+    if(!['kg','lb'].includes(t.value)){ render(); return; }
+    S.profile.settings.weightUnit=t.value; Store.saveProfile(); render(); return;
+  }
   if(t.dataset.f === 'r' || t.dataset.f === 'w'){
     var autoEntry = S.draft.entries[+t.dataset.ei], autoRi=+t.dataset.ri;
     if(autoRi > 0 && autoEntry){
@@ -3379,14 +3418,16 @@ function onChange(ev){
       if(t.value === 'false' && hasLeftValues) toast('En modo bilateral se usa el lado derecho; el detalle por lado se conserva durante este entreno.');
       return;
     }
-    var hv = num(t.value);
+    var hcWeight=['inc','loadStep','warmupStep'].includes(t.dataset.hc);
+    var hv = hcWeight?toKg(t.value):num(t.value);
     if(hv === null){ render(); return; }
     if(t.dataset.hc) applyEntryCfg(+t.dataset.ei, t.dataset.hc, hv);
     else applyEntryCfg(+t.dataset.ei, 'ef', hv, +t.dataset.k);
     return;
   }
   if(S.redit && t.dataset.it){
-    var it = S.redit.items[+t.dataset.i], k = t.dataset.it, v0 = num(t.value);
+    var it = S.redit.items[+t.dataset.i], k = t.dataset.it;
+    var v0=['inc','loadStep','warmupStep'].includes(k)?toKg(t.value):num(t.value);
     if(!it || v0 === null){ render(); return; }
     if(k === 'sets'){
       var ns = Math.min(10, Math.max(1, Math.round(v0))), ef = [];
@@ -3446,7 +3487,8 @@ function onChange(ev){
     if(Array.isArray(ex.secondaryMuscles)) ex.secondaryMuscles = ex.secondaryMuscles.filter(function(id){ return id !== t.value; });
     Store.saveProfile(); render(); return;
   }
-  var v = num(t.value);
+  var cfgWeight=['inc','loadStep','warmupStep'].includes(key);
+  var v = cfgWeight?toKg(t.value):num(t.value);
   if(v === null){ render(); return; }
   if(key === 'sets') ex.sets = Math.min(10, Math.max(1, Math.round(v)));
   if(key === 'min'){ ex.min = Math.min(50, Math.max(1, Math.round(v))); if(ex.max <= ex.min) ex.max = ex.min + 1; }

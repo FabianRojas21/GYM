@@ -7,6 +7,11 @@
 
   function fmt(value){ return (Math.round(value * 100) / 100).toString().replace('.', ','); }
   function fmt1(value){ return (Math.round(value * 10) / 10).toString().replace('.', ','); }
+  function weightText(value, settings){
+    var unit=settings && settings.weightUnit==='lb'?'lb':'kg';
+    var displayed=unit==='lb'?Number(value)*2.20462262185:Number(value);
+    return fmt(displayed)+' '+unit;
+  }
   function mean(values){ return values.reduce(function(sum, value){ return sum + value; }, 0) / values.length; }
   function countsForProgress(set){ return !set.type || set.type === 'normal'; }
   function isEffectiveSet(set){
@@ -196,13 +201,13 @@
 
     if((allTop && okEffort) || easy){
       result.status = 'sube'; result.nextW = result.progressTarget; result.target = fill(ex.min); result.progress = 1;
-      result.headline = 'Sube a ' + fmt(result.nextW) + ' kg';
+      result.headline = 'Sube a ' + weightText(result.nextW,settings);
       result.detail = allTop
-        ? 'Cumpliste ' + need + '×' + ex.max + (avgRir !== null ? ' con ' + effTxt(avgRir, settings) : '') + '. Próximo entreno: ' + fmt(result.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.'
-        : 'Te sobraron repeticiones (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '). Sube a ' + fmt(result.nextW) + ' kg y apunta a ' + ex.min + ' reps en cada serie.';
+        ? 'Cumpliste ' + need + '×' + ex.max + (avgRir !== null ? ' con ' + effTxt(avgRir, settings) : '') + '. Próximo entreno: ' + weightText(result.nextW,settings) + ' y apunta a ' + ex.min + ' reps en cada serie.'
+        : 'Te sobraron repeticiones (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '). Sube a ' + weightText(result.nextW,settings) + ' y apunta a ' + ex.min + ' reps en cada serie.';
     } else if(allTop){
       result.status = 'confirma'; result.target = fill(ex.max); result.progress = 1;
-      result.headline = 'Repite ' + fmt(weight) + ' kg';
+      result.headline = 'Repite ' + weightText(weight,settings);
       result.detail = 'Llegaste a ' + ex.max + ' reps pero más al límite de lo pedido (' + effTxt(avgRir, settings) + '). Repite con ' + targetText(ex, settings) + ' para confirmar la subida.';
     } else if(avgReps < ex.min){
       var previousLow = false;
@@ -220,16 +225,16 @@
         downWeight = availableWeight(downWeight, ex.loadStep || increment, 'down');
         if(downWeight <= 0 || downWeight >= weight){
           result.status='mantener'; result.nextW=weight; result.target=fill(ex.min);
-          result.headline='Mantén ' + fmt(weight) + ' kg';
+          result.headline='Mantén ' + weightText(weight,settings);
           result.detail='No hay un peso inferior disponible y seguro para bajar con el incremento configurado. Mantén el peso y vuelve a buscar ' + ex.min + ' reps.';
         } else {
           result.status = 'bajar'; result.nextW = downWeight; result.target = fill(ex.min);
-          result.headline = 'Baja a ' + fmt(downWeight) + ' kg';
-          result.detail = 'Dos entrenos seguidos bajo ' + ex.min + ' reps con ' + fmt(weight) + ' kg. Baja un poco y vuelve a construir desde ' + ex.min + ' reps.';
+          result.headline = 'Baja a ' + weightText(downWeight,settings);
+          result.detail = 'Dos entrenos seguidos bajo ' + ex.min + ' reps con ' + weightText(weight,settings) + '. Baja un poco y vuelve a construir desde ' + ex.min + ' reps.';
         }
       } else {
         result.status = 'mantener'; result.target = fill(ex.min);
-        result.headline = 'Mantén ' + fmt(weight) + ' kg';
+        result.headline = 'Mantén ' + weightText(weight,settings);
         result.detail = 'Promedio de ' + fmt1(avgReps) + ' reps, bajo el mínimo de ' + ex.min + '. Busca ' + ex.min + ' reps en todas las series antes de subir.';
       }
     } else {
@@ -239,8 +244,8 @@
         var current = reps[k] !== undefined ? reps[k] : last;
         result.target.push(okEffort ? Math.min(ex.max, current + 1) : current);
       }
-      result.headline = fmt(weight) + ' kg, suma reps';
-      result.detail = 'Objetivo: ' + result.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + fmt(result.progressTarget) + ' kg.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '), así que mantén las reps.');
+      result.headline = weightText(weight,settings) + ', suma reps';
+      result.detail = 'Objetivo: ' + result.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + weightText(result.progressTarget,settings) + '.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '), así que mantén las reps.');
     }
     return result;
   }
@@ -274,7 +279,7 @@
     if(!right || !left) return null;
     var rank = {sube:0, reps:1, confirma:2, mantener:3, bajar:4};
     var weaker = rank[right.status] >= rank[left.status] ? right : left;
-    var sideTarget = function(name, result){ return name + ': ' + fmt(result.nextW) + ' kg × ' + result.target.join(', ') + ' reps'; };
+    var sideTarget = function(name, result){ return name + ': ' + weightText(result.nextW,settings) + ' × ' + result.target.join(', ') + ' reps'; };
     return Object.assign({}, weaker, {
       W:Math.min(right.W, left.W), nextW:Math.min(right.nextW, left.nextW), progressTarget:Math.min(right.progressTarget, left.progressTarget), progress:Math.min(right.progress, left.progress),
       sidePlans:{right:right, left:left},
