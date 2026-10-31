@@ -88,6 +88,28 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.match(workflow,/actions\/deploy-pages/);
 });
 
+test('el Service Worker entrega la respuesta aunque falle su copia offline', async () => {
+  const source=fs.readFileSync('./sw.js','utf8');
+  let fetchHandler, responsePromise;
+  const pendingWrites=[];
+  const response={ok:true,clone(){throw new TypeError('Response body is already used');}};
+  const context={
+    URL,
+    self:{location:{origin:'https://example.test'},addEventListener(type,handler){if(type==='fetch') fetchHandler=handler;}},
+    caches:{match:async()=>null,open:async()=>({put:async()=>{}})},
+    fetch:async()=>response,
+    console:{warn(){}}
+  };
+  vm.runInNewContext(source,context);
+  fetchHandler({
+    request:{method:'GET',mode:'navigate',url:'https://example.test/app.js'},
+    respondWith(promise){responsePromise=promise;},
+    waitUntil(promise){pendingWrites.push(promise);}
+  });
+  assert.equal(await responsePromise,response);
+  await Promise.all(pendingWrites);
+});
+
 test('la sección Yo incluye resumen, ejercicios y medidas corporales', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const index=fs.readFileSync('./index.html','utf8');
