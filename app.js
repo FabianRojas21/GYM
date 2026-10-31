@@ -1606,6 +1606,8 @@ function sessionEditorHtml(session){
   var data = edit.session, date = edit.date, editHours = edit.hours, editMinutes = edit.minutes;
   var setsHtml = data.entries.map(function(entry, entryIndex){
     var exercise = exName(entry.exId);
+    var collapsed = edit.collapsedEntries.has(entry);
+    var exerciseConfig = S.profile.exercises[entry.exId];
     var rows = entry.sets.map(function(set, setIndex){
       var side = set.side === 'right' ? ' · Der.' : (set.side === 'left' ? ' · Izq.' : '');
       var effort = set.rir === null || set.rir === undefined ? '' : fmt(S.profile.settings.mode === 'rpe' ? 10 - set.rir : set.rir);
@@ -1615,11 +1617,14 @@ function sessionEditorHtml(session){
       var options = Object.keys(SET_TYPES).map(function(key){
         return '<option value="' + key + '"' + (setType(set) === key ? ' selected' : '') + '>' + SET_TYPES[key] + '</option>';
       }).join('');
-      return '<div class="session-set-edit"><strong>Serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1) + esc(side) + '</strong>' +
+      var finishControl = set.editorDone
+        ? '<button class="set-finish set-finish-done" data-act="session-undo-finish-set" data-entry="' + entryIndex + '" data-set="' + setIndex + '" aria-label="Deshacer fin de la serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1) + '"' + (edit.saving ? ' disabled' : '') + '><span aria-hidden="true">✓</span> Hecha</button>'
+        : '<button class="btn ghost sm set-finish" data-act="session-finish-set" data-entry="' + entryIndex + '" data-set="' + setIndex + '"' + (!sessionEditSetCanFinish(entry, set, exerciseConfig) || edit.saving ? ' disabled' : '') + '>Terminar serie</button>';
+      return '<div class="session-set-edit" data-entry="' + entryIndex + '" data-set="' + setIndex + '"><strong>Serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1) + esc(side) + '</strong>' +
         input('weight', 'Kg', set.w, 'decimal') + input('reps', 'Reps', set.r, 'numeric') + input('effort', S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR', effort, 'decimal') +
         '<select class="txt session-set-type" data-session-edit="type" data-entry="' + entryIndex + '" data-set="' + setIndex + '" aria-label="Tipo de serie"' + (edit.saving ? ' disabled' : '') + '>' + options + '</select>' +
         input('rest', 'Descanso s', Number.isFinite(set.restMs) ? Math.round(set.restMs/1000) : '', 'numeric') +
-        '<button class="btn ghost sm" data-act="session-remove-set" data-entry="'+entryIndex+'" data-set="'+setIndex+'"'+(edit.saving?' disabled':'')+'>Quitar serie</button></div>';
+        finishControl + '<button class="btn ghost sm" data-act="session-remove-set" data-entry="'+entryIndex+'" data-set="'+setIndex+'"'+(edit.saving?' disabled':'')+'>Quitar serie</button></div>';
     }).join('');
     var tools='<div class="row"><button class="btn ghost sm" data-act="session-add-set" data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>Añadir serie</button>' +
       (edit.confirmEntry===entryIndex
@@ -1628,7 +1633,11 @@ function sessionEditorHtml(session){
     var replaceOptions='<option value="'+esc(entry.exId)+'">'+esc(exercise)+'</option>'+Object.keys(S.profile.exercises).filter(function(id){return id!==entry.exId && !S.profile.exercises[id].archived;}).map(function(id){return '<option value="'+esc(id)+'">'+esc(S.profile.exercises[id].name)+'</option>';}).join('');
     var replace='<label class="field"><span class="lab">Cambiar ejercicio</span><select class="txt" data-session-replace-exercise data-entry="'+entryIndex+'"'+(edit.saving?' disabled':'')+'>'+replaceOptions+'</select></label>';
     var orderControls='<div class="row"><button class="btn ghost sm" data-act="session-move-exercise" data-entry="'+entryIndex+'" data-direction="-1"'+(entryIndex===0||edit.saving?' disabled':'')+'>↑ Mover arriba</button><button class="btn ghost sm" data-act="session-move-exercise" data-entry="'+entryIndex+'" data-direction="1"'+(entryIndex===data.entries.length-1||edit.saving?' disabled':'')+'>↓ Mover abajo</button></div>';
-    return '<div class="session-entry-edit"><p class="sec-title">' + esc(exercise) + '</p>' + replace + orderControls + rows + tools + '</div>';
+    return '<div class="session-entry-edit' + (collapsed ? ' is-collapsed' : '') + '" data-entry="' + entryIndex + '">' +
+      '<div class="card-head workout-card-head"><h3 class="workout-card-heading"><button class="workout-card-toggle" data-act="session-toggle-entry" data-entry="' + entryIndex + '" aria-expanded="' + (!collapsed) + '">' +
+      '<span class="workout-card-title"><span class="workout-card-name">' + esc(exercise) + '</span><span class="workout-progress session-progress">' + sessionEditProgressText(entry, exerciseConfig) + '</span></span>' +
+      '<span class="workout-card-chevron" aria-hidden="true">' + (collapsed ? '▸' : '▾') + '</span></button></h3></div>' +
+      (collapsed ? '' : '<div class="workout-card-body">' + replace + orderControls + rows + tools + '</div>') + '</div>';
   }).join('');
   var addPicker=edit.addPicker ? '<div class="field"><label class="lab" for="session-add-exercise">Ejercicio</label><select id="session-add-exercise" class="txt" data-session-add-exercise>'+
     '<option value="">Seleccionar ejercicio</option>'+Object.keys(S.profile.exercises).filter(function(id){return !S.profile.exercises[id].archived;}).map(function(id){var ex=S.profile.exercises[id];return '<option value="'+esc(id)+'">'+esc(ex.name)+'</option>';}).join('')+'</select></div><button class="btn ghost sm" data-act="session-add-exercise-cancel"'+(edit.saving?' disabled':'')+'>Cancelar</button>' : '<button class="btn ghost sm" data-act="session-add-exercise-picker"'+(edit.saving?' disabled':'')+'>Añadir ejercicio</button>';
@@ -1636,10 +1645,87 @@ function sessionEditorHtml(session){
     '<div class="fields"><div class="field"><label class="lab" for="session-edit-date">Día del entrenamiento</label><input class="txt" id="session-edit-date" data-session-meta="date" type="date" required value="' + esc(date) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
     '<div class="field"><label class="lab" for="session-edit-hours">Horas</label><input class="txt" id="session-edit-hours" data-session-meta="hours" type="number" min="0" max="999" step="1" inputmode="numeric" required value="' + esc(editHours) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
     '<div class="field"><label class="lab" for="session-edit-minutes">Minutos</label><input class="txt" id="session-edit-minutes" data-session-meta="minutes" type="number" min="0" max="59" step="1" inputmode="numeric" required value="' + esc(editMinutes) + '"' + (edit.saving ? ' disabled' : '') + '></div></div>' +
-    '<p class="small muted">La duración se guarda con precisión de minutos. Corrige aquí peso, reps o esfuerzo de cada serie; también puedes cambiar el tipo. La fecha corregida actualiza el resumen semanal.</p>' +
+    '<p class="small muted">La duración se guarda con precisión de minutos. Corrige aquí peso, reps o esfuerzo de cada serie; también puedes cambiar el tipo. Al editar una serie marcada, vuelve a quedar pendiente. La fecha corregida actualiza el resumen semanal.</p>' +
     setsHtml + addPicker +
     (edit.conflict ? '<div class="alert warn"><strong>Conflicto de sincronización</strong><p class="small muted">' + esc(edit.conflict.message) + '</p><div class="row"><button class="btn ghost sm" data-act="session-conflict-reload"' + (edit.saving ? ' disabled' : '') + '>Recargar versión remota</button><button class="btn sm" data-act="session-conflict-overwrite"' + (edit.saving ? ' disabled' : '') + '>Sobrescribir</button></div></div>' : '') +
     '<div class="row"><button class="btn sm" data-act="session-edit-save"' + (edit.saving ? ' disabled' : '') + '>Guardar cambios</button><button class="btn ghost sm" data-act="session-edit-cancel"' + (edit.saving ? ' disabled' : '') + '>Cancelar</button></div></section>';
+}
+function sessionEditSetValid(set){
+  return !!set && Number.isFinite(set.w) && set.w >= 0 && Number.isInteger(set.r) && set.r > 0;
+}
+function sessionEntryIsUnilateral(entry, exercise){
+  return typeof entry.unilateral === 'boolean' ? entry.unilateral : !!(exercise && exercise.unilateral);
+}
+function sessionEditSetCanFinish(entry, set, exercise){
+  if(!sessionEditSetValid(set)) return false;
+  if(!sessionEntryIsUnilateral(entry,exercise) || set.pair === undefined) return true;
+  var pair = entry.sets.filter(function(item){ return item.pair === set.pair; });
+  return pair.length === 2 && pair.some(function(item){ return item.side === 'left'; }) &&
+    pair.some(function(item){ return item.side === 'right'; }) && pair.every(sessionEditSetValid);
+}
+function prepareSessionForEdit(session){
+  var editable = clone(session);
+  editable.entries.forEach(function(entry){
+    entry.sets.forEach(function(set){ set.editorDone=sessionEditSetValid(set); });
+  });
+  return editable;
+}
+function sessionEditProgressText(entry, exercise){
+  var target = Math.max(1, Number(entry.cfg && entry.cfg.sets) || Number(exercise && exercise.sets) || 1), completed = 0;
+  if(sessionEntryIsUnilateral(entry,exercise)){
+    var pairs = Object.create(null);
+    entry.sets.forEach(function(set){
+      if(set.pair === undefined || setType(set) !== 'normal' || !set.editorDone) return;
+      var key = String(set.pair);
+      if(!pairs[key]) pairs[key] = {left:false,right:false};
+      if(set.side === 'left' || set.side === 'right') pairs[key][set.side] = true;
+    });
+    completed = Object.keys(pairs).filter(function(key){ return pairs[key].left && pairs[key].right; }).length;
+  }else{
+    completed = entry.sets.filter(function(set){ return setType(set) === 'normal' && set.editorDone; }).length;
+  }
+  return Math.min(target, completed) + '/' + target + ' series';
+}
+function refreshSessionEditProgress(entryIndex){
+  var edit = S.sessionEdit, entry = edit && edit.session.entries[entryIndex];
+  if(!entry) return;
+  var progress = $('.session-entry-edit[data-entry="' + entryIndex + '"] .session-progress');
+  if(progress) progress.textContent = sessionEditProgressText(entry, S.profile.exercises[entry.exId]);
+}
+function setSessionEditDone(entry, set, done, exercise){
+  if(sessionEntryIsUnilateral(entry,exercise) && set.pair !== undefined){
+    entry.sets.forEach(function(item){ if(item.pair === set.pair) item.editorDone = done; });
+  }else set.editorDone = done;
+}
+function updateSessionEditFinishControl(entryIndex, setIndex){
+  var edit = S.sessionEdit, entry = edit && edit.session.entries[entryIndex], set = entry && entry.sets[setIndex];
+  var row = $('.session-set-edit[data-entry="' + entryIndex + '"][data-set="' + setIndex + '"]');
+  var oldButton = row && $('.set-finish', row);
+  if(!set || !oldButton) return;
+  var exercise = S.profile.exercises[entry.exId], button = document.createElement('button');
+  button.dataset.entry = String(entryIndex); button.dataset.set = String(setIndex); button.className = 'set-finish';
+  if(set.editorDone){
+    button.dataset.act = 'session-undo-finish-set';
+    button.classList.add('set-finish-done');
+    button.setAttribute('aria-label', 'Deshacer fin de la serie ' + (set.pair !== undefined ? set.pair + 1 : setIndex + 1));
+    button.innerHTML = '<span aria-hidden="true">✓</span> Hecha';
+  }else{
+    button.dataset.act = 'session-finish-set';
+    button.classList.add('btn','ghost','sm');
+    button.textContent = 'Terminar serie';
+    button.disabled = !sessionEditSetCanFinish(entry, set, exercise);
+  }
+  oldButton.replaceWith(button);
+  refreshSessionEditProgress(entryIndex);
+}
+function updateSessionEditFinishControls(entryIndex, setIndex){
+  var edit = S.sessionEdit, entry = edit && edit.session.entries[entryIndex], set = entry && entry.sets[setIndex];
+  if(!set) return;
+  var exercise = S.profile.exercises[entry.exId];
+  if(sessionEntryIsUnilateral(entry,exercise) && set.pair !== undefined){
+    entry.sets.forEach(function(item,index){ if(item.pair === set.pair) updateSessionEditFinishControl(entryIndex,index); });
+  }else updateSessionEditFinishControl(entryIndex,setIndex);
+  refreshSessionEditProgress(entryIndex);
 }
 function saveSessionEdit(){
   var edit = S.sessionEdit;
@@ -1661,7 +1747,11 @@ function saveSessionEdit(){
   });
   if(!validSets){ toast('Cada serie debe tener peso (0 para ejercicios con carga corporal), reps válidos y esfuerzo entre 0 y 10'); return; }
   var durationMs = (hours * 60 + minutes) * 60000;
-  var updated = Object.assign({}, edit.session, {date:date, durationMs:durationMs});
+  var updated = clone(edit.session);
+  updated.entries.forEach(function(entry){
+    entry.sets.forEach(function(set){ delete set.editorDone; });
+  });
+  Object.assign(updated, {date:date, durationMs:durationMs});
   var shiftToDate = function(timestamp){
     var original = new Date(timestamp), shifted = parseISO(date);
     shifted.setHours(original.getHours(), original.getMinutes(), original.getSeconds(), original.getMilliseconds());
@@ -2713,8 +2803,34 @@ function onClick(ev){
       var editSession = S.sessions.find(function(s){ return s.id === t.dataset.id; });
       if(editSession){
         var editDuration = Math.max(0, Math.floor((Number(editSession.durationMs) || 0) / 60000));
-        S.sessionEdit = {id:editSession.id, session:clone(editSession), date:editSession.date, hours:String(Math.floor(editDuration / 60)), minutes:String(editDuration % 60), saving:false, addPicker:false, confirmEntry:null};
+        var editableSession=prepareSessionForEdit(editSession);
+        S.sessionEdit = {id:editSession.id, session:editableSession, date:editSession.date, hours:String(Math.floor(editDuration / 60)), minutes:String(editDuration % 60), saving:false, addPicker:false, confirmEntry:null, collapsedEntries:new Set()};
         S.confirm = null; render();
+      }
+      break;
+    case 'session-toggle-entry':
+      if(S.sessionEdit){
+        var toggleEntry=S.sessionEdit.session.entries[+t.dataset.entry];
+        if(toggleEntry){
+          if(S.sessionEdit.collapsedEntries.has(toggleEntry)) S.sessionEdit.collapsedEntries.delete(toggleEntry);
+          else S.sessionEdit.collapsedEntries.add(toggleEntry);
+          render();
+        }
+      }
+      break;
+    case 'session-finish-set':
+    case 'session-undo-finish-set':
+      if(S.sessionEdit && !S.sessionEdit.saving){
+        var finishEditEntry=S.sessionEdit.session.entries[+t.dataset.entry];
+        var finishEditSet=finishEditEntry && finishEditEntry.sets[+t.dataset.set];
+        var finishEditExercise=finishEditEntry && S.profile.exercises[finishEditEntry.exId];
+        if(finishEditSet){
+          var markDone=act==='session-finish-set';
+          if((markDone && sessionEditSetCanFinish(finishEditEntry,finishEditSet,finishEditExercise)) || !markDone){
+            setSessionEditDone(finishEditEntry,finishEditSet,markDone,finishEditExercise);
+            render();
+          }
+        }
       }
       break;
     case 'session-edit-save': saveSessionEdit(); break;
@@ -2724,7 +2840,7 @@ function onClick(ev){
         var remote=S.sessionEdit.conflict.remoteSession || S.sessions.find(function(s){ return s.id===S.sessionEdit.id; });
         if(!remote){ toast('El entrenamiento ya no existe en la nube'); S.sessionEdit=null; render(); break; }
         var remoteDuration=Math.max(0,Math.floor((Number(remote.durationMs)||0)/60000));
-        S.sessionEdit.session=clone(remote); S.sessionEdit.date=remote.date; S.sessionEdit.hours=String(Math.floor(remoteDuration/60)); S.sessionEdit.minutes=String(remoteDuration%60); S.sessionEdit.conflict=null; S.sessionEdit.overwrite=false; render();
+        S.sessionEdit.session=prepareSessionForEdit(remote); S.sessionEdit.date=remote.date; S.sessionEdit.hours=String(Math.floor(remoteDuration/60)); S.sessionEdit.minutes=String(remoteDuration%60); S.sessionEdit.collapsedEntries=new Set(); S.sessionEdit.conflict=null; S.sessionEdit.overwrite=false; render();
       }
       break;
     case 'session-conflict-overwrite': if(S.sessionEdit){ S.sessionEdit.overwrite=true; S.sessionEdit.conflict=null; saveSessionEdit(); } break;
@@ -2745,9 +2861,9 @@ function onClick(ev){
         var exerciseForEntry=S.profile.exercises[addEntry.exId];
         if(exerciseForEntry && exerciseForEntry.unilateral){
           var pairIndex=addEntry.sets.reduce(function(max,set){return Math.max(max,Number.isFinite(set.pair)?set.pair+1:0);},0);
-          addEntry.sets.push({w:null,r:null,rir:null,type:'normal',pair:pairIndex,side:'left'});
-          addEntry.sets.push({w:null,r:null,rir:null,type:'normal',pair:pairIndex,side:'right'});
-        }else addEntry.sets.push({w:null,r:null,rir:null,type:'normal'});
+          addEntry.sets.push({w:null,r:null,rir:null,type:'normal',pair:pairIndex,side:'left',editorDone:false});
+          addEntry.sets.push({w:null,r:null,rir:null,type:'normal',pair:pairIndex,side:'right',editorDone:false});
+        }else addEntry.sets.push({w:null,r:null,rir:null,type:'normal',editorDone:false});
         render();
       }
     } break;
@@ -2825,6 +2941,8 @@ function onInput(ev){
       set.rir = value === null ? null : (S.profile.settings.mode === 'rpe' ? 10 - value : value);
     }
     if(t.dataset.sessionEdit === 'rest'){ set.restMs = t.value.trim() === '' ? undefined : Math.max(0, Number(t.value))*1000; }
+    setSessionEditDone(entry,set,false,S.profile.exercises[entry.exId]);
+    updateSessionEditFinishControls(+t.dataset.entry,+t.dataset.set);
     return;
   }
   if(t.id === 'pk-q'){ $('#pk-list').innerHTML = pickerList(t.value, S.redit && S.redit.pick ? 'routine' : 'day'); return; }
@@ -2888,6 +3006,8 @@ function onChange(ev){
         replacementSets.forEach(function(set){ delete set.pair; delete set.side; });
         replaceEntry.sets=replacementSets;
       }
+      replaceEntry.unilateral=!!replacement.unilateral;
+      replaceEntry.cfg=null;
       render();
     }
     return;
@@ -2898,13 +3018,13 @@ function onChange(ev){
     var exercise=S.profile.exercises[editExId], setCount=Math.max(1,Math.min(20,Number(exercise.sets)||3)), newSets=[];
     if(exercise.unilateral){
       for(var pair=0;pair<setCount;pair++){
-        newSets.push({w:null,r:null,rir:null,type:'normal',pair:pair,side:'left'});
-        newSets.push({w:null,r:null,rir:null,type:'normal',pair:pair,side:'right'});
+        newSets.push({w:null,r:null,rir:null,type:'normal',pair:pair,side:'left',editorDone:false});
+        newSets.push({w:null,r:null,rir:null,type:'normal',pair:pair,side:'right',editorDone:false});
       }
     }else{
-      for(var i=0;i<setCount;i++) newSets.push({w:null,r:null,rir:null,type:'normal'});
+      for(var i=0;i<setCount;i++) newSets.push({w:null,r:null,rir:null,type:'normal',editorDone:false});
     }
-    sessionEdit.session.entries.push({exId:editExId,sets:newSets});
+    sessionEdit.session.entries.push({exId:editExId,sets:newSets,unilateral:!!exercise.unilateral});
     sessionEdit.addPicker=false;
     render();
     return;
@@ -2913,11 +3033,12 @@ function onChange(ev){
     var edit = S.sessionEdit, entry = edit && edit.session.entries[+t.dataset.entry], set = entry && entry.sets[+t.dataset.set];
     if(!set || !Object.prototype.hasOwnProperty.call(SET_TYPES, t.value)) return;
     set.type = t.value;
-    if(entry.unilateral && set.pair !== undefined){
+    if(sessionEntryIsUnilateral(entry,S.profile.exercises[entry.exId]) && set.pair !== undefined){
       entry.sets.forEach(function(other){
         if(other.pair === set.pair) other.type = t.value;
       });
     }
+    refreshSessionEditProgress(+t.dataset.entry);
     return;
   }
   if(t.dataset.routineProgram !== undefined && S.redit){
