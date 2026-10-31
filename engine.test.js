@@ -426,7 +426,9 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(app,/function syncCollapsedEntries\(\)/);
   assert.doesNotMatch(app,/toast\('Serie terminada · descanso iniciado'\)/);
   assert.match(app,/function onWorkoutKeydown/);
-  assert.match(app,/closest\('section\.card\[data-ei\]'\)/);
+  assert.match(app,/section\.card\[data-ei\] input\[data-f\]/);
+  assert.match(app,/if\(!next\)\{ ev\.target\.blur\(\); return; \}/);
+  assert.match(app,/enterkeyhint="next"/);
   assert.match(app,/id="draft-save-status"/);
   assert.match(app,/data-history-search/);
   assert.match(app,/data-history-range/);

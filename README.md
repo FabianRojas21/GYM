@@ -31,9 +31,11 @@ respuesta; muestra qué parte no respondió y conserva los datos locales para qu
 puedas corregir la conexión y volver a intentarlo.
 
 Durante un entreno puedes copiar una serie ya completada a la siguiente serie
-vacía, avanzar entre campos con **Enter** y ver el estado de guardado debajo
-del título. En **Historial** puedes buscar por ejercicio, rutina o fecha y
-filtrar por periodo.
+vacía y avanzar entre todos los campos de los ejercicios con **Enter**; al
+terminar el último campo, se cierra el teclado. En móvil, el teclado muestra la
+opción **Siguiente**. El borrador se recupera al volver a abrir la app y el
+estado de guardado aparece debajo del título. En **Historial** puedes buscar
+por ejercicio, rutina o fecha y filtrar por periodo.
 
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
 del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes

@@ -1353,12 +1353,12 @@ function entryHtml(en, ei){
       var sideTarget = type === 'normal' && p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[wi] !== undefined
         ? String(p.sidePlans[side].target[wi]) : tgt;
       return '<div class="side-inputs"><span class="side-label">' + (side === 'right' ? 'Der.' : 'Izq.') + '</span>' +
-        '<input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" autocomplete="off" placeholder="kg" aria-label="Peso lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.w) + '">' +
-        '<input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '">' +
-        '<input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '"></div>';
-    }).join('') : '<input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" autocomplete="off" placeholder="kg" aria-label="Peso de la serie ' + (ri+1) + '" value="' + esc(r.w) + '">' +
-      '<input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '">' +
-      '<input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '">';
+        '<input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="kg" aria-label="Peso lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.w) + '">' +
+        '<input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '">' +
+        '<input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '"></div>';
+    }).join('') : '<input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="kg" aria-label="Peso de la serie ' + (ri+1) + '" value="' + esc(r.w) + '">' +
+      '<input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '">' +
+      '<input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '">';
     return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + '">' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
@@ -3344,15 +3344,16 @@ function onChange(ev){
 }
 function onWorkoutKeydown(ev){
   if(ev.key!=='Enter' || !ev.target.matches('input[data-f]')) return;
-  var card=ev.target.closest('section.card[data-ei]');
-  if(!card) return;
-  var inputs=Array.from(card.querySelectorAll('input[data-f]'));
+  var view=$('#view');
+  if(!view || !ev.target.closest('section.card[data-ei]')) return;
+  var inputs=Array.from(view.querySelectorAll('section.card[data-ei] input[data-f]'));
   var index=inputs.indexOf(ev.target);
-  if(index>=0 && inputs[index+1]){
-    ev.preventDefault();
-    inputs[index+1].focus();
-    if(inputs[index+1].select) inputs[index+1].select();
-  }
+  if(index<0) return;
+  ev.preventDefault();
+  var next=inputs[index+1];
+  if(!next){ ev.target.blur(); return; }
+  next.focus();
+  if(next.select) next.select();
 }
 
 var AUTO_BACKUP_KEY='sobrecarga:auto-backup:v1';
