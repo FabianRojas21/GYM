@@ -9,6 +9,117 @@
   function fmt1(value){ return (Math.round(value * 10) / 10).toString().replace('.', ','); }
   function mean(values){ return values.reduce(function(sum, value){ return sum + value; }, 0) / values.length; }
   function countsForProgress(set){ return !set.type || set.type === 'normal'; }
+  function isEffectiveSet(set){
+    if(!set || set.type === 'warmup' || !Number.isFinite(Number(set.w)) || Number(set.w) < 0 || !(Number(set.r) > 0)) return false;
+    if(set.rir === null || set.rir === undefined || set.rir === '') return true;
+    var rir=Number(set.rir);
+    return Number.isFinite(rir) && rir <= 4;
+  }
+  function countEffectiveSets(sets, unilateral){
+    var effective=sets.filter(isEffectiveSet);
+    if(!unilateral) return effective.length;
+    var pairs={};
+    effective.forEach(function(set){
+      if(set.pair===undefined || (set.side!=='right' && set.side!=='left')) return;
+      var key=String(set.pair);
+      if(!pairs[key]) pairs[key]={};
+      pairs[key][set.side]=true;
+    });
+    return Object.keys(pairs).filter(function(key){ return pairs[key].right && pairs[key].left; }).length;
+  }
+  function entryVolume(sets, unilateral){
+    var working=sets.filter(function(set){
+      return set && set.type!=='warmup' && Number.isFinite(Number(set.w)) && Number(set.w)>=0 && Number(set.r)>0;
+    });
+    if(!unilateral) return working.reduce(function(total,set){ return total+Number(set.w)*Number(set.r); },0);
+    var pairs={};
+    working.forEach(function(set){
+      if(set.pair===undefined || (set.side!=='right' && set.side!=='left')) return;
+      var key=String(set.pair);
+      if(!pairs[key]) pairs[key]={};
+      pairs[key][set.side]=set;
+    });
+    return Object.keys(pairs).reduce(function(total,key){
+      var pair=pairs[key];
+      return pair.right && pair.left
+        ? total+Number(pair.right.w)*Number(pair.right.r)+Number(pair.left.w)*Number(pair.left.r)
+        : total;
+    },0);
+  }
+  function isUnilateralEntry(entry, exercise){
+    return !!(entry && entry.unilateral) || !!(exercise && exercise.unilateral) ||
+      !!(entry && Array.isArray(entry.sets) && entry.sets.some(function(set){
+        return set.pair!==undefined || set.side==='right' || set.side==='left';
+      }));
+  }
+  function inferSecondaryMuscles(primary, exerciseName){
+    var name=String(exerciseName||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ');
+    var matches=function(words){ return words.some(function(word){ return name.includes(word); }); };
+    var isolation=['extension','extensiones','curl','elevacion','elevaciones','apertura','aperturas','pajaro','laterales','lateral','maquina femoral'];
+    if(isolation.some(function(word){ return name.includes(word); }) &&
+      !matches(['sentadilla','press','remo','jalon','dominada','peso muerto','hip thrust','prensa'])) return [];
+    if(primary.indexOf('chest')===0){
+      return matches(['press','fondos'])
+        ? ['tricepsLateral','tricepsMedial','shoulderAnterior']
+        : [];
+    }
+    if(['lats','upperBack','traps','lowerBack'].indexOf(primary)>=0){
+      return matches(['remo','jalon','dominada','pull','row'])
+        ? ['bicepsShort','brachialis']
+        : matches(['peso muerto']) ? ['glutesMax','lowerBack'] : [];
+    }
+    if(primary.indexOf('shoulder')===0){
+      return matches(['press','militar']) ? ['tricepsLateral','tricepsMedial'] : [];
+    }
+    if(primary.indexOf('biceps')===0 || primary==='brachialis') return [];
+    if(primary.indexOf('triceps')===0) return [];
+    if(primary==='quads' && matches(['sentadilla','prensa'])) return ['glutesMax','adductors'];
+    if(primary==='hamstrings' && matches(['peso muerto','rumano'])) return ['glutesMax','lowerBack'];
+    if(primary==='glutesMax' && matches(['peso muerto','sentadilla','hip thrust'])) return ['hamstrings'];
+    return [];
+  }
+  function muscleAssignments(primary, secondaryMuscles){
+    var ids=[primary].concat(secondaryMuscles||[]);
+    return ids.filter(function(id,index){ return id && ids.indexOf(id)===index; }).map(function(id,index){
+      return {id:id,factor:index===0?1:0.5};
+    });
+  }
+  function muscleGroupId(id){
+    if(id.indexOf('chest')===0) return 'chest';
+    if(id.indexOf('shoulder')===0) return 'shoulder';
+    if(['lats','upperBack','lowerBack','traps','serratus'].indexOf(id)>=0) return 'back';
+    if(id.indexOf('biceps')===0 || id==='brachialis') return 'biceps';
+    if(id==='forearms') return 'forearms';
+    if(id.indexOf('triceps')===0) return 'triceps';
+    if(id==='quads') return 'quads';
+    if(id==='hamstrings') return 'hamstrings';
+    if(id.indexOf('glutes')===0) return 'glutes';
+    if(id.indexOf('calves')===0 || id==='tibialis') return 'calves';
+    if(['rectusAbdominis','obliques','transverseCore'].indexOf(id)>=0) return 'core';
+    return 'other';
+  }
+  function effectiveBodyweight(bodyweight, addedWeight, percentage){
+    var body=Number(bodyweight), added=Number(addedWeight), share=Number(percentage);
+    if(!Number.isFinite(body) || body<0 || !Number.isFinite(added) || added<0) return added;
+    if(!Number.isFinite(share) || share<0 || share>100) return body+added;
+    return body*share/100+added;
+  }
+  function comparableWeekRange(today, weeksAgo){
+    var parts=String(today).split('-').map(Number);
+    var date=new Date(parts[0],parts[1]-1,parts[2]);
+    var dayOffset=(date.getDay()+6)%7;
+    var monday=new Date(date); monday.setDate(date.getDate()-dayOffset-7*weeksAgo);
+    var end=new Date(monday); end.setDate(monday.getDate()+dayOffset);
+    var key=function(value){ return value.getFullYear()+'-'+String(value.getMonth()+1).padStart(2,'0')+'-'+String(value.getDate()).padStart(2,'0'); };
+    return {start:key(monday),end:key(end)};
+  }
+  function compareWeeklyTrend(current, previousValues){
+    var values=(previousValues||[]).filter(function(value){ return Number.isFinite(Number(value)) && Number(value)>=0; }).map(Number);
+    if(!values.length) return current ? 'Carga nueva' : 'Sin cambios';
+    var previous=mean(values);
+    if(previous===0) return current ? 'Carga nueva' : 'Sin cambios';
+    return current>previous*1.15 ? 'Carga al alza' : current<previous*0.85 ? 'Carga a la baja' : 'Carga estable';
+  }
   function effortTarget(ex, index, settings){
     var efforts = ex.efforts;
     return efforts && efforts[index] !== undefined && efforts[index] !== null ? efforts[index] : settings.targetRir;
@@ -152,5 +263,12 @@
     });
   }
 
-  return {analyze:analyze, analyzeCore:analyzeCore, effortTarget:effortTarget, effTxt:effTxt, targetText:targetText, countsForProgress:countsForProgress};
+  return {
+    analyze:analyze, analyzeCore:analyzeCore, effortTarget:effortTarget, effTxt:effTxt, targetText:targetText,
+    countsForProgress:countsForProgress, isEffectiveSet:isEffectiveSet, countEffectiveSets:countEffectiveSets,
+    entryVolume:entryVolume, isUnilateralEntry:isUnilateralEntry,
+    inferSecondaryMuscles:inferSecondaryMuscles, muscleAssignments:muscleAssignments,
+    muscleGroupId:muscleGroupId, effectiveBodyweight:effectiveBodyweight,
+    comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend
+  };
 });

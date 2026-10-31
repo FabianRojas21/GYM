@@ -56,6 +56,10 @@ var MUSCLES = {
   rectusAbdominis:'Abdominal recto', obliques:'Oblicuos', transverseCore:'Transverso / core profundo', neck:'Cuello', other:'Otro'
 };
 var LEGACY_MUSCLE_IDS={shoulders:'shoulderLateral',back:'lats',chest:'chestMid',biceps:'bicepsShort',triceps:'tricepsLong',glutes:'glutesMax',calves:'calvesGastro',core:'rectusAbdominis'};
+var MUSCLE_GROUPS={chest:'Pecho',shoulder:'Hombros',back:'Espalda',biceps:'Bíceps',triceps:'Tríceps',forearms:'Antebrazos',quads:'Cuádriceps',hamstrings:'Isquiotibiales',glutes:'Glúteos',calves:'Pantorrillas',core:'Core',other:'Otro'};
+function muscleGroupId(id){
+  return SobrecargaEngine.muscleGroupId(id);
+}
 var MEASUREMENT_FIELDS={
   weight:'Peso corporal', height:'Altura', chest:'Pecho', waist:'Cintura', abdomen:'Abdomen', hips:'Cadera', neck:'Cuello',
   armLeft:'Brazo izquierdo', armRight:'Brazo derecho', thighLeft:'Muslo izquierdo', thighRight:'Muslo derecho', calfLeft:'Pantorrilla izquierda', calfRight:'Pantorrilla derecha', bodyFat:'Grasa corporal'
@@ -94,27 +98,11 @@ function muscleOptions(selected){
 function normalizedSecondaryMuscles(ex){
   var explicit=(ex.secondaryMuscles||[]).map(function(id){ return LEGACY_MUSCLE_IDS[id] || id; }).filter(function(id){ return MUSCLES[id] && id!==muscleId(ex); });
   if(explicit.length || Array.isArray(ex.secondaryMuscles)) return explicit.filter(function(id,index){ return explicit.indexOf(id)===index; });
-  var primary = muscleId(ex);
-  var name = String(ex.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  var inferred = [];
-  var matches = function(words){ return words.some(function(word){ return name.includes(word); }); };
-  if(primary.indexOf('chest')===0) inferred=['tricepsLong','shoulderAnterior'];
-  else if(['lats','upperBack','traps','lowerBack'].indexOf(primary)>=0){ inferred=['bicepsShort','forearms']; if(matches(['peso muerto','traccion','dominada'])) inferred.push('glutesMax','lowerBack'); }
-  else if(primary.indexOf('shoulder')===0) inferred=['tricepsLong','upperBack'];
-  else if(primary.indexOf('biceps')===0 || primary==='brachialis') inferred=['forearms','lats'];
-  else if(primary.indexOf('triceps')===0) inferred=['chestMid','forearms'];
-  else if(primary==='quads' || primary==='hipFlexors') inferred=['glutesMax'];
-  else if(primary==='hamstrings') inferred=['glutesMax','lowerBack'];
-  else if(primary==='glutesMax') inferred=['hamstrings','lowerBack'];
-  else if(primary==='glutesMed') inferred=['quads'];
-  else if(primary==='calvesGastro'||primary==='calvesSoleus') inferred=['hamstrings'];
-  return inferred.filter(function(id,index){ return MUSCLES[id] && id!==primary && inferred.indexOf(id)===index; });
+  return SobrecargaEngine.inferSecondaryMuscles(muscleId(ex),ex.name).filter(function(id,index,all){ return MUSCLES[id] && id!==muscleId(ex) && all.indexOf(id)===index; });
 }
 function muscleAssignments(ex){
   var primary = muscleId(ex);
-  var assignments = [{id:primary, factor:1}];
-  normalizedSecondaryMuscles(ex).forEach(function(id){ assignments.push({id:id, factor:0.5}); });
-  return assignments;
+  return SobrecargaEngine.muscleAssignments(primary,normalizedSecondaryMuscles(ex));
 }
 function latestBodyWeight(date){
   var matches=(S.profile.measurements||[]).filter(function(m){ return m.values && Number(m.values.weight)>=0 && typeof m.date==='string' && (!date || m.date<=date); }).sort(function(a,b){ return b.date.localeCompare(a.date); });
@@ -123,7 +111,8 @@ function latestBodyWeight(date){
 function effectiveWeight(ex, set, date){
   if(ex.loadMode !== 'bodyweight') return Number(set.w);
   var added = Number(set.w); if(!isFinite(added) || added < 0) return Number(set.w);
-  var bodyWeight = latestBodyWeight(date); return bodyWeight === null ? added : bodyWeight + added;
+  var bodyWeight = latestBodyWeight(date);
+  return bodyWeight === null ? added : SobrecargaEngine.effectiveBodyweight(bodyWeight,added,ex.bodyweightPercent === undefined ? 100 : ex.bodyweightPercent);
 }
 function effectiveSetsFor(ex, sets, date){
   return sets.map(function(set){ var copy=clone(set); copy.w=effectiveWeight(ex,set,date); return copy; });
@@ -621,6 +610,7 @@ function validBackup(data){
       (item.warmupPercents === undefined || (Array.isArray(item.warmupPercents) &&
         item.warmupPercents.every(function(percent){ return validNumber(percent) && percent >= 1 && percent <= 100; }))) &&
       (item.loadStep === undefined || (validNumber(item.loadStep) && item.loadStep > 0)) &&
+      (item.bodyweightPercent === undefined || (validNumber(item.bodyweightPercent) && item.bodyweightPercent >= 0 && item.bodyweightPercent <= 100)) &&
       (item.muscle === undefined || Object.prototype.hasOwnProperty.call(MUSCLES, LEGACY_MUSCLE_IDS[item.muscle] || item.muscle));
   };
   var exerciseIds = Object.keys(profile.exercises || {});
@@ -787,7 +777,8 @@ function importSessionsCsv(text){
     Object.keys(grouped[date]).forEach(function(name){
       var exercise=Object.keys(S.profile.exercises).map(function(id){ return S.profile.exercises[id]; }).find(function(e){ return e.name.toLowerCase()===name.toLowerCase(); });
       if(!exercise){ exercise={id:uid('ex'),name:name,sets:3,min:1,max:20,inc:2.5,muscle:'unassigned'}; S.profile.exercises[exercise.id]=exercise; }
-      entries.push({exId:exercise.id,sets:grouped[date][name]});
+      var sets=grouped[date][name];
+      entries.push({exId:exercise.id,sets:sets,unilateral:SobrecargaEngine.isUnilateralEntry({sets:sets},exercise)});
     });
     var signature=JSON.stringify(entries.map(function(entry){ return {exId:Object.keys(S.profile.exercises).find(function(id){ return id===entry.exId; })?entry.exId:entry.exId,sets:entry.sets.map(function(set){ return [set.w,set.r,set.rir,set.type]; })}; }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }));
     var duplicate=S.sessions.some(function(session){
@@ -1298,43 +1289,11 @@ function sessionStats(session){
 }
 function entryVolume(entry, sessionDate){
   var ex = exById(entry.exId);
-  var effectiveSets = ex ? effectiveSetsFor(ex, entry.sets, sessionDate) : entry.sets;
-  entry = Object.assign({}, entry, {sets:effectiveSets});
-  if(!entry.unilateral){
-    return entry.sets.reduce(function(total, set){
-      return total + (setType(set) !== 'warmup' && validWeight(set.w) && set.r > 0 ? set.w * set.r : 0);
-    }, 0);
-  }
-  var pairs = {}, volume = 0;
-  entry.sets.forEach(function(set){
-    var type = setType(set);
-    if(type === 'warmup') return;
-    if(type !== 'normal'){
-      if(validWeight(set.w) && set.r > 0) volume += set.w * set.r;
-      return;
-    }
-    if(set.pair === undefined) return;
-    var key = String(set.pair);
-    if(!pairs[key]) pairs[key] = {};
-    pairs[key][set.side] = set;
-  });
-  return Object.keys(pairs).reduce(function(total, key){
-    var pair = pairs[key], right = pair.right, left = pair.left;
-    return right && left && validWeight(right.w) && right.r > 0 && validWeight(left.w) && left.r > 0
-      ? total + right.w * right.r + left.w * left.r
-      : total;
-  }, volume);
+  var sets = ex ? effectiveSetsFor(ex, entry.sets, sessionDate) : entry.sets;
+  return SobrecargaEngine.entryVolume(sets,SobrecargaEngine.isUnilateralEntry(entry,ex));
 }
 function entryEffectiveSets(entry){
-  if(!entry.unilateral) return entry.sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && set.r > 0; }).length;
-  var pairs = {};
-  entry.sets.forEach(function(set){
-    if(set.pair === undefined || !countsForProgress(set) || !(validWeight(set.w) && set.r > 0)) return;
-    var key = String(set.pair);
-    if(!pairs[key]) pairs[key] = {};
-    pairs[key][set.side] = true;
-  });
-  return Object.keys(pairs).filter(function(key){ return pairs[key].right && pairs[key].left; }).length;
+  return SobrecargaEngine.countEffectiveSets(entry.sets,SobrecargaEngine.isUnilateralEntry(entry,exById(entry.exId)));
 }
 function weeklyMuscleSummaryHtml(week){
   var counts = {}, directCounts = {}, indirectCounts = {};
@@ -1351,25 +1310,47 @@ function weeklyMuscleSummaryHtml(week){
     });
   });
   var groups = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || MUSCLES[a].localeCompare(MUSCLES[b], 'es'); });
-  var content = groups.length
-    ? '<div class="weekly-muscle-list">' + groups.map(function(id){
-        return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLES[id]) + '</span><small>' + fmt1(directCounts[id] || 0) + ' directas · ' + fmt1(indirectCounts[id] || 0) + ' indirectas est.</small></div><strong>' + fmt1(counts[id]) + ' estimadas</strong></div>';
+  var groupCounts={}, groupDetails={};
+  groups.forEach(function(id){
+    var group=muscleGroupId(id);
+    groupCounts[group]=(groupCounts[group]||0)+(counts[id]||0);
+    groupDetails[group]=groupDetails[group]||[];
+    groupDetails[group].push(id);
+  });
+  var groupIds=Object.keys(groupCounts).sort(function(a,b){ return groupCounts[b]-groupCounts[a] || MUSCLE_GROUPS[a].localeCompare(MUSCLE_GROUPS[b],'es'); });
+  var content = groupIds.length
+    ? '<div class="weekly-muscle-list">' + groupIds.map(function(group){
+        var details=groupDetails[group];
+        var subgroups=details.length>1 ? '<details class="muscle-volume-detail"><summary>Ver subdivisiones</summary>'+details.map(function(id){ return '<div><span>'+esc(MUSCLES[id])+'</span><strong>'+fmt1(counts[id])+' estimadas</strong></div>'; }).join('')+'</details>' : '';
+        var directLabel=details.reduce(function(sum,id){ return sum+(directCounts[id]||0); },0);
+        var indirectLabel=details.reduce(function(sum,id){ return sum+(indirectCounts[id]||0); },0);
+        var secondary=indirectLabel ? ' · '+fmt1(indirectLabel)+' indirectas × 0,5 = '+fmt1(indirectLabel*0.5) : '';
+        return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLE_GROUPS[group] || group) + '</span><small>' + fmt1(directLabel) + ' directas' + secondary + (details.length===1 ? ' · '+esc(MUSCLES[details[0]]) : '') + '</small>' + subgroups + '</div><strong>' + fmt1(groupCounts[group]) + ' estimadas</strong></div>';
       }).join('') + '</div>'
     : '<p class="home-weekly-note">Aún no hay series efectivas registradas esta semana.</p>';
-  var now=new Date(); var recent=new Date(now); recent.setDate(now.getDate()-7);
-  var previous=new Date(now); previous.setDate(now.getDate()-28);
-  var recentThreshold=iso(recent), previousThreshold=iso(previous);
-  var countsRecent={}, countsPrevious={};
-  week.forEach(function(session){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId); if(count) muscleAssignments(ex||{}).forEach(function(a){ countsRecent[a.id]=(countsRecent[a.id]||0)+count*a.factor; }); }); });
-  S.sessions.forEach(function(session){ if(session.date>=previousThreshold && session.date<recentThreshold){ session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId); if(count) muscleAssignments(ex||{}).forEach(function(a){ countsPrevious[a.id]=(countsPrevious[a.id]||0)+count*a.factor; }); }); } });
+  var now=new Date(), today=iso(now);
+  var previousGroupValues={};
+  for(var weekIndex=1; weekIndex<=4; weekIndex++){
+    var range=SobrecargaEngine.comparableWeekRange(today,weekIndex);
+    var weekCounts={};
+    S.sessions.forEach(function(session){
+      if(session.date>=range.start && session.date<=range.end){
+        session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId); if(count) muscleAssignments(ex||{}).forEach(function(a){ weekCounts[a.id]=(weekCounts[a.id]||0)+count*a.factor; }); });
+      }
+    });
+    var priorGroups={}; Object.keys(weekCounts).forEach(function(id){ var group=muscleGroupId(id); priorGroups[group]=(priorGroups[group]||0)+weekCounts[id]; });
+    Object.keys(priorGroups).forEach(function(group){ previousGroupValues[group]=previousGroupValues[group]||[]; previousGroupValues[group].push(priorGroups[group]); });
+  }
   var effortByMuscle={};
-  week.forEach(function(session){ session.entries.forEach(function(entry){ var ex=exById(entry.exId); entry.sets.forEach(function(set){ if(!countsForProgress(set)) return; muscleAssignments(ex||{}).forEach(function(a){ effortByMuscle[a.id]=effortByMuscle[a.id]||[]; if(set.rir!==null && set.rir!==undefined && isFinite(Number(set.rir))) effortByMuscle[a.id].push(Number(set.rir)); }); }); }); });
-  var trends=groups.slice(0,5).map(function(id){
-    var current=counts[id]||0, prior=Math.round((countsPrevious[id]||0)/3);
-    var trend=prior===0?(current?'Carga nueva':'Sin cambios'):current>prior*1.15?'Carga al alza':current<prior*0.85?'Carga a la baja':'Carga estable';
-    var efforts=effortByMuscle[id]||[], average=efforts.length?efforts.reduce(function(sum,value){return sum+value;},0)/efforts.length:null;
+  week.forEach(function(session){ session.entries.forEach(function(entry){ var ex=exById(entry.exId), id=muscleId(ex||{}); entry.sets.forEach(function(set){ if(!countsForProgress(set)) return; if(set.rir!==null && set.rir!==undefined && isFinite(Number(set.rir))){ effortByMuscle[id]=effortByMuscle[id]||[]; effortByMuscle[id].push(Number(set.rir)); } }); }); });
+  var trends=groupIds.slice(0,5).map(function(group){
+    var current=groupCounts[group]||0;
+    var trend=SobrecargaEngine.compareWeeklyTrend(current,previousGroupValues[group]||[]);
+    var efforts=[];
+    (groupDetails[group]||[]).forEach(function(id){ efforts=efforts.concat(effortByMuscle[id]||[]); });
+    var average=efforts.length?efforts.reduce(function(sum,value){return sum+value;},0)/efforts.length:null;
     var fatigue=average===null?'':average<=1?' · fatiga alta':average<=2?' · fatiga media':' · fatiga baja';
-    return '<div class="weekly-muscle-row"><span>'+esc(MUSCLES[id])+'</span><strong>'+esc(trend+fatigue)+'</strong></div>';
+    return '<div class="weekly-muscle-row"><span>'+esc(MUSCLE_GROUPS[group] || group)+'</span><strong>'+esc(trend+fatigue)+'</strong></div>';
   }).join('');
   return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo y fatiga</h3><p>Las series directas cuentan completas; las indirectas se estiman al 50 % y el total efectivo suma ambas contribuciones. La fatiga estimada usa el RIR/RPE registrado: menor RIR indica mayor fatiga reciente.</p></div>' +
     content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
@@ -1780,12 +1761,12 @@ function exDetail(ex){
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
       f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('loadStep', 'Peso disponible cada (kg)', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-      '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></div>' +
+      '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div>' +
       '<fieldset class="field"><legend class="lab">Músculos secundarios estimados</legend><p class="small muted">Aportan aproximadamente 0,5 serie efectiva. Puedes desmarcarlos si no participan en este ejercicio.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
         var selected = normalizedSecondaryMuscles(ex).indexOf(id) >= 0;
         return '<label class="secondary-muscle-option"><input type="checkbox" data-cfg="secondary-muscle" data-id="' + esc(ex.id) + '" value="' + esc(id) + '"' + (selected ? ' checked' : '') + '> <span>' + esc(MUSCLES[id]) + '</span></label>';
       }).join('') + '</div></fieldset>' +
-      '<div class="field"><label class="lab" for="cfg-loadMode">Tipo de carga</label><select id="cfg-loadMode" class="txt" data-cfg="loadMode" data-id="' + esc(ex.id) + '"><option value="external"' + (ex.loadMode !== 'bodyweight' ? ' selected' : '') + '>Peso externo</option><option value="bodyweight"' + (ex.loadMode === 'bodyweight' ? ' selected' : '') + '>Peso corporal + carga añadida</option></select></div>' + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
+      '<div class="field"><label class="lab" for="cfg-loadMode">Tipo de carga</label><select id="cfg-loadMode" class="txt" data-cfg="loadMode" data-id="' + esc(ex.id) + '"><option value="external"' + (ex.loadMode !== 'bodyweight' ? ' selected' : '') + '>Peso externo</option><option value="bodyweight"' + (ex.loadMode === 'bodyweight' ? ' selected' : '') + '>Peso corporal + carga añadida</option></select></div>' + (ex.loadMode === 'bodyweight' ? f('bodyweightPercent','Porcentaje del peso corporal que se desplaza',ex.bodyweightPercent === undefined ? 100 : ex.bodyweightPercent) + '<p class="small muted">Por ejemplo, usa cerca de 67 % para flexiones; puedes ajustarlo por ejercicio.</p>' : '') + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
         return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-cfg="warmupPercent" data-id="' + esc(ex.id) + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
       }).join('') + '</div></div>' : '') + '<div class="fields">' +
       '<div class="field"><label class="lab" for="cfg-unilateral">Ejecución</label><select id="cfg-unilateral" class="txt" data-cfg="unilateral" data-id="' + esc(ex.id) + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div></div>' +
@@ -2666,6 +2647,11 @@ function onChange(ev){
   if(key === 'loadMode'){
     if(!['external','bodyweight'].includes(t.value)){ render(); return; }
     ex.loadMode = t.value; Store.saveProfile(); render(); return;
+  }
+  if(key === 'bodyweightPercent'){
+    var bodyweightPercent=num(t.value);
+    if(bodyweightPercent===null || bodyweightPercent<0 || bodyweightPercent>100){ render(); return; }
+    ex.bodyweightPercent=bodyweightPercent; Store.saveProfile(); render(); return;
   }
   if(key === 'unilateral'){
     if(t.value !== 'true' && t.value !== 'false'){ render(); return; }

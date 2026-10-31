@@ -126,7 +126,8 @@ test('la carga corporal y los músculos secundarios están integrados en la inte
   assert.match(app,/Peso corporal \+ carga añadida/);
   assert.match(app,/effectiveWeight\(/);
   assert.match(app,/normalizedSecondaryMuscles/);
-  assert.match(app,/factor:0\.5/);
+  assert.match(app,/Porcentaje del peso corporal que se desplaza/);
+  assert.equal(require('./engine.js').muscleAssignments('chestMid',['tricepsLateral'])[1].factor,0.5);
 });
 
 test('los sellos detectan cambios, dispositivos y sesiones borradas sin sobrescribirlas', () => {
@@ -191,4 +192,74 @@ test('la carga corporal se convierte una sola vez y también en récords y gráf
   assert.match(app,/var sets = effectiveSetsFor\(ex, entry\.sets, session\.date\)/);
   assert.match(app,/effectiveSetsFor\(ex,h\.sets,h\.date\)/);
   assert.doesNotMatch(app,/sets\.concat\(effectiveSetsFor\(exById/);
+});
+
+test('series duras cuentan para hipertrofia independientemente del tipo', () => {
+  const {isEffectiveSet, countEffectiveSets} = require('./engine.js');
+  assert.equal(isEffectiveSet(set(10,1)),true);
+  assert.equal(isEffectiveSet(set(10,8)),false);
+  assert.equal(isEffectiveSet(set(10,1,60,'backoff')),true);
+  assert.equal(isEffectiveSet(set(10,2,60,'dropset')),true);
+  assert.equal(isEffectiveSet(set(10,2,60,'restpause')),true);
+  assert.equal(isEffectiveSet(set(10,null,60,'warmup')),false);
+  assert.equal(isEffectiveSet({w:60,r:10,type:'normal'}),true);
+  assert.equal(isEffectiveSet(set(10,'no válido')),false);
+  assert.equal(countEffectiveSets([set(10,1),set(10,8),set(10,1,60,'backoff')],false),2);
+  assert.equal(require('./engine.js').entryVolume([set(10,8),set(10,1,60,'backoff')],false),1200);
+});
+
+test('el volumen de unilaterales exige pares completos incluso en series especiales', () => {
+  const {entryVolume,countEffectiveSets,isUnilateralEntry} = require('./engine.js');
+  const sets=[
+    {...set(10,1,12),pair:0,side:'right'},
+    {...set(10,1,12),pair:0,side:'left'},
+    {...set(8,1,8,'dropset'),pair:1,side:'right'},
+    {...set(8,1,8,'dropset'),pair:1,side:'left'},
+    {...set(10,1,50,'backoff'),pair:2,side:'right'}
+  ];
+  assert.equal(entryVolume(sets,true),368);
+  assert.equal(countEffectiveSets(sets,true),2);
+  assert.equal(isUnilateralEntry({sets:[{pair:0,side:'left'}]},null),true);
+});
+
+test('los accesorios aislados no heredan secundarios de su grupo', () => {
+  const {inferSecondaryMuscles}=require('./engine.js');
+  assert.deepEqual(inferSecondaryMuscles('shoulderLateral','Elevaciones laterales'),[]);
+  assert.deepEqual(inferSecondaryMuscles('tricepsLong','Extensión de tríceps en polea'),[]);
+  assert.deepEqual(inferSecondaryMuscles('quads','Extensión de cuádriceps'),[]);
+  assert.deepEqual(inferSecondaryMuscles('hamstrings','Curl femoral'),[]);
+  assert.deepEqual(inferSecondaryMuscles('calvesGastro','Elevación de talones'),[]);
+  assert.deepEqual(inferSecondaryMuscles('bicepsShort','Curl de bíceps'),[]);
+  assert.deepEqual(inferSecondaryMuscles('chestMid','Aperturas'),[]);
+  assert.deepEqual(inferSecondaryMuscles('chestMid','Press banca'),['tricepsLateral','tricepsMedial','shoulderAnterior']);
+});
+
+test('agrupa subdivisiones y calcula series directas e indirectas', () => {
+  const {muscleGroupId,muscleAssignments}=require('./engine.js');
+  assert.equal(muscleGroupId('chestUpper'),'chest');
+  assert.equal(muscleGroupId('chestMid'),'chest');
+  assert.deepEqual(muscleAssignments('chestMid',['tricepsLateral','tricepsMedial']),[
+    {id:'chestMid',factor:1},{id:'tricepsLateral',factor:0.5},{id:'tricepsMedial',factor:0.5}
+  ]);
+});
+
+test('compara días equivalentes y detecta tendencias sin semanas falsas', () => {
+  const {comparableWeekRange,compareWeeklyTrend}=require('./engine.js');
+  assert.deepEqual(comparableWeekRange('2026-10-31',1),{start:'2026-10-19',end:'2026-10-24'});
+  assert.equal(compareWeeklyTrend(5,[10,10]),'Carga a la baja');
+  assert.equal(compareWeeklyTrend(10,[10]),'Carga estable');
+  assert.equal(compareWeeklyTrend(10,[]),'Carga nueva');
+});
+
+test('calcula peso corporal ponderado por ejercicio', () => {
+  const {effectiveBodyweight}=require('./engine.js');
+  assert.equal(effectiveBodyweight(80,0,67),53.6);
+});
+
+test('CSV unilateral mantiene su estado y las tendencias agrupan músculos', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  assert.match(source,/unilateral:SobrecargaEngine\.isUnilateralEntry\(\{sets:sets\},exercise\)/);
+  assert.match(source,/var groupCounts=\{\}, groupDetails=\{\}/);
+  assert.match(source,/comparableWeekRange\(today,weekIndex\)/);
+  assert.match(source,/indirectLabel\*0\.5/);
 });

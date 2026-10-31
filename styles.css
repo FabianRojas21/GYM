@@ -259,6 +259,8 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .secondary-muscle-option{display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px;color:var(--text);font-size:13px;line-height:1.25}
 .secondary-muscle-option:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .weekly-muscle-row small{display:block;margin-top:3px;color:var(--muted);font-size:12px}
+.muscle-volume-detail{margin-top:6px;color:var(--muted);font-size:12px}.muscle-volume-detail summary{cursor:pointer}.muscle-volume-detail div{display:flex;justify-content:space-between;gap:8px;padding-top:5px}.muscle-volume-detail strong{font-size:12px}
+.warn-text{margin:6px 0 0;color:var(--warn);font-size:13px}
 @media (max-width:560px){.secondary-muscle-grid{grid-template-columns:1fr}}
 .latest-workout{display:flex;flex-direction:column;gap:14px;padding:14px;background:#101114;border:1px solid #25272C;border-radius:10px}
 .latest-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
