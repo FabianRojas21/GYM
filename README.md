@@ -36,9 +36,11 @@ editar la copia y guardarla como una nueva versión.
 En **Hoy**, el resumen semanal también muestra las series efectivas por grupo
 muscular. Asigna un músculo principal a cada ejercicio desde **Biblioteca →
 Ejercicios**; los registros anteriores quedan como «Sin asignar» hasta que lo
-clasifiques. Se cuentan solo las series normales completas, una vez por ronda
-en los ejercicios unilaterales; las aproximaciones y técnicas especiales no
-se incluyen en este conteo.
+clasifiques. Una serie de trabajo cuenta como efectiva si se hizo a 4 RIR o
+menos, o si no se registró el RIR; las aproximaciones no cuentan. En ejercicios
+unilaterales se cuenta una ronda cuando están completos ambos lados. Los
+secundarios aportan 0,5 serie estimada y las porciones de un mismo grupo no se
+duplican en el total.
 
 En las reglas del ejercicio o de cada elemento de una rutina puedes ajustar
 **Peso disponible cada (kg)**. La app redondea las recomendaciones de subida
@@ -68,6 +70,10 @@ Durante un entrenamiento puedes elegir el tipo de cada serie:
 Al evaluar una subida, la app considera solo las series normales requeridas
 por la configuración del ejercicio. Las series normales adicionales también
 se guardan, pero no bloquean la progresión ni cambian el objetivo.
+
+El volumen efectivo muscular puede incluir series normales, back-off, drop set
+y rest-pause cuando se realizan a 4 RIR o menos (o no se anotó el RIR). Esto es
+independiente de la progresión, que sigue considerando solo series normales.
 
 Los entrenamientos anteriores siguen siendo compatibles: las series que se
 guardaron como calentamiento se muestran como aproximaciones.
