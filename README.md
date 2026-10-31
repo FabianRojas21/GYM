@@ -27,6 +27,11 @@ al guardado en este navegador en vez de habilitar una sincronización que no est
 lista. Cuando vuelva la conexión, usa **Sincronizar ahora** en Ajustes; espera
 el aviso de confirmación antes de cerrar o recargar la app.
 
+Durante un entreno puedes copiar una serie ya completada a la siguiente serie
+vacía, avanzar entre campos con **Enter** y ver el estado de guardado debajo
+del título. En **Historial** puedes buscar por ejercicio, rutina o fecha y
+filtrar por periodo.
+
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
 del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes
 corregir el peso, las repeticiones, el esfuerzo y el tipo de las series. La

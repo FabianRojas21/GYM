@@ -311,3 +311,17 @@ test('no confirma la importación CSV antes de persistir y gestiona fallos de mi
   assert.match(source,/No se pudo borrar el entreno:/);
   assert.match(source,/throw error;\s*\}\);\s*\},\s*replaceAll:/);
 });
+
+test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
+  assert.match(app,/data-act="repeat-set"/);
+  assert.match(app,/function onWorkoutKeydown/);
+  assert.match(app,/closest\('section\.card\[data-ei\]'\)/);
+  assert.match(app,/id="draft-save-status"/);
+  assert.match(app,/data-history-search/);
+  assert.match(app,/data-history-range/);
+  assert.match(app,/Cómo se calcula el volumen y la fatiga/);
+  assert.ok(styles.includes('.workout-finish{position:sticky'));
+  assert.ok(styles.includes('padding-bottom:calc(124px'));
+});
