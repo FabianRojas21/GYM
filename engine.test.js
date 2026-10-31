@@ -330,6 +330,23 @@ test('CSV unilateral mantiene su estado y las tendencias agrupan músculos', () 
   assert.match(source,/indirectLabel\*0\.5/);
 });
 
+test('los objetivos personalizados permiten actualizar progreso y calculan el avance', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function goalProgress\(goal\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={S:{sessions:[]},personalRecords:()=>({}),exById:()=>null,iso:()=>''};
+  vm.runInNewContext(helper[0]+';globalThis.goalProgressForTest=goalProgress;',context);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.goalProgressForTest({type:'custom',current:25,target:100,start:0}))),
+    {current:25,percent:25}
+  );
+  assert.match(source,/data-act="goal-update"/);
+  assert.match(source,/currentGoal\.current=updatedGoalValue/);
+  assert.match(source,/data-goal-field="current"/);
+  assert.match(source,/Faltan '\+fmt\(remaining\)/);
+  assert.match(source,/goalType==='weekly'\?'entrenos\/7 días'/);
+});
+
 test('no confirma la importación CSV antes de persistir y gestiona fallos de migración y borrado', () => {
   const source=fs.readFileSync('./app.js','utf8');
   assert.match(source,/return Store\.saveProfileNow\(\)\.then\(persistSessions\)/);

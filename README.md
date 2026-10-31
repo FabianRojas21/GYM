@@ -22,6 +22,12 @@ reglas de progresión.
 La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
 con accesos a tus rutinas y a los ejercicios que puedes retomar.
 
+En **Yo → Resumen → Objetivos**, las metas de peso en un ejercicio, entrenos
+totales y entrenos de los últimos 7 días se actualizan con tus datos. Los
+objetivos personalizados requieren una unidad y permiten actualizar el
+progreso manualmente; cada tarjeta muestra cuánto falta o si ya alcanzaste la
+meta.
+
 Si Firebase no responde al iniciar, la app conserva los datos locales y cambia
 al guardado en este navegador en vez de habilitar una sincronización que no está
 lista. Cuando vuelva la conexión, usa **Sincronizar ahora** en Ajustes; espera

@@ -150,6 +150,15 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 
 /* goal block */
 .goal{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--surface-2);border-radius:4px}
+.goal-card{display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px}
+.goal-card .goal-row{justify-content:space-between}
+.goal-card .goal-row>strong{min-width:0;overflow-wrap:anywhere}
+.progress{height:10px;overflow:hidden;border-radius:999px;background:var(--line)}
+.progress>span{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .2s ease}
+.goal-complete{color:var(--go);font-weight:700}
+.goal-update{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.goal-update .field{flex:1 1 150px}
+.goal-form{display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--surface-2);border-radius:4px}
 .goal-more{border-top:1px solid var(--line);padding-top:7px}
 .goal-more summary,.workout-help summary,.volume-help summary{cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;list-style-position:inside}
 .goal-more[open],.workout-help[open],.volume-help[open]{display:flex;flex-direction:column;gap:7px}

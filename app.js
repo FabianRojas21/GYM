@@ -2247,12 +2247,26 @@ function goalProgress(goal){
 function goalsHtml(){
   var goals=Object.keys(S.profile.goals||{}).map(function(id){ return S.profile.goals[id]; });
   var cards=goals.map(function(goal){
-    var progress=goalProgress(goal); var unit=goal.unit||'';
-    return '<div class="goal-card"><div class="goal-row"><strong>'+esc(goal.name)+'</strong><button class="mini" data-act="goal-delete" data-id="'+esc(goal.id)+'" aria-label="Eliminar objetivo">×</button></div><div class="goal-row"><span class="small muted">'+fmt(progress.current)+' '+esc(unit)+' de '+fmt(goal.target)+' '+esc(unit)+' · '+progress.percent+'%</span></div><div class="progress" role="progressbar" aria-label="Progreso de '+esc(goal.name)+'" aria-valuenow="'+progress.percent+'" aria-valuemin="0" aria-valuemax="100"><span style="width:'+progress.percent+'%"></span></div></div>';
+    var progress=goalProgress(goal), unit=goal.unit||'', complete=progress.current>=Number(goal.target);
+    var remaining=Math.max(0,Number(goal.target)-progress.current);
+    return '<div class="goal-card"><div class="goal-row"><strong>'+esc(goal.name)+'</strong><button class="mini" data-act="goal-delete" data-id="'+esc(goal.id)+'" aria-label="Eliminar objetivo">×</button></div>' +
+      '<div class="goal-row"><span class="small muted">'+fmt(progress.current)+(unit?' '+esc(unit):'')+' de '+fmt(goal.target)+(unit?' '+esc(unit):'')+' · '+progress.percent+'%</span></div>' +
+      '<div class="progress" role="progressbar" aria-label="Progreso de '+esc(goal.name)+'" aria-valuenow="'+progress.percent+'" aria-valuemin="0" aria-valuemax="100"><span style="width:'+progress.percent+'%"></span></div>' +
+      '<p class="small '+(complete?'goal-complete':'muted')+'">'+(complete?'Meta alcanzada':'Faltan '+fmt(remaining)+(unit?' '+esc(unit):'')+' para alcanzar la meta')+'</p>' +
+      (goal.type==='custom' ? '<div class="goal-update"><label class="field"><span class="lab">Progreso actual'+(unit?' · '+esc(unit):'')+'</span><input class="txt" inputmode="decimal" data-goal-current="'+esc(goal.id)+'" value="'+esc(String(progress.current).replace('.',','))+'"></label><button class="btn ghost sm" data-act="goal-update" data-id="'+esc(goal.id)+'">Actualizar progreso</button></div>' : '') +
+      '</div>';
   }).join('');
   var exerciseOptions=Object.keys(S.profile.exercises).map(function(id){var ex=S.profile.exercises[id]; return '<option value="'+esc(id)+'">'+esc(ex.name)+'</option>';}).join('');
-  var form=S.goalNew ? '<div class="goal-form"><div class="fields"><div class="field"><label class="lab" for="goal-name">Nombre</label><input id="goal-name" class="txt" maxlength="60" placeholder="Ej. Alcanzar 80 kg en press banca"></div><div class="field"><label class="lab" for="goal-type">Tipo</label><select id="goal-type" class="txt"><option value="exercise-weight">Peso máximo en ejercicio</option><option value="sessions">Entrenos totales</option><option value="weekly">Entrenos en la última semana</option><option value="custom">Objetivo personalizado</option></select></div><div class="field"><label class="lab" for="goal-target">Meta</label><input id="goal-target" class="txt" inputmode="decimal"></div><div class="field"><label class="lab" for="goal-exercise">Ejercicio</label><select id="goal-exercise" class="txt"><option value="">Seleccionar ejercicio</option>'+exerciseOptions+'</select></div><div class="field"><label class="lab" for="goal-unit">Unidad</label><input id="goal-unit" class="txt" placeholder="kg, entrenos..."></div></div><div class="row"><button class="btn sm" data-act="goal-save">Guardar objetivo</button><button class="btn ghost sm" data-act="goal-cancel">Cancelar</button></div></div>' : '';
+  var form=S.goalNew ? '<div class="goal-form"><div class="fields"><div class="field"><label class="lab" for="goal-name">Nombre</label><input id="goal-name" class="txt" maxlength="60" placeholder="Ej. Alcanzar 80 kg en press banca"></div><div class="field"><label class="lab" for="goal-type">Tipo</label><select id="goal-type" class="txt"><option value="exercise-weight">Peso máximo en ejercicio</option><option value="sessions">Entrenos totales</option><option value="weekly">Entrenos en la última semana</option><option value="custom">Objetivo personalizado</option></select></div><div class="field"><label class="lab" for="goal-target">Meta</label><input id="goal-target" class="txt" inputmode="decimal"></div><div class="field" data-goal-field="exercise"><label class="lab" for="goal-exercise">Ejercicio</label><select id="goal-exercise" class="txt"><option value="">Seleccionar ejercicio</option>'+exerciseOptions+'</select></div><div class="field" data-goal-field="unit" hidden><label class="lab" for="goal-unit">Unidad</label><input id="goal-unit" class="txt" placeholder="Ej. cm, kg o minutos"></div><div class="field" data-goal-field="current" hidden><label class="lab" for="goal-current">Progreso actual</label><input id="goal-current" class="txt" inputmode="decimal" value="0"></div></div><div class="row"><button class="btn sm" data-act="goal-save">Guardar objetivo</button><button class="btn ghost sm" data-act="goal-cancel">Cancelar</button></div></div>' : '';
   return '<section class="card"><p class="sec-title">Objetivos</p>'+ (cards||'<p class="small muted">Todavía no tienes objetivos.</p>') + form + (S.goalNew?'':'<button class="btn ghost sm" data-act="goal-new">Añadir objetivo</button>')+'</section>';
+}
+function updateGoalFormFields(){
+  var type=$('#goal-type'); if(!type) return;
+  var exerciseField=$('[data-goal-field="exercise"]'), unitField=$('[data-goal-field="unit"]'), currentField=$('[data-goal-field="current"]');
+  var exercise=type.value==='exercise-weight', custom=type.value==='custom';
+  if(exerciseField) exerciseField.hidden=!exercise;
+  if(unitField) unitField.hidden=!custom;
+  if(currentField) currentField.hidden=!custom;
 }
 function profileNav(){
   return '<div class="seg profile-nav" role="tablist" aria-label="Secciones de tu perfil">'+
@@ -2978,10 +2992,21 @@ function onClick(ev){
       var goalName=$('#goal-name')&&$('#goal-name').value.trim(), goalTarget=$('#goal-target')?num($('#goal-target').value):null;
       if(!goalName || !(goalTarget>0)){ toast('Completa el nombre y una meta válida'); break; }
       var goalType=$('#goal-type').value, exerciseId=$('#goal-exercise')?$('#goal-exercise').value:'';
+      if(!['exercise-weight','sessions','weekly','custom'].includes(goalType)){ toast('Elige un tipo de objetivo válido'); break; }
       if(goalType==='exercise-weight' && !exerciseId){ toast('Selecciona un ejercicio para este objetivo'); break; }
-      var records=exerciseId && personalRecords(exById(exerciseId)||{});
-      var goal={id:uid('goal'),name:goalName,type:goalType,target:goalTarget,start:records&&records.weight?Number(records.weight.value):0,current:0,unit:$('#goal-unit').value.trim(),exerciseId:exerciseId||null};
+      var goalUnit=goalType==='exercise-weight'?'kg':(goalType==='sessions'?'entrenos':(goalType==='weekly'?'entrenos/7 días':($('#goal-unit').value.trim())));
+      if(goalType==='custom' && !goalUnit){ toast('Indica la unidad de tu objetivo personalizado'); break; }
+      var currentGoalValue=goalType==='custom'?num($('#goal-current').value):0;
+      if(goalType==='custom' && (currentGoalValue===null || currentGoalValue<0)){ toast('Indica un progreso actual válido (0 o más)'); break; }
+      var records=goalType==='exercise-weight' && personalRecords(exById(exerciseId)||{});
+      var goal={id:uid('goal'),name:goalName,type:goalType,target:goalTarget,start:records&&records.weight?Number(records.weight.value):0,current:currentGoalValue===null?0:currentGoalValue,unit:goalUnit,exerciseId:goalType==='exercise-weight'?exerciseId:null};
       S.profile.goals=S.profile.goals||{}; S.profile.goals[goal.id]=goal; S.goalNew=false; Store.saveProfile(); render(); toast('Objetivo añadido'); break;
+    case 'goal-update':
+      var currentGoal=S.profile.goals[t.dataset.id], currentGoalInput=$('[data-goal-current="'+t.dataset.id+'"]');
+      var updatedGoalValue=currentGoalInput?num(currentGoalInput.value):null;
+      if(!currentGoal || currentGoal.type!=='custom') break;
+      if(updatedGoalValue===null || updatedGoalValue<0){ toast('Indica un progreso actual válido (0 o más)'); break; }
+      currentGoal.current=updatedGoalValue; Store.saveProfile(); render(); toast('Progreso del objetivo actualizado'); break;
     case 'goal-delete': delete S.profile.goals[t.dataset.id]; Store.saveProfile(); render(); toast('Objetivo eliminado'); break;
     case 'demo-load': loadDemo(); break;
     case 'demo-clear': clearDemo(); break;
@@ -3079,6 +3104,7 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.id==='goal-type'){ updateGoalFormFields(); return; }
   if(t.dataset.historyRange!==undefined){
     if(['all','7','30'].includes(t.value)){ S.historyRange=t.value; refreshHistoryResults(); }
     return;
