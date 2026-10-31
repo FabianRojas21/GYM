@@ -239,3 +239,11 @@ Las reglas restringen cada documento bajo `/users/{uid}` al usuario autenticado
 con ese UID. Firebase Hosting no es obligatorio; GitHub Pages puede usar los
 SDK web compatibles con la app estática. La configuración Firebase es pública;
 no se deben incluir claves privadas ni credenciales de cuenta de servicio.
+
+En un dispositivo nuevo, espera a que la cuenta termine de cargar el perfil,
+los entrenamientos y el entreno en curso antes de sincronizar. Si la nube no
+pudo cargarse, **Reintentar conexión** vuelve a comprobar la cuenta y no sube
+el estado local mientras no se verifique. Al restaurar un respaldo, los datos
+se combinan: no se eliminan entrenamientos existentes y, si un ID ya existe,
+se conserva la versión actual. Los elementos de perfil nuevos se agregan sin
+reemplazar los que ya existen.

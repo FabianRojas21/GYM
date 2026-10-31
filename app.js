@@ -94,6 +94,38 @@ function normProfile(p){
   d.measurements = Array.isArray(p.measurements) ? p.measurements.filter(function(m){ return isObject(m) && typeof m.id === 'string'; }).map(function(m){ return {id:m.id, date:typeof m.date === 'string' ? m.date : iso(new Date()), values:isObject(m.values) ? clone(m.values) : {}, notes:typeof m.notes === 'string' ? m.notes : ''}; }) : [];
   return d;
 }
+function mergeBackupData(currentProfile,currentSessions,backupProfile,backupSessions){
+  var profileHasData=['exercises','routines','programs','goals'].some(function(key){
+    return Object.keys(currentProfile[key] || {}).length>0;
+  }) || (currentProfile.measurements || []).length>0;
+  var mergedProfile=profileHasData ? clone(currentProfile) : clone(backupProfile);
+  if(profileHasData){
+    ['exercises','routines','programs','goals'].forEach(function(key){
+      mergedProfile[key]=mergedProfile[key] || {};
+      Object.keys(backupProfile[key] || {}).forEach(function(id){
+        if(!Object.prototype.hasOwnProperty.call(mergedProfile[key],id)) mergedProfile[key][id]=clone(backupProfile[key][id]);
+      });
+    });
+    var measurementIds={}, measurements=clone(currentProfile.measurements || []);
+    measurements.forEach(function(measurement){ measurementIds[measurement.id]=true; });
+    (backupProfile.measurements || []).forEach(function(measurement){
+      if(!measurementIds[measurement.id]){
+        measurementIds[measurement.id]=true;
+        measurements.push(clone(measurement));
+      }
+    });
+    mergedProfile.measurements=measurements;
+  }
+  var mergedSessions=clone(currentSessions), sessionIds={};
+  mergedSessions.forEach(function(session){ sessionIds[session.id]=true; });
+  (backupSessions || []).forEach(function(session){
+    if(!sessionIds[session.id]){
+      sessionIds[session.id]=true;
+      mergedSessions.push(clone(session));
+    }
+  });
+  return {profile:mergedProfile,sessions:mergedSessions};
+}
 function exerciseLoadStep(ex){ return Number(ex.loadStep) > 0 ? Number(ex.loadStep) : (Number(ex.inc) > 0 ? Number(ex.inc) : 2.5); }
 function muscleId(ex){
   var id=LEGACY_MUSCLE_IDS[ex.muscle] || ex.muscle;
@@ -440,8 +472,8 @@ var Store = {
     }
     migration.then(function(){
       if(generation!==Store.cloudGeneration) return;
-      var gotProfile=false, gotSessions=false;
-      var done=function(){ if(gotProfile && gotSessions){ S.ready=true; createAutoBackup(); render(); } };
+      var gotProfile=false, gotSessions=false, gotDraft=false;
+      var done=function(){ if(gotProfile && gotSessions && gotDraft){ S.ready=true; createAutoBackup(); render(); } };
       cloudUnsubs.push(Store.ref.onSnapshot(function(snap){
         if(generation!==Store.cloudGeneration) return;
         if(!(profDirty || profBusy)){
@@ -449,7 +481,7 @@ var Store = {
           else S.profile=defaultProfile();
         }
         gotProfile=true; done();
-        if(gotProfile && gotSessions){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+        if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
       }, function(error){
         if(generation!==Store.cloudGeneration) return;
         console.warn('No se pudo descargar el perfil de Firebase',error);
@@ -460,7 +492,7 @@ var Store = {
         if(generation!==Store.cloudGeneration) return;
         S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
         gotSessions=true; done();
-        if(gotProfile && gotSessions){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+        if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
       }, function(error){
         if(generation!==Store.cloudGeneration) return;
         console.warn('No se pudieron descargar los entrenos de Firebase',error);
@@ -482,7 +514,13 @@ var Store = {
         }else if(S.draft.entries.length || S.draft.startedAt){
           saveDraft(false);
         }
-      }).catch(function(error){ if(generation===Store.cloudGeneration) console.warn('No se pudo sincronizar el borrador',error); });
+        gotDraft=true; done();
+        if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+      }).catch(function(error){
+        if(generation!==Store.cloudGeneration) return;
+        console.warn('No se pudo descargar el entreno en curso de Firebase',error);
+        Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudo comprobar el entreno en curso de la cuenta. Se conservaron los datos locales y no se sincronizarán hasta verificar la nube.');
+      });
     }).catch(function(error){
       if(generation!==Store.cloudGeneration) return;
       console.warn('Migración local a Firebase fallida',error);
@@ -516,19 +554,19 @@ var Store = {
   },
   syncToCloud:function(){
     if(!Store.firebaseUser || !Store.ref || !Store.col) return Promise.reject(new Error('No hay una cuenta de Firebase disponible'));
-    var user=Store.firebaseUser, fallback=S.syncUnavailable;
+    if(!S.ready || S.syncUnavailable || S.kind!=='cloud'){
+      return Promise.reject(new Error('La cuenta no terminó de cargar. Vuelve a conectar antes de sincronizar; no se subieron datos para proteger los que ya están en la nube.'));
+    }
+    var user=Store.firebaseUser;
     var profileWrite=withTimeout(
-      fallback ? Store.ref.set(clone(S.profile)) : Store.saveProfileNow(),
+      Store.saveProfileNow(),
       15000,
       'Firebase no respondió al guardar el perfil. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
     );
     var sessionsWrite=S.sessions.reduce(function(queue,session){
       return queue.then(function(){
-        var write=fallback
-          ? Store.col.doc(session.id).set(clone(stampSession(session)))
-          : Store.saveSession(session);
         return withTimeout(
-          write,
+          Store.saveSession(session),
           15000,
           'Firebase no respondió al guardar tus entrenamientos. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
         );
@@ -541,9 +579,7 @@ var Store = {
       15000,
       'Firebase no respondió al guardar el entreno en curso. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
     );
-    return Promise.all([profileWrite,sessionsWrite,draftWrite]).then(function(){
-      if(fallback) Store.startFirebase(user);
-    });
+    return Promise.all([profileWrite,sessionsWrite,draftWrite]);
   },
   startDb:function(db, id){
     S.kind = 'db';
@@ -872,15 +908,19 @@ function downloadBackup(){
 }
 function restoreBackup(){
   if(!S.pendingImport) return;
+  if(S.cloudUser && S.kind==='cloud' && !S.ready){
+    toast('Espera a que termine de cargar la cuenta antes de restaurar el respaldo');
+    return;
+  }
   var data = S.pendingImport;
-  var pending = Store.replaceAll(normProfile(data.profile), data.sessions);
-  S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd();
+  var merged=mergeBackupData(S.profile,S.sessions,normProfile(data.profile),data.sessions);
+  var pending = Store.replaceAll(merged.profile, merged.sessions);
   S.pendingImport = null; S.confirm = null; S.justSaved = null;
-  render(); toast('Respaldo restaurado en este navegador');
+  render(); toast('Respaldo combinado; se conservaron los datos existentes');
   pending.then(function(){
-    if(['db','cloud'].includes(S.kind)) toast('Respaldo sincronizado con tu cuenta');
+    if(['db','cloud'].includes(S.kind)) toast('Respaldo combinado con tu cuenta');
   }).catch(function(error){
-    toast('Respaldo restaurado aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
+    toast('Respaldo combinado aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
   });
 }
 function csvCell(value){
@@ -2300,7 +2340,7 @@ function viewSet(){
   var accountHtml='';
   if(Store.firebaseAuth){
     accountHtml=S.cloudUser
-      ? '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Conectado como <strong>'+esc(S.cloudUser.email || S.cloudUser.displayName || 'usuario')+'</strong>.'+(S.syncUnavailable?' La nube no está disponible; los cambios se guardan en este navegador hasta que sincronices.':' Tus datos se sincronizan en todos tus dispositivos.')+'</p><div class="row"><span class="chip '+(S.syncUnavailable?'warn':'ok')+'">'+(S.syncUnavailable?'Guardado local':'Sincronización activa')+'</span><button class="btn ghost sm" data-act="cloud-sync"'+(S.cloudSyncing?' disabled':'')+'>'+(S.cloudSyncing?'Sincronizando…':'Sincronizar ahora')+'</button><button class="btn ghost sm" data-act="cloud-signout">Cerrar sesión</button></div></section>'
+      ? '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Conectado como <strong>'+esc(S.cloudUser.email || S.cloudUser.displayName || 'usuario')+'</strong>.'+(S.syncUnavailable?' La cuenta no terminó de cargar; los datos locales no se subirán hasta verificar primero los datos de la nube.':' Tus datos se sincronizan en todos tus dispositivos.')+'</p><div class="row"><span class="chip '+(S.syncUnavailable?'warn':'ok')+'">'+(S.syncUnavailable?'Guardado local':'Sincronización activa')+'</span><button class="btn ghost sm" data-act="cloud-sync"'+(S.cloudSyncing?' disabled':'')+'>'+(S.cloudSyncing?'Sincronizando…':S.syncUnavailable?'Reintentar conexión':'Sincronizar ahora')+'</button><button class="btn ghost sm" data-act="cloud-signout">Cerrar sesión</button></div></section>'
       : '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Inicia sesión con Google para mantener tus datos en varios dispositivos y recuperarlos si cambias de navegador.</p><div class="row"><button class="btn sm" data-act="cloud-signin">Continuar con Google</button></div></section>';
   }
   out += accountHtml;
@@ -2313,7 +2353,7 @@ function viewSet(){
     (hasDemo ? '<button class="btn ghost sm" data-act="demo-clear">Quitar datos de ejemplo</button>' : '<button class="btn ghost sm" data-act="demo-load">Cargar datos de ejemplo</button>') +
     (S.confirm === 'wipe' ? '<button class="btn danger sm" data-act="wipe-ok">Confirmar: borrar todo</button>' : '<button class="btn danger sm" data-act="wipe">Borrar todo</button>') +
     '</div><input id="backup-file" type="file" accept="application/json,.json" hidden><input id="csv-file" type="file" accept="text/csv,.csv" hidden><input id="routine-file" type="file" accept="application/json,.json" hidden>' +
-    (S.pendingImport ? '<div class="restore-confirm"><p class="small">El respaldo contiene ' + Object.keys(S.pendingImport.profile.exercises).length + ' ejercicios, ' + Object.keys(S.pendingImport.profile.routines).length + ' rutinas y ' + S.pendingImport.sessions.length + ' entrenos. Restaurarlo reemplazará los datos actuales.</p><div class="row"><button class="btn danger sm" data-act="import-confirm">Confirmar restauración</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>' : '') +
+    (S.pendingImport ? '<div class="restore-confirm"><p class="small">El respaldo contiene ' + Object.keys(S.pendingImport.profile.exercises).length + ' ejercicios, ' + Object.keys(S.pendingImport.profile.routines).length + ' rutinas y ' + S.pendingImport.sessions.length + ' entrenos. Se combinará con los datos actuales: no se borrarán entrenos existentes y, si un ID ya existe, se conservará la versión actual.</p><div class="row"><button class="btn sm" data-act="import-confirm">Combinar respaldo</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>' : '') +
     '</section>';
   return out;
 }
@@ -2621,6 +2661,13 @@ function onClick(ev){
       break;
     case 'cloud-sync':
       if(S.cloudSyncing) break;
+      if(!S.ready || S.syncUnavailable || S.kind!=='cloud'){
+        if(Store.firebaseUser){
+          Store.startFirebase(Store.firebaseUser);
+          toast('Comprobando primero los datos de tu cuenta; no se subieron datos locales.');
+        }else toast('Inicia sesión y espera a que se carguen los datos antes de sincronizar.');
+        break;
+      }
       S.cloudSyncing=true; render();
       Promise.resolve().then(function(){ return Store.syncToCloud(); }).then(function(){
         S.cloudSyncing=false;
@@ -3308,11 +3355,19 @@ function restoreAutoBackup(){
     var backup=JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY));
     var data=SobrecargaBackup.migrateBackup({format:'sobrecarga-backup',version:1,profile:backup&&backup.profile,sessions:backup&&backup.sessions});
     if(!backup || !data || !validBackup(data)) throw new Error('invalid');
-    Store.replaceAll(normProfile(data.profile),data.sessions).then(function(){
-      S.sessions=data.sessions; S.profile=normProfile(data.profile);
-      if(backup.draft && Array.isArray(backup.draft.entries)) { S.draft=Object.assign(blankDraft(),backup.draft); saveDraft(); }
-      render(); toast('Copia automática restaurada');
-    }).catch(function(){ toast('No se pudo restaurar la copia automática'); });
+    if(S.cloudUser && S.kind==='cloud' && !S.ready){
+      toast('Espera a que termine de cargar la cuenta antes de restaurar la copia');
+      return;
+    }
+    var merged=mergeBackupData(S.profile,S.sessions,normProfile(data.profile),data.sessions);
+    Store.replaceAll(merged.profile,merged.sessions).then(function(){
+      if(!S.cloudUser && !S.draft.entries.length && !S.draft.startedAt && backup.draft && Array.isArray(backup.draft.entries)) {
+        S.draft=Object.assign(blankDraft(),backup.draft); saveDraft();
+      }
+      render(); toast('Copia automática combinada; se conservaron los datos existentes');
+    }).catch(function(error){
+      toast('Copia automática combinada aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
+    });
   } catch(e){ toast('No hay una copia automática válida'); }
 }
 function anomalyWarnings(){

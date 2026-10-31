@@ -344,6 +344,55 @@ test('no confirma la importación CSV antes de persistir y gestiona fallos de mi
   assert.match(source,/throw error;\s*\}\);\s*\},\s*replaceAll:/);
 });
 
+test('restaurar un respaldo combina datos y conserva los actuales ante IDs duplicados', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function mergeBackupData\([\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={clone:value=>JSON.parse(JSON.stringify(value))};
+  vm.runInNewContext(helper[0]+';globalThis.mergeBackupDataForTest=mergeBackupData;',context);
+  const currentProfile={
+    settings:{mode:'rpe'},
+    exercises:{same:{name:'Ejercicio actual'}},
+    routines:{current:{name:'Rutina actual'}},
+    programs:{},goals:{},
+    measurements:[{id:'current',values:{weight:80}},{id:'shared',values:{weight:81}}]
+  };
+  const backupProfile={
+    settings:{mode:'rir'},
+    exercises:{same:{name:'Ejercicio del respaldo'},added:{name:'Ejercicio nuevo'}},
+    routines:{current:{name:'Rutina antigua'},added:{name:'Rutina nueva'}},
+    programs:{added:{name:'Programa nuevo'}},goals:{},
+    measurements:[{id:'shared',values:{weight:70}},{id:'backup',values:{weight:79}}]
+  };
+  const currentSessions=[{id:'same',notes:'nube'},{id:'keep',notes:'actual'}];
+  const backupSessions=[{id:'same',notes:'respaldo antiguo'},{id:'new',notes:'respaldo nuevo'}];
+  const merged=context.mergeBackupDataForTest(currentProfile,currentSessions,backupProfile,backupSessions);
+  assert.equal(merged.profile.settings.mode,'rpe');
+  assert.equal(merged.profile.exercises.same.name,'Ejercicio actual');
+  assert.equal(merged.profile.exercises.added.name,'Ejercicio nuevo');
+  assert.equal(merged.profile.routines.current.name,'Rutina actual');
+  assert.equal(merged.profile.routines.added.name,'Rutina nueva');
+  assert.deepEqual(Array.from(merged.profile.measurements,m=>m.id),['current','shared','backup']);
+  assert.deepEqual(Array.from(merged.sessions,m=>m.id),['same','keep','new']);
+  assert.equal(merged.sessions[0].notes,'nube');
+  const fresh=context.mergeBackupDataForTest(
+    {settings:{mode:'rir'},exercises:{},routines:{},programs:{},goals:{},measurements:[]},
+    [],
+    backupProfile,
+    backupSessions
+  );
+  assert.equal(fresh.profile.exercises.added.name,'Ejercicio nuevo');
+  assert.deepEqual(Array.from(fresh.sessions,m=>m.id),['same','new']);
+  assert.match(source,/function restoreBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
+  assert.match(source,/function restoreAutoBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
+  assert.match(source,/Cuenta y sincronización[\s\S]*?Reintentar conexión/);
+  assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!==?'cloud'\)\{[\s\S]*?no se subieron datos/);
+  assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!=='cloud'\)\{\s*return Promise\.reject/);
+  assert.match(source,/gotProfile && gotSessions && gotDraft/);
+  assert.match(source,/No se pudo comprobar el entreno en curso de la cuenta/);
+  assert.doesNotMatch(source.match(/function restoreBackup\(\)[\s\S]*?\n\}/)[0],/blankDraft\(\)/);
+});
+
 test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
