@@ -327,6 +327,14 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.doesNotMatch(inputHandler[1],/delete row\.restTriggered/);
   assert.match(app,/case 'undo-finish-set':[\s\S]*?cancelRestForRow\(undoRow\)/);
   assert.match(app,/localStorage\.setItem\(RTOK, S\.restOwner\)/);
+  assert.match(app,/restOwner=S\.restOwner \|\| null/);
+  assert.match(app,/remoteDraft\.restOwner==='string'/);
+  assert.match(app,/function restoreRestAfterUndo\(rows, state\)/);
+  assert.match(app,/restoreRestAfterUndo\(removedEntry\.rows, removedEntryRestState\)/);
+  assert.match(app,/restoreRestAfterUndo\(\[removedRow\], removedSetRestState\)/);
+  assert.match(app,/collapsedEntryIds:\[\]/);
+  assert.match(app,/S\.draft\.collapsedEntryIds=Array\.from\(S\.collapsedEntries\)/);
+  assert.match(app,/function syncCollapsedEntries\(\)/);
   assert.doesNotMatch(app,/toast\('Serie terminada · descanso iniciado'\)/);
   assert.match(app,/function onWorkoutKeydown/);
   assert.match(app,/closest\('section\.card\[data-ei\]'\)/);

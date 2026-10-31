@@ -118,9 +118,17 @@ function effectiveWeight(ex, set, date){
 function effectiveSetsFor(ex, sets, date){
   return sets.map(function(set){ var copy=clone(set); copy.w=effectiveWeight(ex,set,date); return copy; });
 }
-function blankDraft(){ return {date:null, startedAt:null, routineId:null, entries:[]}; }
+function blankDraft(){ return {date:null, startedAt:null, routineId:null, entries:[], collapsedEntryIds:[]}; }
+function normalizeDraft(value){
+  var draft=Object.assign(blankDraft(), value);
+  draft.entries.forEach(function(entry){ if(!entry.uiId) entry.uiId=uid('entry_'); });
+  draft.collapsedEntryIds=Array.isArray(draft.collapsedEntryIds)
+    ? draft.collapsedEntryIds.filter(function(id){ return typeof id==='string'; })
+    : [];
+  return draft;
+}
 function loadDraft(){
-  try { var d = JSON.parse(localStorage.getItem(DK)); if(d && Array.isArray(d.entries)) return Object.assign(blankDraft(), d); } catch(e){}
+  try { var d = JSON.parse(localStorage.getItem(DK)); if(d && Array.isArray(d.entries)) return normalizeDraft(d); } catch(e){}
   return blankDraft();
 }
 function loadRestEnd(){
@@ -140,6 +148,7 @@ var S = {
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(),
   restEndsAt:loadRestEnd(), restOwner:loadRestOwner(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:''
 };
+S.collapsedEntries=new Set(S.draft.collapsedEntryIds || []);
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
 function refreshDraftSaveStatus(){
@@ -157,7 +166,7 @@ function saveDraft(syncCloud){
       S.draftSaveState='saving'; refreshDraftSaveStatus();
       clearTimeout(cloudDraftTimer);
       cloudDraftTimer=setTimeout(function(){
-        var payload=clone(S.draft); payload.updatedAt=Date.now(); payload.restEndsAt=S.restEndsAt || null;
+        var payload=clone(S.draft); payload.updatedAt=Date.now(); payload.restEndsAt=S.restEndsAt || null; payload.restOwner=S.restOwner || null;
         Store.firebaseDb.collection('users').doc(Store.firebaseUser.uid).collection('app').doc('draft').set(payload).then(function(){
           S.draftSaveState='synced'; refreshDraftSaveStatus();
         }).catch(function(error){
@@ -189,7 +198,7 @@ function updateWorkoutClock(){
   var el = $('#workout-clock');
   if(el && S.draft.startedAt) el.textContent = formatDuration(Date.now() - S.draft.startedAt);
 }
-function saveRestEnd(){
+function saveRestEnd(syncCloud){
   try {
     if(S.restEndsAt){
       localStorage.setItem(RTK, String(S.restEndsAt));
@@ -200,7 +209,7 @@ function saveRestEnd(){
       localStorage.removeItem(RTK);
       localStorage.removeItem(RTOK);
     }
-    if(['cloud'].includes(S.kind)) saveDraft();
+    if(['cloud'].includes(S.kind) && syncCloud !== false) saveDraft();
   } catch(e){ toast('No se pudo guardar el temporizador'); }
 }
 function startRest(seconds, owner){
@@ -215,6 +224,31 @@ function cancelRestForRow(row){
     S.restOwner=null;
     saveRestEnd();
   }
+}
+function restStateForRows(rows){
+  if(!S.restEndsAt || !S.restOwner || !rows.some(function(row){ return row && row.restToken===S.restOwner && row.restTriggered; })) return null;
+  return {endsAt:S.restEndsAt, owner:S.restOwner};
+}
+function restoreRestAfterUndo(rows, state){
+  if(!state || state.endsAt<=Date.now() || (S.restEndsAt && S.restEndsAt>Date.now())) return;
+  if(!rows.some(function(row){ return row && row.restToken===state.owner && row.restTriggered; })) return;
+  S.restEndsAt=state.endsAt;
+  S.restOwner=state.owner;
+  saveRestEnd();
+}
+function syncCollapsedEntries(){
+  var activeIds={};
+  var changed=false;
+  S.draft.entries.forEach(function(entry){
+    if(!entry.uiId){ entry.uiId=uid('entry_'); changed=true; }
+    activeIds[entry.uiId]=true;
+  });
+  var collapsed=(Array.isArray(S.draft.collapsedEntryIds) ? S.draft.collapsedEntryIds : [])
+    .filter(function(id){ return activeIds[id]; });
+  if(collapsed.length !== (S.draft.collapsedEntryIds || []).length) changed=true;
+  S.draft.collapsedEntryIds=collapsed;
+  S.collapsedEntries=new Set(collapsed);
+  if(changed) saveDraft();
 }
 function restTimerHtml(){
   if(!S.draft.entries.length) return '';
@@ -416,10 +450,13 @@ var Store = {
       root.collection('app').doc('draft').get().then(function(snap){
         if(generation!==Store.cloudGeneration) return;
         if(snap.exists && snap.data() && Array.isArray(snap.data().entries)){
-          var remoteDraft=Object.assign(blankDraft(), snap.data());
+          var remoteDraft=normalizeDraft(snap.data());
           if(!S.draft.entries.length || remoteDraft.updatedAt >= (S.draft.updatedAt||0)){
             S.draft=remoteDraft;
-            if(remoteDraft.restEndsAt) S.restEndsAt=remoteDraft.restEndsAt;
+            var remoteRestEnd=Number(remoteDraft.restEndsAt);
+            S.restEndsAt=isFinite(remoteRestEnd) && remoteRestEnd>Date.now() ? remoteRestEnd : null;
+            S.restOwner=S.restEndsAt && typeof remoteDraft.restOwner==='string' ? remoteDraft.restOwner : null;
+            saveRestEnd(false);
             saveDraft(false);
           }
         }else if(S.draft.entries.length || S.draft.startedAt){
@@ -1133,7 +1170,7 @@ function addEntry(exId){
   syncAutoWarmupWeights({rows:rows}, ex);
   if(!S.draft.date) S.draft.date = iso(new Date());
   if(!S.draft.startedAt) S.draft.startedAt = Date.now();
-  S.draft.entries.push({exId:exId, rows:rows});
+  S.draft.entries.push({uiId:uid('entry_'), exId:exId, rows:rows});
   saveDraft();
 }
 function effDisplay(row){
@@ -1224,7 +1261,7 @@ function entryHtml(en, ei){
   var p = planFor(ex);
   var targetSets = Math.max(1, Number(ex.sets) || 1);
   var completedSets = completedWorkSets(en, ex);
-  var collapsed = S.collapsedEntries.has(en);
+  var collapsed = S.collapsedEntries.has(en.uiId);
   var workIndex = 0;
   var rows = en.rows.map(function(r, ri){
     ensureRowMode(r, ex.unilateral);
@@ -2261,6 +2298,7 @@ function render(){
   var y = window.scrollY;
   var views = {hoy:viewHoy, rutinas:viewRut, ejercicios:viewRut, historial:viewHist, yo:viewProfile, ajustes:viewSet};
   try {
+    syncCollapsedEntries();
     $('#view').innerHTML = S.ready ? (views[S.tab] || viewHoy)() : loadingView();
   } catch(error){
     console.error('Error al mostrar la interfaz', error);
@@ -2330,10 +2368,12 @@ function startRoutine(id){
     }
     for(var i=0;i<cfg.sets;i++) rows.push(plannedRow(p, cfg.unilateral, p.nextW));
     syncAutoWarmupWeights({rows:rows}, Object.assign({}, exById(it.exId), cfg));
-    entries.push({exId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
+    entries.push({uiId:uid('entry_'), exId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
   });
   if(!entries.length){ toast(skipped ? 'La rutina solo tiene ejercicios archivados' : 'La rutina no tiene ejercicios'); return; }
-  S.draft = {date:iso(new Date()), startedAt:Date.now(), routineId:id, entries:entries}; saveDraft();
+  S.draft = {date:iso(new Date()), startedAt:Date.now(), routineId:id, entries:entries, collapsedEntryIds:[]};
+  S.collapsedEntries.clear();
+  saveDraft();
   S.restEndsAt = null; saveRestEnd();
   S.confirm = null; S.picker = false; S.justSaved = null; S.tab = 'hoy'; render(); window.scrollTo(0, 0);
   if(skipped) toast('Se omitieron los ejercicios archivados de la rutina');
@@ -2537,17 +2577,26 @@ function onClick(ev){
     case 'toggle-entry':
       var toggledEntry = S.draft.entries[ei];
       if(!toggledEntry) break;
-      if(S.collapsedEntries.has(toggledEntry)) S.collapsedEntries.delete(toggledEntry);
-      else S.collapsedEntries.add(toggledEntry);
+      if(S.collapsedEntries.has(toggledEntry.uiId)) S.collapsedEntries.delete(toggledEntry.uiId);
+      else S.collapsedEntries.add(toggledEntry.uiId);
+      S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
+      saveDraft();
       render(); break;
     case 'rm-ex':
       var removedEntry = S.draft.entries[ei], entryIndex = ei, draftAtRemoval = S.draft;
       if(!removedEntry) break;
+      var removedEntryRestState=restStateForRows(removedEntry.rows);
+      var removedEntryCollapsed=S.collapsedEntries.has(removedEntry.uiId);
       removedEntry.rows.forEach(cancelRestForRow);
+      S.collapsedEntries.delete(removedEntry.uiId);
+      S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
       S.draft.entries.splice(ei, 1); saveDraft(); render();
       toast('Ejercicio quitado del entreno', 'Deshacer', function(){
         if(S.draft !== draftAtRemoval || S.draft.entries.indexOf(removedEntry) >= 0) return;
         S.draft.entries.splice(Math.min(entryIndex, S.draft.entries.length), 0, removedEntry);
+        if(removedEntryCollapsed) S.collapsedEntries.add(removedEntry.uiId);
+        S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
+        restoreRestAfterUndo(removedEntry.rows, removedEntryRestState);
         saveDraft(); render();
       });
       break;
@@ -2624,11 +2673,13 @@ function onClick(ev){
     case 'rm-set':
       var removeFrom = S.draft.entries[ei], removedRow = removeFrom && removeFrom.rows[ri], rowIndex = ri, draftForRow = S.draft;
       if(!removedRow) break;
+      var removedSetRestState=restStateForRows([removedRow]);
       cancelRestForRow(removedRow);
       removeFrom.rows.splice(ri, 1); saveDraft(); render();
       toast('Serie quitada del entreno', 'Deshacer', function(){
         if(S.draft !== draftForRow || S.draft.entries.indexOf(removeFrom) < 0 || removeFrom.rows.indexOf(removedRow) >= 0) return;
         removeFrom.rows.splice(Math.min(rowIndex, removeFrom.rows.length), 0, removedRow);
+        restoreRestAfterUndo([removedRow], removedSetRestState);
         saveDraft(); render();
       });
       break;
