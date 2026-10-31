@@ -2180,24 +2180,61 @@ function viewHist(){
   var out = '<div class="head-row"><h2>Historial</h2><span class="num muted" id="history-count">' + ss.length + ' de ' + total + ' entreno' + (total === 1 ? '' : 's') + '</span></div>';
   if(!total) return out + '<div class="card"><p>Cuando termines tu primer entreno aparecerá aquí.</p><button class="btn" data-act="tab" data-tab="hoy">Empezar un entreno</button></div>';
   return out + '<section class="card history-tools"><label class="field"><span class="lab">Buscar entreno, ejercicio o rutina</span><input class="txt" data-history-search type="search" autocomplete="off" placeholder="Ej. Press banca" value="' + esc(S.historyQuery) + '"></label>' +
-    '<label class="field"><span class="lab">Periodo</span><select class="txt" data-history-range><option value="all"' + (S.historyRange==='all'?' selected':'') + '>Todo el historial</option><option value="30"' + (S.historyRange==='30'?' selected':'') + '>Últimos 30 días</option><option value="7"' + (S.historyRange==='7'?' selected':'') + '>Últimos 7 días</option></select></label></section>' +
+    '<label class="field"><span class="lab">Periodo</span><select class="txt" data-history-range><option value="all"' + (S.historyRange==='all'?' selected':'') + '>Todo el historial</option><option value="90"' + (S.historyRange==='90'?' selected':'') + '>Últimos 90 días</option><option value="30"' + (S.historyRange==='30'?' selected':'') + '>Últimos 30 días</option><option value="7"' + (S.historyRange==='7'?' selected':'') + '>Últimos 7 días</option></select></label></section>' +
+    '<div id="history-summary">' + historySummaryHtml(ss) + '</div>' +
     '<div class="list" id="history-list">' + (ss.length ? ss.map(historyCardHtml).join('') : '<div class="card"><p class="muted">No hay entrenos que coincidan. Prueba otro término o periodo.</p></div>') + '</div>';
+}
+function historyWindowBounds(days,today){
+  var currentEnd=parseISO(today); currentEnd.setHours(0,0,0,0);
+  var currentStart=new Date(currentEnd); currentStart.setDate(currentStart.getDate()-days+1);
+  var previousEnd=new Date(currentStart); previousEnd.setDate(previousEnd.getDate()-1);
+  var previousStart=new Date(previousEnd); previousStart.setDate(previousStart.getDate()-days+1);
+  return {start:iso(currentStart),end:iso(currentEnd),previousStart:iso(previousStart),previousEnd:iso(previousEnd)};
+}
+function historyQueryMatches(session,query){
+  if(!query) return true;
+  var readableDate=dFmt(session.date,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  var searchable=[session.date,readableDate,session.routineName||''].concat(session.entries.map(function(entry){ return exName(entry.exId); })).join(' ').toLocaleLowerCase('es');
+  return searchable.indexOf(query)>=0;
+}
+function historySessionsInWindow(start,end,query){
+  return S.sessions.filter(function(session){
+    return session.date>=start && session.date<=end && historyQueryMatches(session,query);
+  });
 }
 function filteredHistorySessions(){
   var query=S.historyQuery.trim().toLocaleLowerCase('es');
-  var minDate='';
-  if(S.historyRange!=='all'){
-    var days=Number(S.historyRange), from=new Date();
-    from.setDate(from.getDate()-days+1);
-    minDate=iso(from);
+  var matches;
+  if(S.historyRange==='all') matches=S.sessions.filter(function(session){ return historyQueryMatches(session,query); });
+  else {
+    var window=historyWindowBounds(Number(S.historyRange),iso(new Date()));
+    matches=historySessionsInWindow(window.start,window.end,query);
   }
-  return S.sessions.filter(function(session){
-    if(minDate && session.date<minDate) return false;
-    if(!query) return true;
-    var readableDate=dFmt(session.date,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-    var searchable=[session.date,readableDate,session.routineName||''].concat(session.entries.map(function(entry){ return exName(entry.exId); })).join(' ').toLocaleLowerCase('es');
-    return searchable.indexOf(query)>=0;
-  }).sort(function(a,b){ return a.date===b.date ? (b.ts||0)-(a.ts||0) : (a.date<b.date?1:-1); });
+  return matches.sort(function(a,b){ return a.date===b.date ? (b.ts||0)-(a.ts||0) : (a.date<b.date?1:-1); });
+}
+function historyAggregate(sessions){
+  return sessions.reduce(function(total,session){
+    var stats=sessionStats(session);
+    total.volume+=stats.volume;
+    total.effectiveSets+=stats.effectiveSets;
+    total.duration+=Number(session.durationMs)||0;
+    return total;
+  },{sessions:sessions.length,volume:0,effectiveSets:0,duration:0});
+}
+function historyTrend(current,previous){
+  if(previous===0) return current===0?'Sin cambios previos':'Nuevo periodo';
+  var difference=current-previous;
+  if(!difference) return 'Sin cambios';
+  return (difference>0?'↑ ':'↓ ')+Math.round(Math.abs(difference)/previous*100)+'% vs periodo anterior';
+}
+function historySummaryHtml(matches){
+  var current=historyAggregate(matches), trendHtml='';
+  if(S.historyRange!=='all'){
+    var window=historyWindowBounds(Number(S.historyRange),iso(new Date()));
+    var previous=historyAggregate(historySessionsInWindow(window.previousStart,window.previousEnd,S.historyQuery.trim().toLocaleLowerCase('es')));
+    trendHtml='<p class="small muted">Comparación con los '+S.historyRange+' días anteriores · entrenos: '+esc(historyTrend(current.sessions,previous.sessions))+' · series efectivas: '+esc(historyTrend(current.effectiveSets,previous.effectiveSets))+' · volumen: '+esc(historyTrend(current.volume,previous.volume))+'</p>';
+  }
+  return '<section class="card history-summary"><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' kg·reps</strong><span>volumen</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
 }
 function historyCardHtml(s){
     var total = 0; s.entries.forEach(function(e){
@@ -2224,6 +2261,8 @@ function refreshHistoryResults(){
   if(!list) return;
   var matches=filteredHistorySessions();
   list.innerHTML=matches.length ? matches.map(historyCardHtml).join('') : '<div class="card"><p class="muted">No hay entrenos que coincidan. Prueba otro término o periodo.</p></div>';
+  var summary=$('#history-summary');
+  if(summary) summary.innerHTML=historySummaryHtml(matches);
   var count=$('#history-count');
   if(count) count.textContent=matches.length+' de '+S.sessions.length+' entreno'+(S.sessions.length===1?'':'s');
 }
@@ -3106,7 +3145,7 @@ function onChange(ev){
   var t = ev.target;
   if(t.id==='goal-type'){ updateGoalFormFields(); return; }
   if(t.dataset.historyRange!==undefined){
-    if(['all','7','30'].includes(t.value)){ S.historyRange=t.value; refreshHistoryResults(); }
+    if(['all','7','30','90'].includes(t.value)){ S.historyRange=t.value; refreshHistoryResults(); }
     return;
   }
   if(t.dataset.profileExerciseSort!==undefined){S.exerciseSort=t.value;render();return;}
