@@ -193,37 +193,38 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .barlab{display:flex;justify-content:space-between;font:500 14px/1 var(--font-display);letter-spacing:.04em;color:var(--muted)}
 
 /* set table */
-.sets{display:flex;flex-direction:column;gap:6px}
-.set{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 34px;gap:6px;align-items:center}
-.set.head{font:600 13px/1 var(--font-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:center}
-.set .n{font:600 18px/1 var(--font-display);color:var(--muted);text-align:center}
+.sets{display:flex;flex-direction:column;gap:8px}
+.set{display:grid;grid-template-columns:26px minmax(0,1fr) 40px;gap:8px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.set .n{grid-column:1;grid-row:1;font:600 18px/1 var(--font-display);color:var(--muted);text-align:center;padding-top:20px}
 .set.is-special .in{opacity:.7}
+.set-fields{grid-column:2;grid-row:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;min-width:0}
+.set-input{display:flex;flex-direction:column;gap:4px;min-width:0;text-align:center}
+.set-input>span,.set-type-label>span{font:600 11px/1.1 var(--font-body);color:var(--muted);white-space:nowrap}
+.set-input>span{overflow:hidden;text-overflow:ellipsis}
 .in{
   width:100%;min-width:0;height:44px;border:1px solid var(--line);background:var(--bg);color:var(--ink);
   border-radius:4px;text-align:center;font:600 22px/1 var(--font-display);font-variant-numeric:tabular-nums;
 }
 .in::placeholder{color:var(--muted);opacity:.55;font-weight:500}
+.set-type-label{grid-column:2/-1;display:flex;flex-direction:column;gap:4px;min-width:0}
 .set-type{
-  grid-column:2 / -1;width:100%;min-width:0;height:38px;padding:0 8px;
+  width:100%;min-width:0;height:40px;padding:0 8px;
   border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);
   font:500 15px/1 var(--font-body);
 }
 .set-finish{grid-column:2 / -1;min-height:36px}
 .set-finish:disabled{cursor:not-allowed;opacity:.55}
 .set-finish-done{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0;border:0;background:transparent;color:var(--go);font-size:14px;font-weight:700}
-.set-type-head{grid-column:2 / -1;text-align:left}
 .set-reference{grid-column:2 / -1;font-size:12px;line-height:1.2;color:var(--muted);padding:0 2px}
-.set-unilateral{grid-template-columns:24px minmax(0,1fr) 34px;grid-template-rows:auto auto auto}
-.set-unilateral>.n{grid-column:1;grid-row:1 / 3}
-.set-unilateral .side-inputs{grid-column:2;display:grid;grid-template-columns:32px repeat(3,minmax(0,1fr));gap:5px;align-items:center}
-.set-unilateral .side-inputs:first-of-type{grid-row:1}
-.set-unilateral .side-inputs:nth-of-type(2){grid-row:2}
+.set-unilateral{grid-template-columns:26px minmax(0,1fr) 40px}
+.set-unilateral>.n{grid-row:1/3}
+.set-unilateral>.set-fields{grid-row:1/3;display:flex;flex-direction:column;gap:8px}
+.set-unilateral .side-inputs{display:grid;grid-template-columns:34px repeat(3,minmax(0,1fr));gap:5px;align-items:end}
+.set-unilateral .side-inputs .set-input>span{font-size:10px}
 .set-unilateral>.icon{grid-column:3;grid-row:1}
-.set-unilateral .set-type{grid-column:2 / -1;grid-row:3}
+.set-unilateral .set-type-label{grid-row:3}
 .set-unilateral .in{font-size:18px}
 .side-label{font:600 13px/1 var(--font-display);text-transform:uppercase;color:var(--muted)}
-.unilateral-head{grid-template-columns:24px minmax(0,1fr) 34px}
-.unilateral-head .side-type-head{grid-column:2 / -1;text-align:left}
 .side-progress{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .live{display:flex;flex-direction:column;gap:8px;padding-top:2px}
 .live .goal-row strong{font:700 20px/1.1 var(--font-display);letter-spacing:.03em}
@@ -466,6 +467,11 @@ nav.tabs .in{min-height:66px}
   .card{padding:16px}.head-row h2{font-size:32px}
   .btn{min-height:48px}.btn.sm{min-height:44px}
   .row>*{min-width:min(150px,100%)}
+  .library-card:not(.create-card){flex-wrap:wrap;gap:8px 12px}
+  .library-card:not(.create-card) .library-open{flex-basis:100%}
+  .library-card-actions{width:100%;justify-content:flex-end}
+  .library-card-actions .mini,.it-tools .mini{width:44px;height:44px}
+  .field:has(select[data-it="warmupMode"]),.field:has(select[data-it="unilateral"]){grid-column:1/-1}
   .summary-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.summary-stats>div{padding:8px}
   .summary-stats strong{font-size:20px}.summary-stats span{line-height:1.15}
   nav.tabs{min-height:78px}nav.tabs .in{min-height:74px}.tab{min-height:72px}
@@ -479,14 +485,16 @@ nav.tabs .in{min-height:66px}
   .history-summary .summary-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .session-set-edit>strong{grid-column:1/-1;padding:4px 0 0}
   .session-set-type{grid-column:1/-1}
-  .set:not(.head):not(.set-unilateral){grid-template-rows:auto auto}
-  .set:not(.head):not(.set-unilateral) .set-type{grid-column:2/4;grid-row:2;height:32px;padding:0 5px;font-size:13px}
-  .set:not(.head):not(.set-unilateral) .set-reference{grid-column:4/6;grid-row:2;overflow:hidden;padding:0 2px;text-align:right;text-overflow:ellipsis;white-space:nowrap}
-  .set-unilateral{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 34px;grid-template-rows:auto auto auto}
-  .set-unilateral .side-inputs{grid-column:2/4}
-  .set-unilateral>.icon{grid-column:4;grid-row:1}
-  .set-unilateral .set-type{grid-column:2/3;grid-row:3;height:32px;padding:0 5px;font-size:13px}
-  .set-unilateral .set-reference{grid-column:3/5;grid-row:3;overflow:hidden;padding:0 2px;text-align:right;text-overflow:ellipsis;white-space:nowrap}
+  .set{grid-template-columns:22px minmax(0,1fr) 38px;gap:7px;padding:8px}
+  .set-fields{gap:5px}
+  .set-input>span,.set-type-label>span{font-size:10px}
+  .set .in{height:46px;font-size:20px}
+  .set-type-label,.set-reference,.set-finish,.set-comparison{grid-column:2/4}
+  .set-type{height:42px}
+  .set-unilateral{grid-template-columns:22px minmax(0,1fr) 38px}
+  .set-unilateral .side-inputs{grid-template-columns:28px repeat(3,minmax(0,1fr));gap:4px}
+  .set-unilateral .side-inputs .set-input>span{font-size:9px}
+  .set-unilateral .in{font-size:18px}
 }
 #pwa-update{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:1100}#pwa-update-button{border:0;border-radius:999px;padding:12px 18px;background:var(--ink);color:var(--surface);font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}
 @media (max-width:380px){

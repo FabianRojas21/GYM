@@ -1624,21 +1624,21 @@ function entryHtml(en, ei){
     var options = Object.keys(SET_TYPES).map(function(key){
       return '<option value="' + key + '"' + (type === key ? ' selected' : '') + '>' + SET_TYPES[key] + '</option>';
     }).join('');
-    var fields = ex.unilateral ? ['right','left'].map(function(side){
+    var fields = ex.unilateral ? '<div class="set-fields unilateral-fields">' + ['right','left'].map(function(side){
       var sideData = r[side], name = side === 'right' ? 'derecho' : 'izquierdo';
       var sideTarget = type === 'normal' && p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[wi] !== undefined
         ? String(p.sidePlans[side].target[wi]) : tgt;
       return '<div class="side-inputs"><span class="side-label">' + (side === 'right' ? 'Der.' : 'Izq.') + '</span>' +
-        '<input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + weightUnitLabel() + '" aria-label="Peso (' + weightUnitLabel() + ') lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(weightInput(sideData.w)) + '">' +
-        '<input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '">' +
-        '<input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '"></div>';
-    }).join('') : '<input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + weightUnitLabel() + '" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '">' +
-      '<input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '">' +
-      '<input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '">';
+        '<label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(weightInput(sideData.w)) + '"></label>' +
+        '<label class="set-input"><span>Reps</span><input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '"></label>' +
+        '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '"></label></div>';
+    }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"></label>' +
+      '<label class="set-input"><span>Reps</span><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"></label>' +
+      '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '"></label></div>';
     return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + '" data-ri="' + ri + '">' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
-      '<select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select>' +
+      '<label class="set-type-label"><span>Tipo de serie</span><select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select></label>' +
       (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral, previousMatch) : '') +
       (r.restTriggered
         ? '<button class="set-finish set-finish-done" data-act="undo-finish-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Deshacer fin de la serie ' + (ri+1) + '"><span aria-hidden="true">✓</span> Hecha · deshacer</button>'
@@ -1646,9 +1646,6 @@ function entryHtml(en, ei){
           (!rowComplete(r, ex.unilateral) ? ' disabled' : '') + '>Terminar serie</button>') +
       (type==='normal'?completedComparisonHtml(r,previousMatch,ex.unilateral):'')+'</div>';
   }).join('');
-  var head = ex.unilateral
-    ? '<div class="set head unilateral-head"><span>#</span><span class="side-type-head">Lado · ' + weightUnitLabel() + ' · reps · ' + effLab + '</span></div>'
-    : '<div class="set head"><span>#</span><span>' + weightUnitLabel() + '</span><span>Reps</span><span>' + effLab + '</span><span></span><span class="set-type-head">Tipo de serie</span></div>';
   var orderControls = S.draft.entries.length > 1
     ? '<div class="workout-card-tools"><button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="-1"' + (ei === 0 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' arriba" title="Mover arriba">↑</button>' +
       '<button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="1"' + (ei === S.draft.entries.length - 1 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' abajo" title="Mover abajo">↓</button></div>'
@@ -1660,7 +1657,7 @@ function entryHtml(en, ei){
     '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
     substitutionHtml +
     (collapsed ? '' : '<div class="workout-card-body">' + goalHtml(ex) +
-    '<div class="sets">' + head + rows + '</div>' +
+    '<div class="sets">' + rows + '</div>' +
     '<details class="workout-help"><summary>Ayuda con las series</summary><p class="hint">' + (ex.unilateral
       ? 'Cada ronda registra ambos lados. Cuenta como una serie cuando completaste derecho e izquierdo; la progresión espera que ambos lados cumplan el objetivo. '
       : 'Solo las series normales cuentan para la sobrecarga. ') +

@@ -646,6 +646,13 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/data-act="repeat-set"/);
   assert.match(app,/data-act="finish-set"/);
+  assert.match(app,/<label class="set-input"><span>Peso · /);
+  assert.match(app,/<label class="set-input"><span>Reps<\/span>/);
+  assert.match(app,/<label class="set-type-label"><span>Tipo de serie<\/span>/);
+  assert.match(styles,/.set-input>span/);
+  assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.set-fields\{gap:5px\}/);
+  assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.library-card:not\(\.create-card\)\{flex-wrap:wrap/);
+  assert.match(styles,/@media \(max-width:520px\)[\s\S]*?select\[data-it="warmupMode"\]/);
   assert.match(app,/case 'finish-set':[\s\S]*?startRest\(finishRestSeconds, finishRow\.restToken\)/);
   assert.match(app,/set-finish-done/);
   assert.match(app,/data-act="toggle-entry"/);
