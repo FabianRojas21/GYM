@@ -24,8 +24,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run automated tests
         run: node --test engine.test.js
-      - name: Generate Service Worker build version
-        run: sed -i "s/__BUILD_ID__/${GITHUB_SHA}/g" sw.js
+      - name: Version deployed assets
+        run: sed -i "s/__BUILD_ID__/${GITHUB_SHA}/g" index.html sw.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
