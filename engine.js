@@ -46,36 +46,43 @@
         : total;
     },0);
   }
-  function isUnilateralEntry(entry, exercise){
-    return !!(entry && entry.unilateral) || !!(exercise && exercise.unilateral) ||
+  function isUnilateralEntry(entry){
+    return !!(entry && entry.unilateral) ||
       !!(entry && Array.isArray(entry.sets) && entry.sets.some(function(set){
         return set.pair!==undefined || set.side==='right' || set.side==='left';
       }));
   }
   function inferSecondaryMuscles(primary, exerciseName){
     var name=String(exerciseName||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ');
-    var matches=function(words){ return words.some(function(word){ return name.includes(word); }); };
+    var matches=function(words){
+      return words.some(function(word){
+        var normalized=word.toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim().replace(/\s+/g,' ');
+        return (' '+name.replace(/\s+/g,' ').trim()+' ').includes(' '+normalized+' ');
+      });
+    };
     var isolation=['extension','extensiones','curl','elevacion','elevaciones','apertura','aperturas','pajaro','laterales','lateral','maquina femoral'];
-    if(isolation.some(function(word){ return name.includes(word); }) &&
-      !matches(['sentadilla','press','remo','jalon','dominada','peso muerto','hip thrust','prensa'])) return [];
+    if(isolation.some(function(word){ return matches([word]); }) &&
+      !matches(['sentadilla','squat','press','remo','jalon','dominada','peso muerto','deadlift','romanian deadlift','rdl','hip thrust','prensa','leg press','zancada','zancadas','estocada','estocadas','lunge','lunges','push up','push ups','pushup','pushups'])) return [];
     if(primary.indexOf('chest')===0){
-      return matches(['press','fondos'])
+      return matches(['press','fondos','flexion','flexiones','push up','push ups','pushup','pushups'])
         ? ['tricepsLateral','tricepsMedial','shoulderAnterior']
         : [];
     }
     if(['lats','upperBack','traps','lowerBack'].indexOf(primary)>=0){
-      return matches(['remo','jalon','dominada','pull','row'])
-        ? ['bicepsShort','brachialis']
-        : matches(['peso muerto']) ? ['glutesMax','lowerBack'] : [];
+      if(matches(['remo','jalon','dominada','pull up','pull ups','pullup','pullups','row','rows'])) return ['bicepsShort','brachialis'];
+      if(matches(['peso muerto','deadlift','romanian deadlift','rdl','hiperextension','hiperextensiones','hyperextension','hyperextensions'])){
+        return primary==='lowerBack' ? ['glutesMax'] : ['glutesMax','lowerBack'];
+      }
+      return [];
     }
     if(primary.indexOf('shoulder')===0){
       return matches(['press','militar']) ? ['tricepsLateral','tricepsMedial'] : [];
     }
     if(primary.indexOf('biceps')===0 || primary==='brachialis') return [];
     if(primary.indexOf('triceps')===0) return [];
-    if(primary==='quads' && matches(['sentadilla','prensa'])) return ['glutesMax','adductors'];
-    if(primary==='hamstrings' && matches(['peso muerto','rumano'])) return ['glutesMax','lowerBack'];
-    if(primary==='glutesMax' && matches(['peso muerto','sentadilla','hip thrust'])) return ['hamstrings'];
+    if(primary==='quads' && matches(['sentadilla','squat','prensa','leg press','zancada','zancadas','estocada','estocadas','lunge','lunges'])) return ['glutesMax','adductors'];
+    if(primary==='hamstrings' && matches(['peso muerto','deadlift','romanian deadlift','rdl'])) return ['glutesMax','lowerBack'];
+    if(primary==='glutesMax' && matches(['peso muerto','deadlift','romanian deadlift','rdl','sentadilla','squat','hip thrust','zancada','zancadas','estocada','estocadas','lunge','lunges'])) return ['hamstrings'];
     return [];
   }
   function muscleAssignments(primary, secondaryMuscles){
@@ -92,11 +99,25 @@
     if(id==='forearms') return 'forearms';
     if(id.indexOf('triceps')===0) return 'triceps';
     if(id==='quads') return 'quads';
+    if(id==='adductors') return 'adductors';
+    if(id==='hipFlexors') return 'hipFlexors';
     if(id==='hamstrings') return 'hamstrings';
     if(id.indexOf('glutes')===0) return 'glutes';
     if(id.indexOf('calves')===0 || id==='tibialis') return 'calves';
     if(['rectusAbdominis','obliques','transverseCore'].indexOf(id)>=0) return 'core';
+    if(id==='neck') return 'neck';
+    if(id==='unassigned') return 'unassigned';
+    if(id==='other') return 'other';
     return 'other';
+  }
+  function groupFactors(assignments){
+    var factors={};
+    (assignments||[]).forEach(function(assignment){
+      if(!assignment || !assignment.id) return;
+      var group=muscleGroupId(assignment.id);
+      factors[group]=Math.max(factors[group]||0,Number(assignment.factor)||0);
+    });
+    return factors;
   }
   function effectiveBodyweight(bodyweight, addedWeight, percentage){
     var body=Number(bodyweight), added=Number(addedWeight), share=Number(percentage);
@@ -266,7 +287,7 @@
   return {
     analyze:analyze, analyzeCore:analyzeCore, effortTarget:effortTarget, effTxt:effTxt, targetText:targetText,
     countsForProgress:countsForProgress, isEffectiveSet:isEffectiveSet, countEffectiveSets:countEffectiveSets,
-    entryVolume:entryVolume, isUnilateralEntry:isUnilateralEntry,
+    entryVolume:entryVolume, isUnilateralEntry:isUnilateralEntry, groupFactors:groupFactors,
     inferSecondaryMuscles:inferSecondaryMuscles, muscleAssignments:muscleAssignments,
     muscleGroupId:muscleGroupId, effectiveBodyweight:effectiveBodyweight,
     comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend

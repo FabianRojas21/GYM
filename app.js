@@ -56,7 +56,7 @@ var MUSCLES = {
   rectusAbdominis:'Abdominal recto', obliques:'Oblicuos', transverseCore:'Transverso / core profundo', neck:'Cuello', other:'Otro'
 };
 var LEGACY_MUSCLE_IDS={shoulders:'shoulderLateral',back:'lats',chest:'chestMid',biceps:'bicepsShort',triceps:'tricepsLong',glutes:'glutesMax',calves:'calvesGastro',core:'rectusAbdominis'};
-var MUSCLE_GROUPS={chest:'Pecho',shoulder:'Hombros',back:'Espalda',biceps:'Bíceps',triceps:'Tríceps',forearms:'Antebrazos',quads:'Cuádriceps',hamstrings:'Isquiotibiales',glutes:'Glúteos',calves:'Pantorrillas',core:'Core',other:'Otro'};
+var MUSCLE_GROUPS={chest:'Pecho',shoulder:'Hombros',back:'Espalda',biceps:'Bíceps',triceps:'Tríceps',forearms:'Antebrazos',quads:'Cuádriceps',adductors:'Aductores',hipFlexors:'Flexores de cadera',hamstrings:'Isquiotibiales',glutes:'Glúteos',calves:'Pantorrillas',core:'Core',neck:'Cuello',unassigned:'Sin asignar',other:'Otro'};
 function muscleGroupId(id){
   return SobrecargaEngine.muscleGroupId(id);
 }
@@ -778,7 +778,7 @@ function importSessionsCsv(text){
       var exercise=Object.keys(S.profile.exercises).map(function(id){ return S.profile.exercises[id]; }).find(function(e){ return e.name.toLowerCase()===name.toLowerCase(); });
       if(!exercise){ exercise={id:uid('ex'),name:name,sets:3,min:1,max:20,inc:2.5,muscle:'unassigned'}; S.profile.exercises[exercise.id]=exercise; }
       var sets=grouped[date][name];
-      entries.push({exId:exercise.id,sets:sets,unilateral:SobrecargaEngine.isUnilateralEntry({sets:sets},exercise)});
+      entries.push({exId:exercise.id,sets:sets,unilateral:!!exercise.unilateral || SobrecargaEngine.isUnilateralEntry({sets:sets})});
     });
     var signature=JSON.stringify(entries.map(function(entry){ return {exId:Object.keys(S.profile.exercises).find(function(id){ return id===entry.exId; })?entry.exId:entry.exId,sets:entry.sets.map(function(set){ return [set.w,set.r,set.rir,set.type]; })}; }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }));
     var duplicate=S.sessions.some(function(session){
@@ -1290,13 +1290,13 @@ function sessionStats(session){
 function entryVolume(entry, sessionDate){
   var ex = exById(entry.exId);
   var sets = ex ? effectiveSetsFor(ex, entry.sets, sessionDate) : entry.sets;
-  return SobrecargaEngine.entryVolume(sets,SobrecargaEngine.isUnilateralEntry(entry,ex));
+  return SobrecargaEngine.entryVolume(sets,SobrecargaEngine.isUnilateralEntry(entry));
 }
 function entryEffectiveSets(entry){
-  return SobrecargaEngine.countEffectiveSets(entry.sets,SobrecargaEngine.isUnilateralEntry(entry,exById(entry.exId)));
+  return SobrecargaEngine.countEffectiveSets(entry.sets,SobrecargaEngine.isUnilateralEntry(entry));
 }
 function weeklyMuscleSummaryHtml(week){
-  var counts = {}, directCounts = {}, indirectCounts = {};
+  var counts = {}, directCounts = {}, indirectCounts = {}, groupCounts = {}, groupDirect = {}, groupIndirect = {};
   week.forEach(function(session){
     session.entries.forEach(function(entry){
       var count = entryEffectiveSets(entry);
@@ -1307,13 +1307,18 @@ function weeklyMuscleSummaryHtml(week){
         if(assignment.factor === 1) directCounts[assignment.id] = (directCounts[assignment.id] || 0) + count;
         else indirectCounts[assignment.id] = (indirectCounts[assignment.id] || 0) + count;
       });
+      var perGroup=SobrecargaEngine.groupFactors(muscleAssignments(exercise||{}));
+      Object.keys(perGroup).forEach(function(group){
+        groupCounts[group]=(groupCounts[group]||0)+count*perGroup[group];
+        if(perGroup[group]===1) groupDirect[group]=(groupDirect[group]||0)+count;
+        else groupIndirect[group]=(groupIndirect[group]||0)+count;
+      });
     });
   });
   var groups = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || MUSCLES[a].localeCompare(MUSCLES[b], 'es'); });
-  var groupCounts={}, groupDetails={};
+  var groupDetails={};
   groups.forEach(function(id){
     var group=muscleGroupId(id);
-    groupCounts[group]=(groupCounts[group]||0)+(counts[id]||0);
     groupDetails[group]=groupDetails[group]||[];
     groupDetails[group].push(id);
   });
@@ -1322,8 +1327,8 @@ function weeklyMuscleSummaryHtml(week){
     ? '<div class="weekly-muscle-list">' + groupIds.map(function(group){
         var details=groupDetails[group];
         var subgroups=details.length>1 ? '<details class="muscle-volume-detail"><summary>Ver subdivisiones</summary>'+details.map(function(id){ return '<div><span>'+esc(MUSCLES[id])+'</span><strong>'+fmt1(counts[id])+' estimadas</strong></div>'; }).join('')+'</details>' : '';
-        var directLabel=details.reduce(function(sum,id){ return sum+(directCounts[id]||0); },0);
-        var indirectLabel=details.reduce(function(sum,id){ return sum+(indirectCounts[id]||0); },0);
+        var directLabel=groupDirect[group]||0;
+        var indirectLabel=groupIndirect[group]||0;
         var secondary=indirectLabel ? ' · '+fmt1(indirectLabel)+' indirectas × 0,5 = '+fmt1(indirectLabel*0.5) : '';
         return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLE_GROUPS[group] || group) + '</span><small>' + fmt1(directLabel) + ' directas' + secondary + (details.length===1 ? ' · '+esc(MUSCLES[details[0]]) : '') + '</small>' + subgroups + '</div><strong>' + fmt1(groupCounts[group]) + ' estimadas</strong></div>';
       }).join('') + '</div>'
@@ -1335,11 +1340,16 @@ function weeklyMuscleSummaryHtml(week){
     var weekCounts={};
     S.sessions.forEach(function(session){
       if(session.date>=range.start && session.date<=range.end){
-        session.entries.forEach(function(entry){ var count=entryEffectiveSets(entry), ex=exById(entry.exId); if(count) muscleAssignments(ex||{}).forEach(function(a){ weekCounts[a.id]=(weekCounts[a.id]||0)+count*a.factor; }); });
+        session.entries.forEach(function(entry){
+          var count=entryEffectiveSets(entry), ex=exById(entry.exId);
+          if(!count) return;
+          var assignments=muscleAssignments(ex||{});
+          var perGroup=SobrecargaEngine.groupFactors(assignments);
+          Object.keys(perGroup).forEach(function(group){ weekCounts[group]=(weekCounts[group]||0)+count*perGroup[group]; });
+        });
       }
     });
-    var priorGroups={}; Object.keys(weekCounts).forEach(function(id){ var group=muscleGroupId(id); priorGroups[group]=(priorGroups[group]||0)+weekCounts[id]; });
-    Object.keys(priorGroups).forEach(function(group){ previousGroupValues[group]=previousGroupValues[group]||[]; previousGroupValues[group].push(priorGroups[group]); });
+    Object.keys(weekCounts).forEach(function(group){ previousGroupValues[group]=previousGroupValues[group]||[]; previousGroupValues[group].push(weekCounts[group]); });
   }
   var effortByMuscle={};
   week.forEach(function(session){ session.entries.forEach(function(entry){ var ex=exById(entry.exId), id=muscleId(ex||{}); entry.sets.forEach(function(set){ if(!countsForProgress(set)) return; if(set.rir!==null && set.rir!==undefined && isFinite(Number(set.rir))){ effortByMuscle[id]=effortByMuscle[id]||[]; effortByMuscle[id].push(Number(set.rir)); } }); }); });
