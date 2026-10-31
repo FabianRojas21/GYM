@@ -362,6 +362,8 @@ details.how ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:col
 .mini[disabled]{opacity:.35;cursor:not-allowed}
 .it-tools{display:flex;gap:6px}
 .hint{font-size:14px;color:var(--muted)}
+.render-error-details{font-size:13px;color:var(--muted)}
+.render-error-details pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
 .session-entry-edit{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
 .session-entry-edit.is-collapsed{padding-bottom:4px}
 .session-entry-edit .session-set-edit .set-finish{grid-column:1/-1;justify-self:start;min-width:140px}

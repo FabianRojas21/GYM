@@ -2392,7 +2392,8 @@ function render(){
     $('#view').innerHTML = S.ready ? (views[S.tab] || viewHoy)() : loadingView();
   } catch(error){
     console.error('Error al mostrar la interfaz', error);
-    $('#view').innerHTML='<section class="card"><p class="sec-title">No se pudo mostrar esta sección</p><p class="small muted">Los datos siguen guardados. Recarga la página o vuelve a Inicio.</p><div class="row"><button class="btn" data-act="tab" data-tab="hoy">Volver a Inicio</button></div></section>';
+    var errorDetails=error && (error.stack || error.message) ? error.stack || error.message : String(error);
+    $('#view').innerHTML='<section class="card"><p class="sec-title">No se pudo mostrar esta sección</p><p class="small muted">Los datos siguen guardados. Recarga la página o vuelve a Inicio.</p><details class="render-error-details"><summary>Detalles técnicos</summary><pre>' + esc(errorDetails) + '</pre></details><div class="row"><button class="btn" data-act="tab" data-tab="hoy">Volver a Inicio</button></div></section>';
     if(typeof toast==='function') toast('Esta sección tuvo un problema; tus datos siguen guardados');
     return;
   }
