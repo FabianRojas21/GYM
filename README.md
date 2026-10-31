@@ -113,11 +113,16 @@ series normales, back-off, drop set y rest-pause.
 
 En **Ajustes** puedes configurar el descanso de las series efectivas/back-off
 (1 a 5 minutos) y el de aproximación (sin temporizador o 15 a 120 segundos).
-Durante un entreno, el contador se inicia al completar una serie normal,
-back-off o aproximación; en ejercicios unilaterales, al completar ambos lados.
-Drop sets y rest-pause no lo inician automáticamente. También puedes iniciarlo,
-sumar 30 segundos o detenerlo manualmente. El contador sigue activo al recargar
-la página y se cancela al descartar o terminar el entreno.
+Durante el entreno, completa el peso y las repeticiones y pulsa **Terminar
+serie** para iniciar el descanso; en ejercicios unilaterales, el botón se activa
+al completar ambos lados. Drop sets y rest-pause no inician descanso desde ese
+botón. También puedes iniciarlo manualmente, sumar 30 segundos o detenerlo. El
+contador sigue activo al recargar la página y se cancela al descartar o terminar
+el entreno.
+
+Al terminar una serie, la fila queda marcada con una verificación discreta. El
+encabezado de cada ejercicio muestra el avance de series normales completadas
+(por ejemplo, `2/3 series`); púlsalo para plegar o desplegar el ejercicio.
 
 En **Ejercicios**, abre un ejercicio para ver sus récords de peso, repeticiones
 por serie y mejor serie estimada, con la fecha de cada marca. Solo cuentan las
