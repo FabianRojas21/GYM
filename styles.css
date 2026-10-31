@@ -255,6 +255,11 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .weekly-muscle-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px}
 .weekly-muscle-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;background:#191A1E;color:#C8CBD0;font-size:14px}
 .weekly-muscle-row strong{color:#E4E6E9;font:700 20px/1 var(--font-display);font-variant-numeric:tabular-nums}
+.secondary-muscle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;max-height:280px;overflow:auto;padding:2px}
+.secondary-muscle-option{display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px;color:var(--text);font-size:13px;line-height:1.25}
+.secondary-muscle-option:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.weekly-muscle-row small{display:block;margin-top:3px;color:var(--muted);font-size:12px}
+@media (max-width:560px){.secondary-muscle-grid{grid-template-columns:1fr}}
 .latest-workout{display:flex;flex-direction:column;gap:14px;padding:14px;background:#101114;border:1px solid #25272C;border-radius:10px}
 .latest-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .latest-head h3,.empty-latest h3{margin:5px 0 3px;font:700 24px/1 var(--font-display);letter-spacing:.02em;text-transform:uppercase}
