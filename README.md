@@ -110,11 +110,21 @@ esfuerzo de esa sesión; los valores siguen siendo editables y se muestra la
 fecha de referencia. El cambio de preferencia no sobrescribe las series que ya
 están en curso.
 
-En **Biblioteca → Ejercicios**, abre un ejercicio y marca sus **Ejercicios
-alternativos**. Durante el entrenamiento puedes elegir uno de ellos para la
-sesión actual. Si ya anotaste datos, la app pide confirmación antes de limpiar
-esas series. El sustituto queda registrado con su propio nombre y no cambia la
-rutina, salvo que al terminar elijas actualizarla.
+En **Biblioteca → Ejercicios**, configura para cada movimiento el **Equipo** y
+el **Grupo muscular principal**, y marca sus **Ejercicios alternativos**.
+Puedes filtrar esa lista por equipo y grupo muscular; los elementos ocultos
+por el filtro se mantienen seleccionados. Durante el entrenamiento puedes
+aplicar una alternativa filtrando de nuevo por esos criterios. Cada opción
+muestra equipo, grupo y ejecución bilateral/unilateral. Si cambia el formato,
+o ya hay valores precargados/anotados, la app pide confirmación antes de
+limpiar ese bloque. El sustituto queda registrado con su propio nombre y no
+cambia la rutina, salvo que al terminar elijas actualizarla.
+
+Al completar una serie normal, la app compara peso, repeticiones y esfuerzo
+con la serie equivalente anterior. La referencia incluye su fecha y rutina de
+origen; el resumen indica si sumaste reps, cambió el peso o hiciste la serie
+con más o menos esfuerzo. Si no se registró esfuerzo en alguna de las sesiones,
+la comparación no inventa ese dato.
 
 En **Hoy**, activa **Modo simple** para ampliar los campos y ocultar la ayuda y
 los paneles secundarios durante el entrenamiento; **Vista completa** los

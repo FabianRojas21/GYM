@@ -131,6 +131,9 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .workout-meta{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;text-align:right}
 .workout-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .workout-substitution{display:grid;gap:6px;padding:2px 0}
+.substitution-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.substitution-filters .field{min-width:0;margin:0}
+.set-comparison{grid-column:2/-1;padding:2px 4px;color:var(--accent);font-size:12px;line-height:1.35;overflow-wrap:anywhere}
 .workout-substitution-confirm{padding:10px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in srgb,var(--warn) 8%,var(--surface))}
 .workout-substitution-confirm p{margin-bottom:8px}
 .workout-card-simple .goal,.workout-card-simple .workout-help,.workout-card-simple .live,.workout-card-simple .workout-card-tools,.workout-card-simple .workout-progress,.workout-card-simple [data-act="toggle-cfg"]{display:none!important}
@@ -314,6 +317,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .muscle-volume-detail{margin-top:6px;color:var(--muted);font-size:12px}.muscle-volume-detail summary{cursor:pointer}.muscle-volume-detail div{display:flex;justify-content:space-between;gap:8px;padding-top:5px}.muscle-volume-detail strong{font-size:12px}
 .warn-text{margin:6px 0 0;color:var(--warn);font-size:13px}
 @media (max-width:560px){.secondary-muscle-grid{grid-template-columns:1fr}}
+@media (max-width:520px){.substitution-filters{grid-template-columns:1fr}}
 .latest-workout{display:flex;flex-direction:column;gap:14px;padding:14px;background:#101114;border:1px solid #25272C;border-radius:10px}
 .latest-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .latest-head h3,.empty-latest h3{margin:5px 0 3px;font:700 24px/1 var(--font-display);letter-spacing:.02em;text-transform:uppercase}

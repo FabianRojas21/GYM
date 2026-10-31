@@ -89,6 +89,31 @@ var MUSCLES = {
 };
 var LEGACY_MUSCLE_IDS={shoulders:'shoulderLateral',back:'lats',chest:'chestMid',biceps:'bicepsShort',triceps:'tricepsLong',glutes:'glutesMax',calves:'calvesGastro',core:'rectusAbdominis'};
 var MUSCLE_GROUPS={chest:'Pecho',shoulder:'Hombros',back:'Espalda',biceps:'Bíceps',triceps:'Tríceps',forearms:'Antebrazos',quads:'Cuádriceps',adductors:'Aductores',hipFlexors:'Flexores de cadera',hamstrings:'Isquiotibiales',glutes:'Glúteos',calves:'Pantorrillas',core:'Core',neck:'Cuello',unassigned:'Sin asignar',other:'Otro'};
+var EQUIPMENT_TYPES={barbell:'Barra',dumbbell:'Mancuernas',machine:'Máquina',cable:'Polea',bodyweight:'Peso corporal',other:'Otro / no indicado'};
+function exerciseEquipment(ex){ return Object.prototype.hasOwnProperty.call(EQUIPMENT_TYPES,ex&&ex.equipment)?ex.equipment:'other'; }
+function equipmentLabel(ex){ return EQUIPMENT_TYPES[exerciseEquipment(ex)]; }
+function equipmentFilterOptions(selected){
+  return '<option value="">Todo el equipo</option>'+Object.keys(EQUIPMENT_TYPES).map(function(id){
+    return '<option value="'+id+'"'+(selected===id?' selected':'')+'>'+esc(EQUIPMENT_TYPES[id])+'</option>';
+  }).join('');
+}
+function muscleGroupFilterOptions(selected){
+  return '<option value="">Todos los grupos</option>'+Object.keys(MUSCLE_GROUPS).map(function(id){
+    return '<option value="'+esc(id)+'"'+(selected===id?' selected':'')+'>'+esc(MUSCLE_GROUPS[id])+'</option>';
+  }).join('');
+}
+function substitutionFilterKey(kind,id){ return kind+':'+id; }
+function substitutionFilter(kind,id){
+  return S.substitutionFilters[substitutionFilterKey(kind,id)]||{equipment:'',muscle:''};
+}
+function filteredSubstitutions(baseId,kind,key){
+  var filters=substitutionFilter(kind,key);
+  return exerciseSubstitutions(baseId).filter(function(id){
+    var ex=exById(id);
+    return (!filters.equipment||exerciseEquipment(ex)===filters.equipment) &&
+      (!filters.muscle||muscleGroupId(muscleId(ex))===filters.muscle);
+  });
+}
 function muscleGroupId(id){
   return SobrecargaEngine.muscleGroupId(id);
 }
@@ -222,7 +247,7 @@ var S = {
   draftSaveState:'saved', historyQuery:'', historyRange:'all',
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
-  librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(),
+  librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(), substitutionFilters:{},
   restEndsAt:loadRestEnd(), restOwner:loadRestOwner(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:'', pendingSubstitution:null, simpleWorkoutMode:false
 };
 S.collapsedEntries=new Set(S.draft.collapsedEntryIds || []);
@@ -900,6 +925,8 @@ function validBackup(data){
     if(!isObject(ex) || typeof ex.name !== 'string' || !validNumber(ex.sets) || !validNumber(ex.min) || !validNumber(ex.max) || !validNumber(ex.inc) ||
       (ex.warmupSets !== undefined && !validNumber(ex.warmupSets)) || !validWarmupConfig(ex) ||
       (ex.loadMode !== undefined && !['external','bodyweight'].includes(ex.loadMode)) ||
+      (ex.equipment !== undefined && !Object.prototype.hasOwnProperty.call(EQUIPMENT_TYPES,ex.equipment)) ||
+      (ex.substitutions !== undefined && (!Array.isArray(ex.substitutions) || !ex.substitutions.every(function(id){return typeof id==='string';})) ) ||
       (ex.secondaryMuscles !== undefined && (!Array.isArray(ex.secondaryMuscles) || !ex.secondaryMuscles.every(function(id){ var normalizedId=LEGACY_MUSCLE_IDS[id] || id; return MUSCLES[normalizedId] && normalizedId !== 'unassigned' && normalizedId !== (LEGACY_MUSCLE_IDS[ex.muscle] || ex.muscle); })))) return false;
   }
   var routineIds = Object.keys(profile.routines || {});
@@ -1397,14 +1424,86 @@ function previousWorkSet(exId, workIndex, unilateral){
     .filter(function(pair){ return pair.right && pair.left; });
   return complete[workIndex] ? {set:complete[workIndex],session:previous.session} : null;
 }
-function previousReferenceHtml(exId, workIndex, unilateral){
-  var match = previousWorkSet(exId, workIndex, unilateral);
+function hasEffortValue(set){
+  return !!set && set.rir!==null && set.rir!==undefined && String(set.rir).trim()!=='' && Number.isFinite(Number(set.rir));
+}
+function previousEffortText(set){
+  if(!hasEffortValue(set)) return 'esfuerzo sin registrar';
+  var effort=S.profile.settings.mode==='rpe' ? 10-Number(set.rir) : Number(set.rir);
+  return (S.profile.settings.mode==='rpe'?'RPE ':'RIR ')+fmt(effort);
+}
+function compareWorkSet(current,previous){
+  var parts=[], currentWeight=Number(current.w), previousWeight=Number(previous.w);
+  var weightDiff=Math.abs(currentWeight-previousWeight)<0.0001 ? 0 : currentWeight-previousWeight;
+  var repsDiff=Number(current.r)-Number(previous.r);
+  var repsChange=Math.abs(repsDiff)+' repetición'+(Math.abs(repsDiff)===1?'':'es');
+  if(weightDiff===0){
+    parts.push(repsDiff===0?'mismas repeticiones y peso':(repsDiff>0?'sumaste ':'hiciste ')+repsChange+(repsDiff>0?' más':' menos')+' con el mismo peso');
+  }else{
+    parts.push((weightDiff>0?'aumentaste el peso ':'bajaste el peso ')+weightText(Math.abs(weightDiff)));
+    parts.push(repsDiff===0?'mismas repeticiones':(repsDiff>0?'sumaste ':'hiciste ')+repsChange+(repsDiff>0?' más':' menos'));
+  }
+  if(hasEffortValue(current)&&hasEffortValue(previous)){
+    var effortDiff=Number(current.rir)-Number(previous.rir);
+    if(effortDiff<0) parts.push('más esfuerzo ('+previousEffortText(previous)+' → '+previousEffortText(current)+')');
+    else if(effortDiff>0) parts.push('menos esfuerzo ('+previousEffortText(previous)+' → '+previousEffortText(current)+')');
+    else parts.push('mismo esfuerzo ('+previousEffortText(current)+')');
+  }else if(hasEffortValue(current)){
+    parts.push('esfuerzo actual '+previousEffortText(current));
+  }else if(hasEffortValue(previous)){
+    parts.push('esfuerzo actual sin registrar (anterior '+previousEffortText(previous)+')');
+  }
+  var currentHasEffort=hasEffortValue(current), previousHasEffort=hasEffortValue(previous);
+  var effortUnchanged=(currentHasEffort&&previousHasEffort&&Number(current.rir)===Number(previous.rir)) ||
+    (!currentHasEffort&&!previousHasEffort);
+  var noChange=weightDiff===0&&repsDiff===0&&effortUnchanged;
+  return noChange?'Igual que la vez anterior: '+parts.join(' · '):parts.join(' · ');
+}
+function completedComparisonHtml(row,previous,unilateral){
+  if(!row.restTriggered||!previous) return '';
+  var summary;
+  if(unilateral){
+    summary=['right','left'].map(function(side){
+      var current=row[side]||{}, past=previous.set[side];
+      return (side==='right'?'Derecho: ':'Izquierdo: ')+(past?compareWorkSet({w:current.w,r:current.r,rir:current.rir},past):'sin referencia anterior');
+    }).join(' · ');
+  }else summary=compareWorkSet({w:row.w,r:row.r,rir:row.rir},previous.set);
+  return '<span class="set-comparison">'+esc(summary)+'</span>';
+}
+function refreshEntryComparison(ei,ri){
+  var entry=S.draft.entries[ei], row=entry&&entry.rows[ri], exercise=entry&&effEx(entry);
+  var card=$('section.card[data-ei="'+ei+'"]'), setElement=card&&$('.set[data-ri="'+ri+'"]',card);
+  if(!row||!exercise||!setElement) return;
+  var workIndex=entry.rows.slice(0,ri+1).filter(function(item){return setType(item)==='normal';}).length-1;
+  var previous=setType(row)==='normal'&&workIndex>=0?previousWorkSet(entry.exId,workIndex,exercise.unilateral):null;
+  var html=completedComparisonHtml(row,previous,exercise.unilateral);
+  var current=$('.set-comparison',setElement), finishButton=$('.set-finish',setElement);
+  if(html&&current) current.outerHTML=html;
+  else if(html&&finishButton) finishButton.insertAdjacentHTML('afterend',html);
+  else if(current) current.remove();
+}
+function previousReferenceHtml(exId, workIndex, unilateral, match){
+  match = match || previousWorkSet(exId, workIndex, unilateral);
   var previous=match && match.set;
   if(!previous) return '';
+  var effort=unilateral
+  ? ' · '+(S.profile.settings.mode==='rpe'?'RPE':'RIR')+' der. '+(hasEffortValue(previous.right)?fmt(S.profile.settings.mode==='rpe'?10-Number(previous.right.rir):previous.right.rir):'—')+' / izq. '+(hasEffortValue(previous.left)?fmt(S.profile.settings.mode==='rpe'?10-Number(previous.left.rir):previous.left.rir):'—')
+  : ' · '+previousEffortText(previous);
+  var source=match.session.routineName || (match.session.routineId&&S.profile.routines[match.session.routineId]
+    ? S.profile.routines[match.session.routineId].name
+    : 'entreno libre');
   var value = unilateral
-    ? 'Anterior ('+dFmt(match.session.date)+'): der. ' + weightText(previous.right.w) + ' × ' + previous.right.r + ' · izq. ' + weightText(previous.left.w) + ' × ' + previous.left.r
-    : 'Anterior ('+dFmt(match.session.date)+'): ' + weightText(previous.w) + ' × ' + previous.r;
+    ? 'Anterior ('+dFmt(match.session.date)+' · '+source+'): der. ' + weightText(previous.right.w) + ' × ' + previous.right.r + ' · izq. ' + weightText(previous.left.w) + ' × ' + previous.left.r+effort
+    : 'Anterior ('+dFmt(match.session.date)+' · '+source+'): ' + weightText(previous.w) + ' × ' + previous.r+effort;
   return '<span class="set-reference">' + esc(value) + '</span>';
+}
+function substitutionExerciseLabel(id){
+  var ex=exById(id);
+  return exName(id)+' · '+equipmentLabel(ex)+' · '+(MUSCLE_GROUPS[muscleGroupId(muscleId(ex))]||'Otro')+' · '+(ex.unilateral?'Unilateral':'Bilateral');
+}
+function substitutionNeedsConfirmation(entry,exerciseId){
+  var target=exById(exerciseId);
+  return !target || entryHasWorkoutData(entry) || !!effEx(entry).unilateral!==!!target.unilateral;
 }
 function exerciseSubstitutions(exId){
   var exercise=exById(exId);
@@ -1498,10 +1597,21 @@ function entryHtml(en, ei){
   var collapsed = S.collapsedEntries.has(en.uiId);
   var baseExId=en.baseExId||en.exId, alternatives=exerciseSubstitutions(baseExId);
   var substitutionHtml=alternatives.length
-    ? '<label class="workout-substitution"><span class="small muted">Ejercicio de hoy · la rutina original no cambia automáticamente</span><select class="txt" data-workout-substitution data-ei="'+ei+'" aria-label="Cambiar ejercicio solo para este entrenamiento"><option value="'+esc(baseExId)+'"'+(en.exId===baseExId?' selected':'')+'>'+esc(exName(baseExId))+'</option>'+alternatives.map(function(id){return '<option value="'+esc(id)+'"'+(en.exId===id?' selected':'')+'>'+esc(exName(id))+'</option>';}).join('')+'</select></label>'
+    ? (function(){
+        var filters=substitutionFilter('workout',en.uiId);
+        var filtered=filteredSubstitutions(baseExId,'workout',en.uiId);
+        if(en.exId!==baseExId&&filtered.indexOf(en.exId)<0) filtered.unshift(en.exId);
+        return '<div class="workout-substitution"><span class="small muted">Ejercicio de hoy · la rutina original no cambia automáticamente</span><div class="substitution-filters"><label class="field"><span class="lab">Equipo</span><select class="txt" data-substitution-filter="equipment" data-kind="workout" data-id="'+esc(en.uiId)+'">'+equipmentFilterOptions(filters.equipment)+'</select></label><label class="field"><span class="lab">Grupo muscular</span><select class="txt" data-substitution-filter="muscle" data-kind="workout" data-id="'+esc(en.uiId)+'">'+muscleGroupFilterOptions(filters.muscle)+'</select></label></div><select class="txt" data-workout-substitution data-ei="'+ei+'" aria-label="Cambiar ejercicio solo para este entrenamiento"><option value="'+esc(baseExId)+'"'+(en.exId===baseExId?' selected':'')+'>'+esc(substitutionExerciseLabel(baseExId))+'</option>'+filtered.map(function(id){return '<option value="'+esc(id)+'"'+(en.exId===id?' selected':'')+'>'+esc(substitutionExerciseLabel(id))+'</option>';}).join('')+'</select><span class="small muted">'+(filtered.length?filtered.length+' alternativa'+(filtered.length===1?'':'s')+' con estos filtros':'No hay alternativas con estos filtros')+'</span></div>';
+      })()
     : '';
   var pendingSubstitution=S.pendingSubstitution&&S.pendingSubstitution.entryId===en.uiId;
-  if(pendingSubstitution) substitutionHtml+='<div class="workout-substitution-confirm"><p class="small">Cambiar de ejercicio quitará los valores cargados o anotados y el temporizador de este bloque. ¿Continuar?</p><div class="row"><button class="btn danger sm" data-act="substitution-confirm">Cambiar y limpiar series</button><button class="btn ghost sm" data-act="substitution-cancel">Cancelar</button></div></div>';
+  if(pendingSubstitution){
+    var pendingTarget=exById(S.pendingSubstitution.exerciseId);
+    var formatChanged=pendingTarget&&!!ex.unilateral!==!!pendingTarget.unilateral;
+    substitutionHtml+='<div class="workout-substitution-confirm"><p class="small">'+
+      (formatChanged?'La alternativa cambia de '+(ex.unilateral?'unilateral':'bilateral')+' a '+(pendingTarget.unilateral?'unilateral':'bilateral')+'. ':'')+
+      'Al cambiar se limpiarán los valores cargados o anotados y el temporizador de este bloque. La rutina original se conservará. ¿Continuar?</p><div class="row"><button class="btn danger sm" data-act="substitution-confirm">Cambiar y limpiar series</button><button class="btn ghost sm" data-act="substitution-cancel">Cancelar</button></div></div>';
+  }
   var workIndex = 0;
   var rows = en.rows.map(function(r, ri){
     ensureRowMode(r, ex.unilateral);
@@ -1510,6 +1620,7 @@ function entryHtml(en, ei){
     if(type === 'normal') workIndex++;
     var effPh = type === 'normal' ? fmt(mode === 'rpe' ? 10 - effortTarget(ex, wi, S.profile.settings) : effortTarget(ex, wi, S.profile.settings)) : '';
     var tgt = type === 'normal' && p.target && p.target[wi] !== undefined ? String(p.target[wi]) : 'reps';
+    var previousMatch=type==='normal'?previousWorkSet(en.exId,wi,ex.unilateral):null;
     var options = Object.keys(SET_TYPES).map(function(key){
       return '<option value="' + key + '"' + (type === key ? ' selected' : '') + '>' + SET_TYPES[key] + '</option>';
     }).join('');
@@ -1524,15 +1635,16 @@ function entryHtml(en, ei){
     }).join('') : '<input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + weightUnitLabel() + '" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '">' +
       '<input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '">' +
       '<input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '">';
-    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + '">' +
+    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + '" data-ri="' + ri + '">' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
       '<select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select>' +
-      (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral) : '') +
+      (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral, previousMatch) : '') +
       (r.restTriggered
         ? '<button class="set-finish set-finish-done" data-act="undo-finish-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Deshacer fin de la serie ' + (ri+1) + '"><span aria-hidden="true">✓</span> Hecha · deshacer</button>'
         : '<button class="btn ghost sm set-finish" data-act="finish-set" data-ei="' + ei + '" data-ri="' + ri + '"' +
-          (!rowComplete(r, ex.unilateral) ? ' disabled' : '') + '>Terminar serie</button>') + '</div>';
+          (!rowComplete(r, ex.unilateral) ? ' disabled' : '') + '>Terminar serie</button>') +
+      (type==='normal'?completedComparisonHtml(r,previousMatch,ex.unilateral):'')+'</div>';
   }).join('');
   var head = ex.unilateral
     ? '<div class="set head unilateral-head"><span>#</span><span class="side-type-head">Lado · ' + weightUnitLabel() + ' · reps · ' + effLab + '</span></div>'
@@ -2364,8 +2476,11 @@ function exDetail(ex){
   var hist = entriesFor(ex.id);
   var records = personalRecords(ex);
   var warmCfg = warmupSettings(ex);
+  var substitutionFiltersForExercise=substitutionFilter('editor',ex.id);
   var substituteChoices=Object.keys(S.profile.exercises).filter(function(id){return id!==ex.id&&!S.profile.exercises[id].archived;})
     .sort(function(a,b){return exName(a).localeCompare(exName(b),'es');});
+  var visibleSubstituteChoices=filteredSubstitutions(ex.id,'editor',ex.id);
+  var hiddenSelectedSubstitutions=(ex.substitutions||[]).filter(function(id){return substituteChoices.indexOf(id)>=0&&visibleSubstituteChoices.indexOf(id)<0;});
   var recordHtml = records.weight || records.reps || (records.estimated && records.estimated.value !== null) ? '<div class="record-grid">' +
     (records.weight ? '<div><span>Mayor peso</span><strong>' + weightText(records.weight.value) + '</strong><small>' + esc(dFmt(records.weight.date)) + '</small></div>' : '') +
     (records.reps ? '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' : '') +
@@ -2394,12 +2509,12 @@ function exDetail(ex){
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
       f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-      '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div>' +
+      '</div><div class="fields"><div class="field"><label class="lab" for="cfg-equipment">Equipo</label><select id="cfg-equipment" class="txt" data-cfg="equipment" data-id="' + esc(ex.id) + '">' + Object.keys(EQUIPMENT_TYPES).map(function(id){return '<option value="' + id + '"' + (exerciseEquipment(ex)===id?' selected':'') + '>' + esc(EQUIPMENT_TYPES[id]) + '</option>';}).join('') + '</select></div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div></div>' +
       '<fieldset class="field"><legend class="lab">Músculos secundarios estimados</legend><p class="small muted">Aportan aproximadamente 0,5 serie efectiva. Puedes desmarcarlos si no participan en este ejercicio.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
         var selected = normalizedSecondaryMuscles(ex).indexOf(id) >= 0;
         return '<label class="secondary-muscle-option"><input type="checkbox" data-cfg="secondary-muscle" data-id="' + esc(ex.id) + '" value="' + esc(id) + '"' + (selected ? ' checked' : '') + '> <span>' + esc(MUSCLES[id]) + '</span></label>';
       }).join('') + '</div></fieldset>' +
-      '<fieldset class="field"><legend class="lab">Ejercicios alternativos</legend><p class="small muted">Elige ejercicios disponibles para sustituir este movimiento solo en una sesión; no se modificará la rutina automáticamente.</p><div class="secondary-muscle-grid">' + (substituteChoices.length ? substituteChoices.map(function(id){return '<label class="secondary-muscle-option"><input type="checkbox" data-cfg="substitution" data-id="' + esc(ex.id) + '" value="' + esc(id) + '"' + ((ex.substitutions||[]).indexOf(id)>=0?' checked':'') + '> <span>' + esc(exName(id)) + '</span></label>';}).join('') : '<span class="small muted">Añade otro ejercicio para definir una alternativa.</span>') + '</div></fieldset>' +
+      '<fieldset class="field"><legend class="lab">Ejercicios alternativos</legend><p class="small muted">Elige ejercicios disponibles para sustituir este movimiento solo en una sesión; no se modificará la rutina automáticamente. Filtra por equipo y grupo muscular para encontrar opciones.</p><div class="substitution-filters"><label class="field"><span class="lab">Equipo</span><select class="txt" data-substitution-filter="equipment" data-kind="editor" data-id="' + esc(ex.id) + '">' + equipmentFilterOptions(substitutionFiltersForExercise.equipment) + '</select></label><label class="field"><span class="lab">Grupo muscular</span><select class="txt" data-substitution-filter="muscle" data-kind="editor" data-id="' + esc(ex.id) + '">' + muscleGroupFilterOptions(substitutionFiltersForExercise.muscle) + '</select></label></div><div class="secondary-muscle-grid" data-substitution-editor="' + esc(ex.id) + '">' + (visibleSubstituteChoices.length ? visibleSubstituteChoices.map(function(id){return '<label class="secondary-muscle-option"><input type="checkbox" data-cfg="substitution" data-id="' + esc(ex.id) + '" value="' + esc(id) + '"' + ((ex.substitutions||[]).indexOf(id)>=0?' checked':'') + '> <span>' + esc(substitutionExerciseLabel(id)) + '</span></label>';}).join('') : '<span class="small muted">No hay ejercicios con esos filtros. Usa «Todo el equipo» y «Todos los grupos» o añade más ejercicios.</span>') + '</div>' + (hiddenSelectedSubstitutions.length?'<p class="small muted">'+hiddenSelectedSubstitutions.length+' alternativa'+(hiddenSelectedSubstitutions.length===1?' seleccionada':'s seleccionadas')+' quedan guardadas fuera de estos filtros.</p>':'') + '<p class="small muted">' + (substituteChoices.length?'Mostrando '+visibleSubstituteChoices.length+' de '+substituteChoices.length+' ejercicios disponibles.':'Añade otro ejercicio para definir una alternativa.') + '</p></fieldset>' +
       '<div class="field"><label class="lab" for="cfg-loadMode">Tipo de carga</label><select id="cfg-loadMode" class="txt" data-cfg="loadMode" data-id="' + esc(ex.id) + '"><option value="external"' + (ex.loadMode !== 'bodyweight' ? ' selected' : '') + '>Peso externo</option><option value="bodyweight"' + (ex.loadMode === 'bodyweight' ? ' selected' : '') + '>Peso corporal + carga añadida</option></select></div>' + (ex.loadMode === 'bodyweight' ? f('bodyweightPercent','Porcentaje del peso corporal que se desplaza',ex.bodyweightPercent === undefined ? 100 : ex.bodyweightPercent) + '<p class="small muted">Por ejemplo, usa cerca de 67 % para flexiones; puedes ajustarlo por ejercicio.</p>' : '') + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
         return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-cfg="warmupPercent" data-id="' + esc(ex.id) + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
       }).join('') + '</div></div>' : '') + '<div class="fields">' +
@@ -3481,7 +3596,7 @@ function onInput(ev){
   }
   var progress = $('.workout-progress', $('section.card[data-ei="' + ei + '"]'));
   if(progress) progress.textContent = completedWorkSets(entry, exercise) + '/' + Math.max(1, Number(exercise.sets) || 1) + ' series';
-  saveDraft(); refreshLive(ei);
+  saveDraft(); refreshLive(ei); refreshEntryComparison(ei,ri);
 }
 function onChange(ev){
   var t = ev.target;
@@ -3491,12 +3606,22 @@ function onChange(ev){
     var originalId=substitutionEntry.baseExId||substitutionEntry.exId;
     if(selectedExercise!==originalId && exerciseSubstitutions(originalId).indexOf(selectedExercise)<0){ render(); return; }
     if(selectedExercise===substitutionEntry.exId) return;
-    if(entryHasWorkoutData(substitutionEntry)){
+    if(substitutionNeedsConfirmation(substitutionEntry,selectedExercise)){
       S.pendingSubstitution={entryId:substitutionEntry.uiId,exerciseId:selectedExercise};
       render(); return;
     }
     if(!resetEntryExercise(substitutionEntry,selectedExercise)){ render(); return; }
     saveDraft(); render(); toast(selectedExercise===originalId?'Ejercicio original restaurado':'Sustituto aplicado solo a este entreno'); return;
+  }
+  if(t.dataset.substitutionFilter!==undefined){
+    var filterKind=t.dataset.kind, filterId=t.dataset.id, filterKey=t.dataset.substitutionFilter;
+    if(!['editor','workout'].includes(filterKind)||!filterId||!['equipment','muscle'].includes(filterKey)){render();return;}
+    if(filterKey==='equipment'&&t.value!==''&&!Object.prototype.hasOwnProperty.call(EQUIPMENT_TYPES,t.value)){render();return;}
+    if(filterKey==='muscle'&&t.value!==''&&!Object.prototype.hasOwnProperty.call(MUSCLE_GROUPS,t.value)){render();return;}
+    var filterStateKey=substitutionFilterKey(filterKind,filterId);
+    S.substitutionFilters[filterStateKey]=S.substitutionFilters[filterStateKey]||{equipment:'',muscle:''};
+    S.substitutionFilters[filterStateKey][filterKey]=t.value;
+    render(); return;
   }
   if(t.id==='goal-type'){ updateGoalFormFields(); return; }
   if(t.dataset.recoveryGroup!==undefined){
@@ -3743,14 +3868,20 @@ function onChange(ev){
   var key = t.dataset.cfg; if(!key && t.dataset.cfg !== 'secondary-muscle') return;
   var ex = exById(t.dataset.id); if(!ex) return;
   if(key === 'substitution'){
-    var substitutionFieldset=t.closest('fieldset');
-    var selectedSubstitutions=substitutionFieldset
-      ? Array.from(substitutionFieldset.querySelectorAll('input[data-cfg="substitution"]:checked')).map(function(input){return input.value;})
+    var substitutionEditor=t.closest('[data-substitution-editor]');
+    var selectedVisibleSubstitutions=substitutionEditor
+      ? Array.from(substitutionEditor.querySelectorAll('input[data-cfg="substitution"]:checked')).map(function(input){return input.value;})
       : [];
-    ex.substitutions=selectedSubstitutions.filter(function(id,index,all){
+    var visibleSubstitutions=filteredSubstitutions(ex.id,'editor',ex.id);
+    var hiddenSubstitutions=exerciseSubstitutions(ex.id).filter(function(id){return visibleSubstitutions.indexOf(id)<0;});
+    ex.substitutions=hiddenSubstitutions.concat(selectedVisibleSubstitutions).filter(function(id,index,all){
       return id!==ex.id && all.indexOf(id)===index && exById(id) && !exById(id).archived;
     });
     Store.saveProfile(); render(); return;
+  }
+  if(key === 'equipment'){
+    if(!Object.prototype.hasOwnProperty.call(EQUIPMENT_TYPES,t.value)){render();return;}
+    ex.equipment=t.value; Store.saveProfile(); render(); return;
   }
   if(key === 'secondary-muscle' || t.dataset.cfg === 'secondary-muscle'){
     var container=t.closest('.secondary-muscle-grid');

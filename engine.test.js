@@ -862,3 +862,68 @@ test('un sustituto reemplaza solo el ejercicio actual y permite volver al origin
   assert.equal(entry.substituteFor,undefined);
   assert.equal(routine.items[0].exId,'original');
 });
+
+test('la comparación muestra el progreso de reps y el cambio de esfuerzo', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helpers=['hasEffortValue','previousEffortText','compareWorkSet','completedComparisonHtml','previousReferenceHtml']
+    .map(name=>{
+      const match=source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`));
+      assert.ok(match,`missing ${name}`);
+      return match[0];
+    }).join('\n');
+  const context={
+    S:{profile:{settings:{mode:'rir'}}},
+    fmt:value=>String(value),
+    weightText:value=>`${value} kg`,
+    esc:value=>String(value),
+    dFmt:value=>value,
+    previousWorkSet:()=>({set:{w:60,r:8,rir:2},session:{date:'2026-10-30',routineName:'Torso A'}})
+  };
+  vm.runInNewContext(helpers+';globalThis.compareWorkSetForTest=compareWorkSet;globalThis.previousReferenceHtmlForTest=previousReferenceHtml;',context);
+  assert.equal(context.compareWorkSetForTest({w:60,r:9,rir:1},{w:60,r:8,rir:2}),
+    'sumaste 1 repetición más con el mismo peso · más esfuerzo (RIR 2 → RIR 1)');
+  assert.match(context.compareWorkSetForTest({w:60,r:8,rir:''},{w:60,r:8,rir:2}),/esfuerzo actual sin registrar \(anterior RIR 2\)/);
+  const row={w:'60',r:'9',rir:'1',restTriggered:true};
+  const summary=vm.runInNewContext('completedComparisonHtml('+JSON.stringify(row)+',{set:{w:60,r:8,rir:2},session:{date:"2026-10-30",routineName:"Torso A"}},false)',context);
+  assert.match(summary,/sumaste 1 repetición más/);
+  const unilateral=vm.runInNewContext('completedComparisonHtml({restTriggered:true,right:{w:"20",r:"9",rir:"1"},left:{w:"20",r:"8",rir:"2"}},{set:{right:{w:20,r:8,rir:2},left:{w:20,r:8,rir:2}},session:{}},true)',context);
+  assert.match(unilateral,/Derecho:/);
+  assert.match(unilateral,/Izquierdo:/);
+  const reference=context.previousReferenceHtmlForTest('press',0,false);
+  assert.match(reference,/2026-10-30 · Torso A/);
+  assert.match(reference,/RIR 2/);
+  context.S.profile.settings.mode='rpe';
+  assert.match(context.previousReferenceHtmlForTest('press',0,false),/RPE 8/);
+});
+
+test('los filtros de sustitución acotan por equipo y grupo, y el cambio unilateral pide confirmación', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helperNames=['substitutionFilterKey','substitutionFilter','filteredSubstitutions','substitutionNeedsConfirmation'];
+  const helpers=helperNames.map(name=>{
+    const match=source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`));
+    assert.ok(match,`missing ${name}`);
+    return match[0];
+  }).join('\n');
+  const exercises={
+    bench:{id:'bench',equipment:'barbell',muscle:'chestMid'},
+    dumbbellPress:{id:'dumbbellPress',equipment:'dumbbell',muscle:'chestUpper',unilateral:false},
+    pushup:{id:'pushup',equipment:'bodyweight',muscle:'chestMid',unilateral:false},
+    row:{id:'row',equipment:'cable',muscle:'lats',unilateral:true}
+  };
+  const context={
+    S:{substitutionFilters:{'workout:entry':{equipment:'dumbbell',muscle:'chest'}},profile:{exercises:{bench:{substitutions:['dumbbellPress','pushup','row']}}}},
+    EQUIPMENT_TYPES:{barbell:'Barra',dumbbell:'Mancuernas',bodyweight:'Peso corporal',cable:'Polea'},
+    exById:id=>exercises[id],
+    exerciseEquipment:exercise=>exercise.equipment,
+    muscleId:exercise=>exercise.muscle,
+    muscleGroupId:id=>id.indexOf('chest')===0?'chest':'back',
+    exerciseSubstitutions:id=>context.S.profile.exercises[id].substitutions,
+    entryHasWorkoutData:entry=>entry.hasData,
+    effEx:entry=>entry.exercise
+  };
+  vm.runInNewContext(helpers+';globalThis.filteredSubstitutionsForTest=filteredSubstitutions;globalThis.substitutionNeedsConfirmationForTest=substitutionNeedsConfirmation;',context);
+  assert.deepEqual(Array.from(context.filteredSubstitutionsForTest('bench','workout','entry')),['dumbbellPress']);
+  assert.equal(context.substitutionNeedsConfirmationForTest({hasData:false,exercise:{unilateral:false}},'row'),true);
+  assert.equal(context.substitutionNeedsConfirmationForTest({hasData:false,exercise:{unilateral:false}},'dumbbellPress'),false);
+  assert.equal(context.substitutionNeedsConfirmationForTest({hasData:true,exercise:{unilateral:false}},'dumbbellPress'),true);
+});
