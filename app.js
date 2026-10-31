@@ -103,7 +103,7 @@ var LK = 'sobrecarga:data:v1';
 var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
 var RTOK = RTK + ':owner';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg'}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[]}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg'}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
@@ -117,15 +117,23 @@ function normProfile(p){
   d.programs = p.programs || {};
   d.goals = p.goals || {};
   d.measurements = Array.isArray(p.measurements) ? p.measurements.filter(function(m){ return isObject(m) && typeof m.id === 'string'; }).map(function(m){ return {id:m.id, date:typeof m.date === 'string' ? m.date : iso(new Date()), values:isObject(m.values) ? clone(m.values) : {}, notes:typeof m.notes === 'string' ? m.notes : ''}; }) : [];
+  d.recoveryRatings = {};
+  Object.keys(p.recoveryRatings || {}).forEach(function(group){
+    var rating=p.recoveryRatings[group];
+    if(Object.prototype.hasOwnProperty.call(MUSCLE_GROUPS,group) && group!=='unassigned' &&
+      isObject(rating) && [1,2,3].includes(Number(rating.level)) && validDate(rating.date)){
+      d.recoveryRatings[group]={level:Number(rating.level),date:rating.date};
+    }
+  });
   return d;
 }
 function mergeBackupData(currentProfile,currentSessions,backupProfile,backupSessions){
-  var profileHasData=['exercises','routines','programs','goals'].some(function(key){
+  var profileHasData=['exercises','routines','programs','goals','recoveryRatings'].some(function(key){
     return Object.keys(currentProfile[key] || {}).length>0;
   }) || (currentProfile.measurements || []).length>0;
   var mergedProfile=profileHasData ? clone(currentProfile) : clone(backupProfile);
   if(profileHasData){
-    ['exercises','routines','programs','goals'].forEach(function(key){
+    ['exercises','routines','programs','goals','recoveryRatings'].forEach(function(key){
       mergedProfile[key]=mergedProfile[key] || {};
       Object.keys(backupProfile[key] || {}).forEach(function(id){
         if(!Object.prototype.hasOwnProperty.call(mergedProfile[key],id)) mergedProfile[key][id]=clone(backupProfile[key][id]);
@@ -1620,6 +1628,61 @@ function entryVolume(entry, sessionDate){
 function entryEffectiveSets(entry){
   return SobrecargaEngine.countEffectiveSets(entry.sets,SobrecargaEngine.isUnilateralEntry(entry));
 }
+function muscleRecoverySummary(today){
+  var summary={}, start=parseISO(today);
+  start.setDate(start.getDate()-6);
+  var startDate=iso(start);
+  S.sessions.forEach(function(session){
+    if(!session.date || session.date>today) return;
+    var days=Math.floor((Date.parse(session.date+'T00:00:00Z')-Date.parse(today+'T00:00:00Z'))/-86400000);
+    session.entries.forEach(function(entry){
+      var count=entryEffectiveSets(entry);
+      if(!count) return;
+      var effective=entry.sets.filter(SobrecargaEngine.isEffectiveSet);
+      var efforts=effective.map(function(set){return Number(set.rir);}).filter(Number.isFinite);
+      var averageRir=efforts.length?efforts.reduce(function(total,value){return total+value;},0)/efforts.length:null;
+      var effortFactor=averageRir===null?1:Math.max(0.7,Math.min(1.3,1+(2-averageRir)*0.1));
+      var ageFactor=days<=6?Math.pow(0.5,days/3):0;
+      var factors=SobrecargaEngine.groupFactors(muscleAssignments(exById(entry.exId)||{}));
+      Object.keys(factors).forEach(function(group){
+        if(group==='unassigned') return;
+        if(!summary[group]) summary[group]={load:0,lastStimulus:null};
+        if(!summary[group].lastStimulus || session.date>summary[group].lastStimulus) summary[group].lastStimulus=session.date;
+        summary[group].load+=count*factors[group]*effortFactor*ageFactor;
+      });
+    });
+  });
+  Object.keys(S.profile.recoveryRatings||{}).forEach(function(group){
+    if(group!=='unassigned' && !summary[group]) summary[group]={load:0,lastStimulus:null};
+  });
+  return summary;
+}
+function recoveryRatingLabel(level){
+  return ({1:'Me siento recuperado',2:'Algo cansado',3:'Muy fatigado'})[Number(level)]||'Sin autoevaluación';
+}
+function recoveryEstimateLabel(load){
+  return load>=4?'Alta':(load>=1.5?'Moderada':(load>0?'Ligera':'Ninguna reciente'));
+}
+function recoveryHtml(){
+  var today=iso(new Date()), summary=muscleRecoverySummary(today);
+  var groups=Object.keys(summary).sort(function(a,b){
+    return summary[b].load-summary[a].load || (MUSCLE_GROUPS[a]||a).localeCompare(MUSCLE_GROUPS[b]||b,'es');
+  });
+  var rows=groups.map(function(group){
+    var item=summary[group], rating=S.profile.recoveryRatings[group];
+    var days=item.lastStimulus===null?null:Math.max(0,Math.floor((Date.parse(today+'T00:00:00Z')-Date.parse(item.lastStimulus+'T00:00:00Z'))/86400000));
+    var stimulus=days===null?'Sin estímulo registrado':(days===0?'Último estímulo: hoy':(days===1?'Último estímulo: ayer':'Último estímulo: hace '+days+' días'));
+    var selected=rating&&rating.date===today?rating.level:'';
+    return '<article class="recovery-muscle"><div class="recovery-muscle-head"><strong>'+esc(MUSCLE_GROUPS[group]||group)+'</strong><span class="recovery-load">'+esc(recoveryEstimateLabel(item.load))+'</span></div>'+
+      '<p class="small muted">'+esc(stimulus)+' · '+fmt1(item.load)+' series equivalentes recientes</p>'+
+      '<label class="field"><span class="lab">¿Cómo lo sientes hoy?</span><select class="txt" data-recovery-group="'+esc(group)+'"><option value="">Sin autoevaluación hoy</option><option value="1"'+(selected===1?' selected':'')+'>Me siento recuperado</option><option value="2"'+(selected===2?' selected':'')+'>Algo cansado</option><option value="3"'+(selected===3?' selected':'')+'>Muy fatigado</option></select></label>'+
+      (rating&&rating.date!==today?'<small class="muted">Última autoevaluación: '+esc(recoveryRatingLabel(rating.level))+' · '+esc(dFmt(rating.date))+'</small>':'')+
+      '</article>';
+  }).join('');
+  return '<section class="recovery-panel"><div><h3>Recuperación y carga reciente</h3><p class="small muted">La carga es una estimación; tu autoevaluación se muestra aparte. No mide la recuperación fisiológica ni recomienda evitar entrenar.</p></div>'+
+    (rows?'<div class="recovery-grid">'+rows+'</div>':'<p class="home-weekly-note">Registra series efectivas y asigna músculos a tus ejercicios para ver su carga reciente.</p>')+
+    '<details class="volume-help"><summary>Cómo se estima</summary><p>Se consideran las series efectivas de los últimos 7 días: las secundarias cuentan al 50 %, el esfuerzo registrado ajusta ligeramente el aporte y las sesiones más antiguas pesan menos. La autoevaluación es opcional, se guarda por grupo muscular y no cambia tus recomendaciones de peso.</p></details></section>';
+}
 function weeklyMuscleSummaryHtml(week){
   var counts = {}, directCounts = {}, indirectCounts = {}, groupCounts = {}, groupDirect = {}, groupIndirect = {};
   week.forEach(function(session){
@@ -1684,10 +1747,10 @@ function weeklyMuscleSummaryHtml(week){
     var efforts=[];
     (groupDetails[group]||[]).forEach(function(id){ efforts=efforts.concat(effortByMuscle[id]||[]); });
     var average=efforts.length?efforts.reduce(function(sum,value){return sum+value;},0)/efforts.length:null;
-    var fatigue=average===null?'':average<=1?' · fatiga alta':average<=2?' · fatiga media':' · fatiga baja';
-    return '<div class="weekly-muscle-row"><span>'+esc(MUSCLE_GROUPS[group] || group)+'</span><strong>'+esc(trend+fatigue)+'</strong></div>';
+    var effort=average===null?'':' · esfuerzo registrado '+(average<=1?'alto':average<=2?'moderado':'bajo');
+    return '<div class="weekly-muscle-row"><span>'+esc(MUSCLE_GROUPS[group] || group)+'</span><strong>'+esc(trend+effort)+'</strong></div>';
   }).join('');
-  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><details class="volume-help"><summary>Cómo se calcula el volumen y la fatiga</summary><p>Las series directas cuentan completas; las indirectas se estiman al 50 % y el total suma ambas contribuciones. La fatiga estimada usa el RIR/RPE registrado: menor RIR indica mayor fatiga reciente.</p></details></div>' +
+  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><details class="volume-help"><summary>Cómo se calcula el volumen y el esfuerzo</summary><p>Las series directas cuentan completas; las indirectas se estiman al 50 % y el total suma ambas contribuciones. El esfuerzo se resume a partir del RIR/RPE guardado; no equivale por sí solo a medir la fatiga o recuperación muscular.</p></details></div>' +
     content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
 }
 function suggestHtml(){
@@ -2423,7 +2486,7 @@ function profileSummary(){
     '<div class="weekly-stat"><span>Entrenos</span><strong>'+S.sessions.length+'</strong><small>'+recent.length+' últimos 7 días</small></div>'+
     '<div class="weekly-stat"><span>Ejercicios usados</span><strong>'+Object.keys(uniqueExercises).length+'</strong><small>'+effectiveSets+' series efectivas totales</small></div>'+
     '<div class="weekly-stat"><span>Volumen total</span><strong>'+volumeText(totalVolume)+' '+weightUnitLabel()+'</strong><small>'+humanDuration(totalDuration)+' acumulados</small></div>'+
-    '<div class="weekly-stat"><span>Peso corporal</span><strong>'+ (latestWeight?weightText(latestWeight.values.weight):'—')+'</strong><small>'+ (latestWeight?esc(dFmt(latestWeight.date)):'Sin medir')+'</small></div></div></section>'+weeklyMuscleSummaryHtml(week)+goalsHtml();
+    '<div class="weekly-stat"><span>Peso corporal</span><strong>'+ (latestWeight?weightText(latestWeight.values.weight):'—')+'</strong><small>'+ (latestWeight?esc(dFmt(latestWeight.date)):'Sin medir')+'</small></div></div></section>'+weeklyMuscleSummaryHtml(week)+recoveryHtml()+goalsHtml();
 }
 function profileExercises(){
   var counts={}, last={}, volumes={};
@@ -3262,6 +3325,14 @@ function onInput(ev){
 function onChange(ev){
   var t = ev.target;
   if(t.id==='goal-type'){ updateGoalFormFields(); return; }
+  if(t.dataset.recoveryGroup!==undefined){
+    var recoveryGroup=t.dataset.recoveryGroup;
+    if(!Object.prototype.hasOwnProperty.call(MUSCLE_GROUPS,recoveryGroup)||recoveryGroup==='unassigned'||!['','1','2','3'].includes(t.value)){ render(); return; }
+    S.profile.recoveryRatings=S.profile.recoveryRatings||{};
+    if(t.value==='') delete S.profile.recoveryRatings[recoveryGroup];
+    else S.profile.recoveryRatings[recoveryGroup]={level:Number(t.value),date:iso(new Date())};
+    Store.saveProfile(); render(); toast(t.value?'Autoevaluación guardada':'Autoevaluación eliminada'); return;
+  }
   if(t.dataset.historyRange!==undefined){
     if(['all','7','30','90'].includes(t.value)){ S.historyRange=t.value; refreshHistoryResults(); }
     return;

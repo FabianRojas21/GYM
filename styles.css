@@ -282,6 +282,16 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .weekly-stat span{color:#969BA3;font-size:12px}
 .weekly-muscles{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:8px;background:#101114;border:1px solid #25272C}
 .weekly-muscles h3{font:600 19px/1.1 var(--font-display);letter-spacing:.03em;text-transform:uppercase}
+.recovery-panel{display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.recovery-panel h3{font:600 20px/1.1 var(--font-display);letter-spacing:.03em;text-transform:uppercase}
+.recovery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}
+.recovery-muscle{display:flex;flex-direction:column;gap:6px;min-width:0;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.recovery-muscle-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.recovery-muscle-head strong{font-size:14px}
+.recovery-load{font-size:12px;color:var(--accent);font-weight:600}
+.recovery-muscle .field{margin:0}
+.recovery-muscle .lab{font-size:12px}
+.recovery-muscle select{font-size:13px}
 .weekly-muscles>div:first-child p,.home-weekly-note{margin-top:4px;color:#969BA3;font-size:12px}
 .volume-help{margin-top:5px}
 .volume-help p{margin-top:6px;color:#969BA3;font-size:12px}

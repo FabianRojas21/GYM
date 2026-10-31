@@ -143,10 +143,46 @@ test('la sección Yo incluye resumen, ejercicios y medidas corporales', () => {
 test('fatiga, anomalías y accesibilidad están integradas en la interfaz', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const index=fs.readFileSync('./index.html','utf8');
-  assert.match(app,/fatiga estimada/i);
+  assert.match(app,/function recoveryHtml\(\)/);
+  assert.match(app,/no mide la recuperación fisiológica/i);
+  assert.match(app,/esfuerzo registrado/);
   assert.match(app,/peso más de 50 % sobre tu récord/);
   assert.match(app,/aria-selected/);
   assert.match(index,/aria-controls="view"/);
+});
+
+test('la recuperación separa carga objetiva reciente y autoevaluación opcional', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function muscleRecoverySummary\(today\)\{[\s\S]*?\n\}/);
+  const labels=source.match(/function recoveryRatingLabel\(level\)\{[\s\S]*?\n\}\nfunction recoveryEstimateLabel\(load\)\{[\s\S]*?\n\}/);
+  assert.ok(helper && labels);
+  const context={
+    S:{profile:{recoveryRatings:{}},sessions:[
+      {date:'2026-10-31',entries:[{exId:'press',sets:[{rir:0}]}]},
+      {date:'2026-10-28',entries:[{exId:'press',sets:[{rir:2}]}]},
+      {date:'2026-10-25',entries:[{exId:'press',sets:[{rir:2}]}]},
+      {date:'2026-10-20',entries:[{exId:'press',sets:[{rir:0}]}]}
+    ]},
+    parseISO:value=>new Date(Number(value.slice(0,4)),Number(value.slice(5,7))-1,Number(value.slice(8,10))),
+    iso:date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`,
+    entryEffectiveSets:()=>1,
+    exById:()=>({muscle:'chestMid'}),
+    muscleAssignments:()=>[{id:'chestMid',factor:1}],
+    SobrecargaEngine:{
+      groupFactors:assignments=>({chest:assignments[0].factor}),
+      isEffectiveSet:set=>set.rir===undefined||set.rir<=4
+    },
+    Object,Date,Math,Number
+  };
+  vm.runInNewContext(helper[0]+';'+labels[0]+';globalThis.summaryForTest=muscleRecoverySummary;globalThis.ratingForTest=recoveryRatingLabel;globalThis.estimateForTest=recoveryEstimateLabel;',context);
+  const summary=context.summaryForTest('2026-10-31');
+  assert.equal(summary.chest.lastStimulus,'2026-10-31');
+  assert.ok(Math.abs(summary.chest.load-1.95)<0.0001);
+  assert.equal(context.ratingForTest(3),'Muy fatigado');
+  assert.equal(context.ratingForTest(0),'Sin autoevaluación');
+  assert.equal(context.estimateForTest(0),'Ninguna reciente');
+  assert.match(source,/data-recovery-group=/);
+  assert.match(source,/S\.profile\.recoveryRatings\[recoveryGroup\]=\{level:Number\(t\.value\),date:iso\(new Date\(\)\)\}/);
 });
 
 test('permite peso cero para ejercicios con carga corporal', () => {
@@ -502,6 +538,7 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
     exercises:{same:{name:'Ejercicio actual'}},
     routines:{current:{name:'Rutina actual'}},
     programs:{},goals:{},
+    recoveryRatings:{chest:{level:1,date:'2026-10-30'}},
     measurements:[{id:'current',values:{weight:80}},{id:'shared',values:{weight:81}}]
   };
   const backupProfile={
@@ -509,6 +546,7 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
     exercises:{same:{name:'Ejercicio del respaldo'},added:{name:'Ejercicio nuevo'}},
     routines:{current:{name:'Rutina antigua'},added:{name:'Rutina nueva'}},
     programs:{added:{name:'Programa nuevo'}},goals:{},
+    recoveryRatings:{chest:{level:3,date:'2026-10-31'},back:{level:2,date:'2026-10-31'}},
     measurements:[{id:'shared',values:{weight:70}},{id:'backup',values:{weight:79}}]
   };
   const currentSessions=[{id:'same',notes:'nube'},{id:'keep',notes:'actual'}];
@@ -519,6 +557,8 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   assert.equal(merged.profile.exercises.added.name,'Ejercicio nuevo');
   assert.equal(merged.profile.routines.current.name,'Rutina actual');
   assert.equal(merged.profile.routines.added.name,'Rutina nueva');
+  assert.equal(merged.profile.recoveryRatings.chest.level,1);
+  assert.equal(merged.profile.recoveryRatings.back.level,2);
   assert.deepEqual(Array.from(merged.profile.measurements,m=>m.id),['current','shared','backup']);
   assert.deepEqual(Array.from(merged.sessions,m=>m.id),['same','keep','new']);
   assert.equal(merged.sessions[0].notes,'nube');
@@ -579,7 +619,7 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(app,/id="draft-save-status"/);
   assert.match(app,/data-history-search/);
   assert.match(app,/data-history-range/);
-  assert.match(app,/Cómo se calcula el volumen y la fatiga/);
+  assert.match(app,/Cómo se calcula el volumen y el esfuerzo/);
   assert.ok(styles.includes('.workout-finish{position:sticky'));
   assert.ok(styles.includes('padding-bottom:calc(124px'));
 });

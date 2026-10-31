@@ -73,6 +73,16 @@ unilaterales se cuenta una ronda cuando están completos ambos lados. Los
 secundarios aportan 0,5 serie estimada y las porciones de un mismo grupo no se
 duplican en el total.
 
+En **Yo → Resumen** puedes consultar la carga reciente por músculo y registrar
+opcionalmente cómo lo sientes hoy: recuperado, algo cansado o muy fatigado. La
+carga estimada suma series efectivas de los últimos 7 días, pondera las
+contribuciones indirectas al 50 %, ajusta suavemente por esfuerzo registrado y
+da menos peso a sesiones más antiguas. La carga y la autoevaluación se muestran
+por separado; son referencias personales, no una medición fisiológica, consejo
+médico ni una indicación para evitar entrenar. La app conserva la última
+autoevaluación por grupo muscular en el perfil y la sincroniza con los demás
+datos.
+
 En las reglas del ejercicio o de cada elemento de una rutina puedes ajustar
 **Peso disponible cada** en la unidad elegida. La app redondea las recomendaciones de subida
 hacia el siguiente peso disponible y las de bajada hacia uno disponible menor
@@ -192,9 +202,10 @@ peso de trabajo, la aproximación queda vacía hasta que lo indiques.
 
 ## Fatiga, anomalías y accesibilidad
 
-En la pantalla principal se muestra la carga semanal por músculo y una fatiga
-estimada según el RIR/RPE registrado. La app compara la carga reciente con el
-promedio anterior y señala esfuerzo alto, medio o bajo.
+En la pantalla principal se muestra la carga semanal por músculo y se compara
+con semanas anteriores; el RIR/RPE resume el esfuerzo registrado, no mide por
+sí solo la fatiga. En **Yo → Resumen**, la carga reciente por músculo y la
+autoevaluación opcional se presentan por separado.
 
 La entrada de series verifica valores imposibles o saltos superiores al 50 %
 del máximo histórico del ejercicio. Los avisos indican ejercicio, serie y
@@ -208,7 +219,7 @@ al cambiar de sección.
 
 La sección **Yo** separa la información personal en tres áreas:
 
-- **Resumen:** entrenamientos, volumen, duración, peso corporal, carga muscular y fatiga reciente.
+- **Resumen:** entrenamientos, volumen, duración, peso corporal, carga muscular reciente y autoevaluación de recuperación.
 - **Ejercicios:** ejercicios realizados, ordenables por nombre, uso reciente, frecuencia o volumen histórico. Al abrir uno se muestra su detalle completo.
 - **Medidas:** historial corporal de peso, altura, perímetros, fuerza de peso corporal opcional y porcentaje de grasa. Cada medición conserva fecha, valores y notas.
 
