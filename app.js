@@ -130,7 +130,7 @@ var S = {
   draftSaveState:'saved', historyQuery:'', historyRange:'all',
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
-  librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false,
+  librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(),
   restEndsAt:loadRestEnd(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:''
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
@@ -197,8 +197,12 @@ function startRest(seconds){
 function restTimerHtml(){
   if(!S.draft.entries.length) return '';
   var restSeconds = Number(S.profile.settings.restSeconds) || 90;
+  var remaining = S.restEndsAt ? Math.max(0, Math.ceil((S.restEndsAt - Date.now()) / 1000)) : 0;
+  var clock = S.restEndsAt
+    ? String(Math.floor(remaining / 60)).padStart(2, '0') + ':' + String(remaining % 60).padStart(2, '0')
+    : 'Listo';
   return '<section class="rest-timer" id="rest-timer" aria-live="polite"><div><span class="lab">Descanso</span><strong class="num" id="rest-clock">' +
-    (S.restEndsAt ? '00:00' : 'Listo') + '</strong></div><div class="row">' +
+    clock + '</strong></div><div class="row">' +
     '<button class="btn ghost sm" data-act="rest-start">Iniciar ' + Math.floor(restSeconds / 60) + ':' + String(restSeconds % 60).padStart(2, '0') + '</button>' +
     (S.restEndsAt ? '<button class="btn ghost sm" data-act="rest-add">+30 s</button><button class="btn ghost sm" data-act="rest-stop">Detener</button>' : '') +
     '</div></section>';
@@ -1184,12 +1188,21 @@ function goalHtml(ex){
     barHtml(p, ex) +
     '<details class="goal-more"><summary>Ver recomendación y último resultado</summary><p class="muted small">Última vez, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div>';
 }
+function completedWorkSets(en, ex){
+  var target = Math.max(1, Number(ex.sets) || 1);
+  return Math.min(target, en.rows.filter(function(row){
+    return setType(row) === 'normal' && row.restTriggered && rowComplete(row, ex.unilateral);
+  }).length);
+}
 function entryHtml(en, ei){
   if(!exById(en.exId)) return '';
   var ex = effEx(en);
   var mode = S.profile.settings.mode;
   var effLab = mode === 'rpe' ? 'RPE' : 'RIR';
   var p = planFor(ex);
+  var targetSets = Math.max(1, Number(ex.sets) || 1);
+  var completedSets = completedWorkSets(en, ex);
+  var collapsed = S.collapsedEntries.has(en);
   var workIndex = 0;
   var rows = en.rows.map(function(r, ri){
     ensureRowMode(r, ex.unilateral);
@@ -1216,7 +1229,11 @@ function entryHtml(en, ei){
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
       '<select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select>' +
-      (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral) : '') + '</div>';
+      (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral) : '') +
+      (r.restTriggered
+        ? '<span class="set-finish set-finish-done" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Serie ' + (ri+1) + ' terminada"><span aria-hidden="true">✓</span> Hecha</span>'
+        : '<button class="btn ghost sm set-finish" data-act="finish-set" data-ei="' + ei + '" data-ri="' + ri + '"' +
+          (!rowComplete(r, ex.unilateral) ? ' disabled' : '') + '>Terminar serie</button>') + '</div>';
   }).join('');
   var head = ex.unilateral
     ? '<div class="set head unilateral-head"><span>#</span><span class="side-type-head">Lado · kg · reps · ' + effLab + '</span></div>'
@@ -1225,9 +1242,12 @@ function entryHtml(en, ei){
     ? '<div class="workout-card-tools"><button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="-1"' + (ei === 0 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' arriba" title="Mover arriba">↑</button>' +
       '<button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="1"' + (ei === S.draft.entries.length - 1 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' abajo" title="Mover abajo">↓</button></div>'
     : '';
-  return '<section class="card" data-ei="' + ei + '">' +
-    '<div class="card-head workout-card-head"><h3>' + esc(ex.name) + '</h3><div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
-    goalHtml(ex) +
+  return '<section class="card workout-card' + (collapsed ? ' is-collapsed' : '') + '" data-ei="' + ei + '">' +
+    '<div class="card-head workout-card-head"><h3 class="workout-card-heading"><button class="workout-card-toggle" data-act="toggle-entry" data-ei="' + ei + '" aria-expanded="' + (!collapsed) + '">' +
+    '<span class="workout-card-title"><span class="workout-card-name">' + esc(ex.name) + '</span><span class="workout-progress">' + completedSets + '/' + targetSets + ' series</span></span>' +
+    '<span class="workout-card-chevron" aria-hidden="true">' + (collapsed ? '▸' : '▾') + '</span></button></h3>' +
+    '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
+    (collapsed ? '' : '<div class="workout-card-body">' + goalHtml(ex) +
     '<div class="sets">' + head + rows + '</div>' +
     '<details class="workout-help"><summary>Ayuda con las series</summary><p class="hint">' + (ex.unilateral
       ? 'Cada ronda registra ambos lados. Cuenta como una serie cuando completaste derecho e izquierdo; la progresión espera que ambos lados cumplan el objetivo. '
@@ -1237,7 +1257,7 @@ function entryHtml(en, ei){
     '<button class="btn ghost sm" data-act="repeat-set" data-ei="' + ei + '">Copiar última serie</button>' +
     '<button class="btn ghost sm" data-act="toggle-cfg" data-ei="' + ei + '" aria-expanded="' + (S.openCfg === en.exId ? 'true' : 'false') + '">Ajustar series, reps y salto</button></div>' +
     (S.openCfg === en.exId ? cfgPanel(en, ei) : '') +
-    '<div class="live" id="live-' + ei + '">' + liveHtml(ei) + '</div></section>';
+    '<div class="live" id="live-' + ei + '">' + liveHtml(ei) + '</div></div>') + '</section>';
 }
 function cfgPanel(en, ei){
   var ex = effEx(en), lab = S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR';
@@ -2492,6 +2512,12 @@ function onClick(ev){
       var movedEntry = S.draft.entries.splice(moveFrom, 1)[0];
       S.draft.entries.splice(moveTo, 0, movedEntry);
       saveDraft(); render(); break;
+    case 'toggle-entry':
+      var toggledEntry = S.draft.entries[ei];
+      if(!toggledEntry) break;
+      if(S.collapsedEntries.has(toggledEntry)) S.collapsedEntries.delete(toggledEntry);
+      else S.collapsedEntries.add(toggledEntry);
+      render(); break;
     case 'rm-ex':
       var removedEntry = S.draft.entries[ei], entryIndex = ei, draftAtRemoval = S.draft;
       if(!removedEntry) break;
@@ -2507,6 +2533,29 @@ function onClick(ev){
       var rows = S.draft.entries[ei].rows, lr = rows[rows.length-1];
       var entryEx = effEx(S.draft.entries[ei]);
       rows.push(nextRow(lr, entryEx.unilateral)); saveDraft(); render(); break;
+    case 'finish-set':
+      var finishEntry = S.draft.entries[ei], finishExercise = finishEntry && effEx(finishEntry);
+      var finishRow = finishEntry && finishEntry.rows[ri];
+      if(!finishRow || !finishExercise || !rowComplete(finishRow, finishExercise.unilateral)){
+        toast(finishExercise && finishExercise.unilateral
+          ? 'Completa peso y repeticiones de ambos lados'
+          : 'Completa peso y repeticiones para terminar la serie');
+        break;
+      }
+      if(finishRow.restTriggered) break;
+      var finishedAt = Date.now(), previousFinishedRow = ri > 0 && finishEntry.rows[ri-1];
+      if(previousFinishedRow && previousFinishedRow.restCompletedAt){
+        finishRow.restMs = Math.max(0, finishedAt - previousFinishedRow.restCompletedAt);
+      }
+      finishRow.restTriggered = true;
+      finishRow.restCompletedAt = finishedAt;
+      saveDraft();
+      var finishRestSeconds = restSecondsFor(finishRow);
+      if(autoRestEligible(finishRow) && finishRestSeconds > 0){
+        startRest(finishRestSeconds);
+      }
+      render();
+      break;
     case 'repeat-set':
       var repeatEntry=S.draft.entries[ei], repeatExercise=repeatEntry&&effEx(repeatEntry);
       if(!repeatEntry||!repeatExercise) break;
@@ -2707,7 +2756,28 @@ function onInput(ev){
   }
   var entry = S.draft.entries[ei], exercise = effEx(entry);
   if(f === 'w' && setType(row) === 'normal') refreshAutoWarmupInputs(ei, entry, exercise);
-  if(!rowComplete(row, effEx(S.draft.entries[ei]).unilateral)) delete row.restTriggered;
+  if(row.restTriggered){
+    delete row.restTriggered;
+    delete row.restCompletedAt;
+    delete row.restMs;
+  }
+  var finishControl = $('.set-finish[data-ei="' + ei + '"][data-ri="' + ri + '"]');
+  if(finishControl){
+    if(finishControl.tagName === 'BUTTON'){
+      finishControl.disabled = !rowComplete(row, exercise.unilateral);
+    }else{
+      var finishButton = document.createElement('button');
+      finishButton.className = 'btn ghost sm set-finish';
+      finishButton.dataset.act = 'finish-set';
+      finishButton.dataset.ei = String(ei);
+      finishButton.dataset.ri = String(ri);
+      finishButton.disabled = !rowComplete(row, exercise.unilateral);
+      finishButton.textContent = 'Terminar serie';
+      finishControl.replaceWith(finishButton);
+    }
+  }
+  var progress = $('.workout-progress', $('section.card[data-ei="' + ei + '"]'));
+  if(progress) progress.textContent = completedWorkSets(entry, exercise) + '/' + Math.max(1, Number(exercise.sets) || 1) + ' series';
   saveDraft(); refreshLive(ei);
 }
 function onChange(ev){
@@ -2840,19 +2910,12 @@ function onChange(ev){
   }
   if(t.dataset.f === 'r' || t.dataset.f === 'w'){
     var autoEntry = S.draft.entries[+t.dataset.ei], autoRi=+t.dataset.ri;
-    if(autoRi > 0){
-      var previousRestRow=autoEntry.rows[autoRi-1];
-      if(previousRestRow && previousRestRow.restCompletedAt && !autoEntry.rows[autoRi].restMs){
-        autoEntry.rows[autoRi].restMs=Math.max(0,Date.now()-previousRestRow.restCompletedAt);
+    if(autoRi > 0 && autoEntry){
+      var previousRestRow=autoEntry.rows[autoRi-1], currentRestRow=autoEntry.rows[autoRi];
+      if(previousRestRow && currentRestRow && previousRestRow.restCompletedAt && !currentRestRow.restMs){
+        currentRestRow.restMs=Math.max(0,Date.now()-previousRestRow.restCompletedAt);
+        saveDraft();
       }
-    }
-    var autoRow = autoEntry && autoEntry.rows[autoRi];
-    var autoEx = autoEntry && effEx(autoEntry);
-    if(autoRow && autoEx && autoRestEligible(autoRow) && rowComplete(autoRow, autoEx.unilateral) && !autoRow.restTriggered){
-      autoRow.restTriggered = true;
-      autoRow.restCompletedAt = Date.now();
-      var duration = restSecondsFor(autoRow);
-      if(duration){ startRest(duration); saveDraft(); }
     }
   }
   if(t.dataset.it === 'unilateral'){
@@ -2882,7 +2945,9 @@ function onChange(ev){
   if(t.dataset.setType !== undefined){
     var setRow = S.draft.entries[+t.dataset.ei] && S.draft.entries[+t.dataset.ei].rows[+t.dataset.ri];
     if(!setRow || !Object.prototype.hasOwnProperty.call(SET_TYPES, t.value)){ render(); return; }
-    setRow.type = t.value; delete setRow.warm; saveDraft(); render(); return;
+    setRow.type = t.value; delete setRow.warm;
+    delete setRow.restTriggered; delete setRow.restCompletedAt; delete setRow.restMs;
+    saveDraft(); render(); return;
   }
   if(t.dataset.hc || t.dataset.hef !== undefined){
     if(t.dataset.hc === 'unilateral'){

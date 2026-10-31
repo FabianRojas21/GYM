@@ -316,6 +316,13 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/data-act="repeat-set"/);
+  assert.match(app,/data-act="finish-set"/);
+  assert.match(app,/case 'finish-set':[\s\S]*?startRest\(finishRestSeconds\)/);
+  assert.match(app,/set-finish-done/);
+  assert.match(app,/data-act="toggle-entry"/);
+  assert.match(app,/completedSets \+ '\/' \+ targetSets/);
+  assert.match(app,/finishControl\.replaceWith\(finishButton\)/);
+  assert.doesNotMatch(app,/toast\('Serie terminada · descanso iniciado'\)/);
   assert.match(app,/function onWorkoutKeydown/);
   assert.match(app,/closest\('section\.card\[data-ei\]'\)/);
   assert.match(app,/id="draft-save-status"/);
