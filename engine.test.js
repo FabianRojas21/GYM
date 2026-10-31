@@ -185,6 +185,59 @@ test('la recuperación separa carga objetiva reciente y autoevaluación opcional
   assert.match(source,/S\.profile\.recoveryRatings\[recoveryGroup\]=\{level:Number\(t\.value\),date:iso\(new Date\(\)\)\}/);
 });
 
+test('el recordatorio configurable es interno, opcional y respeta intervalo y descarte diario', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function workoutReminderHtml\(latest\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const dismissed=new Map();
+  const today=new Date(2026,9,31);
+  const FixedDate=function(value){return value===undefined?today:new Date(value);};
+  FixedDate.parse=Date.parse;
+  const context={
+    S:{profile:{settings:{reminderEnabled:true,reminderIntervalDays:3}}},
+    validDate:value=>/^\d{4}-\d{2}-\d{2}$/.test(value),
+    iso:()=> '2026-10-31',
+    Date:FixedDate,
+    Number,Math,
+    localStorage:{getItem:key=>dismissed.get(key)||null},
+    REMINDER_DISMISSED_KEY:'dismissed',
+    esc:String
+  };
+  vm.runInNewContext(helper[0]+';globalThis.reminderForTest=workoutReminderHtml;',context);
+  const latest={id:'last-session',date:'2026-10-28'};
+  assert.match(context.reminderForTest(latest),/Han pasado 3 días/);
+  assert.equal(context.reminderForTest({...latest,date:'2026-10-29'}),'');
+  dismissed.set('dismissed','last-session:2026-10-31');
+  assert.equal(context.reminderForTest(latest),'');
+  context.S.profile.settings.reminderEnabled=false;
+  assert.equal(context.reminderForTest(latest),'');
+  assert.match(source,/data-setting="reminderEnabled"/);
+});
+
+test('la sección Tus datos muestra fecha y alcance de respaldos', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function readStoredBackup\(key\)\{[\s\S]*?\n\}\nfunction hasAutoBackup\(\)\{[\s\S]*?\n\}\nfunction backupTimestamp\(value\)\{[\s\S]*?\n\}\nfunction backupStatusHtml\(\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const stored=new Map([
+    ['auto',{savedAt:1793480000000,sessions:[{id:'one'},{id:'two'}]}],
+    ['export',{requestedAt:1793480000000,sessionCount:2}]
+  ]);
+  const context={
+    localStorage:{getItem:key=>JSON.stringify(stored.get(key)||null)},
+    console,Number,Date,Intl,esc:String,
+    AUTO_BACKUP_KEY:'auto',BACKUP_EXPORT_KEY:'export'
+  };
+  vm.runInNewContext(helper[0]+';globalThis.backupStatusForTest=backupStatusHtml;globalThis.hasBackupForTest=hasAutoBackup;',context);
+  assert.equal(context.hasBackupForTest(),true);
+  const status=context.backupStatusForTest();
+  assert.match(status,/2 entrenos/);
+  assert.match(status,/Última copia automática en este navegador/);
+  assert.match(status,/Última descarga solicitada/);
+  assert.match(status,/Comprueba que el archivo esté en tu dispositivo/);
+  assert.match(source,/Respaldo restaurado[\s\S]*addedSessions/);
+  assert.match(source,/createAutoBackup\(\);\s*render\(\);\s*toast\('Copia automática restaurada/);
+});
+
 test('permite peso cero para ejercicios con carga corporal', () => {
   const result = analyze(baseExercise, [set(10, 2, 0), set(10, 2, 0), set(10, 2, 0)], null, rirSettings);
   assert.equal(result.status, 'sube');

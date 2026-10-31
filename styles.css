@@ -325,6 +325,15 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .home-start{width:100%;min-height:54px;border:0;border-radius:999px;background:#E7E7E8;color:#111318;font:600 19px/1 var(--font-display);letter-spacing:0;text-transform:none}
 .home-dashboard>.home-start{position:sticky;top:64px;z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .home-start span{font-size:15px}
+.workout-reminder{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;background:color-mix(in srgb,var(--accent) 8%,#101114)}
+.workout-reminder p{margin-top:4px;color:#B5B8BE;font-size:13px}
+.workout-reminder .row{flex:0 0 auto}
+.setting-toggle{flex-direction:row;align-items:center;gap:10px;margin-bottom:12px}
+.setting-toggle input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
+.backup-status{display:grid;gap:5px;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:13px}
+.backup-status p{margin:0}
+.backup-status .small{font-size:12px}
+@media (max-width:520px){.workout-reminder{align-items:stretch;flex-direction:column}.workout-reminder .row{width:100%}.backup-status{font-size:12px}}
 .home-first{border-radius:10px}
 .home-first>div:first-child{display:flex;flex-direction:column;gap:7px}
 .home-first .sec-title{color:var(--ink)}

@@ -103,13 +103,15 @@ var LK = 'sobrecarga:data:v1';
 var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
 var RTOK = RTK + ':owner';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg'}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
   p = clone(p);
   d.settings = Object.assign(d.settings, p.settings || {});
   if(!['kg','lb'].includes(d.settings.weightUnit)) d.settings.weightUnit='kg';
+  d.settings.reminderEnabled=d.settings.reminderEnabled===true;
+  if(![2,3,5,7].includes(Number(d.settings.reminderIntervalDays))) d.settings.reminderIntervalDays=3;
   if(![60,90,120,180,300].includes(Number(d.settings.restSeconds))) d.settings.restSeconds = 90;
   if(![0,15,30,45,60,90,120].includes(Number(d.settings.warmupRestSeconds))) d.settings.warmupRestSeconds = 45;
   d.exercises = p.exercises || {};
@@ -955,7 +957,11 @@ function downloadBackup(){
     link.href = url; link.download = 'sobrecarga-respaldo-' + iso(new Date()) + '.json';
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
-  }).then(function(){ toast('Respaldo descargado'); })
+  }).then(function(){
+    try { localStorage.setItem(BACKUP_EXPORT_KEY,JSON.stringify({requestedAt:Date.now(),sessionCount:S.sessions.length})); }
+    catch(error){ console.warn('No se pudo guardar la fecha de exportación del respaldo',error); }
+    render(); toast('Descarga del respaldo iniciada; comprueba que el archivo se haya guardado');
+  })
     .catch(function(e){ if(!e || e.code !== 'declined') toast('No se pudo descargar el respaldo'); });
 }
 function restoreBackup(){
@@ -966,11 +972,14 @@ function restoreBackup(){
   }
   var data = S.pendingImport;
   var merged=mergeBackupData(S.profile,S.sessions,normProfile(data.profile),data.sessions);
+  var addedSessions=merged.sessions.length-S.sessions.length;
   var pending = Store.replaceAll(merged.profile, merged.sessions);
   S.pendingImport = null; S.confirm = null; S.justSaved = null;
-  render(); toast('Respaldo combinado; se conservaron los datos existentes');
+  render(); toast('Restaurando respaldo…');
   pending.then(function(){
-    if(['db','cloud'].includes(S.kind)) toast('Respaldo combinado con tu cuenta');
+    createAutoBackup();
+    render();
+    toast('Respaldo restaurado'+(['db','cloud'].includes(S.kind)?' con tu cuenta':'')+': '+addedSessions+' entreno'+(addedSessions===1?' nuevo':'s nuevos')+' agregado'+(addedSessions===1?'':'s'));
   }).catch(function(error){
     toast('Respaldo combinado aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
   });
@@ -1991,6 +2000,7 @@ function homeDashboard(){
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
     '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '</strong><span>volumen · sin aprox.</span></div></div>' +
+    workoutReminderHtml(latest) +
     '<button class="btn home-start" data-act="start"><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
     weeklyMuscleSummaryHtml(week);
   if(latest){
@@ -2013,6 +2023,19 @@ function homeDashboard(){
   out += routineQuick() + suggestHtml();
   if(S.picker) out += pickerHtml('day');
   return out;
+}
+var REMINDER_DISMISSED_KEY='sobrecarga:reminder-dismissed:v1';
+function workoutReminderHtml(latest){
+  var settings=S.profile.settings;
+  if(!settings.reminderEnabled || !latest || !validDate(latest.date)) return '';
+  var today=iso(new Date()), todayUtc=Date.parse(today+'T00:00:00Z');
+  var latestUtc=Date.parse(latest.date+'T00:00:00Z');
+  var elapsed=Math.floor((todayUtc-latestUtc)/86400000);
+  if(!Number.isFinite(elapsed) || elapsed<Number(settings.reminderIntervalDays)) return '';
+  try {
+    if(localStorage.getItem(REMINDER_DISMISSED_KEY)===latest.id+':'+today) return '';
+  } catch(error){ console.warn('No se pudo leer el estado del recordatorio',error); }
+  return '<aside class="workout-reminder" aria-live="polite"><div><strong>¿Te gustaría entrenar hoy?</strong><p>Han pasado '+elapsed+' días desde tu último entreno. Es solo un recordatorio; tú decides si hoy te conviene entrenar.</p></div><div class="row"><button class="btn sm" data-act="start">Empezar un entreno</button><button class="btn ghost sm" data-act="reminder-dismiss" data-session="'+esc(latest.id)+'">Ahora no</button></div></aside>';
 }
 function viewHoy(){
   var out = savedHtml();
@@ -2545,6 +2568,10 @@ function viewSet(){
     '</select></div><div class="field"><label class="lab" for="warmup-rest-setting">Series de aproximación</label><select id="warmup-rest-setting" class="txt" data-setting="warmupRestSeconds">' +
     [0,15,30,45,60,90,120].map(function(seconds){ return '<option value="' + seconds + '"' + (Number(st.warmupRestSeconds) === seconds ? ' selected' : '') + '>' + (seconds ? seconds + ' s' : 'Sin temporizador') + '</option>'; }).join('') +
     '</select></div><p class="small muted">El descanso empieza al completar una serie (en unilateral, al completar ambos lados). Drop set y rest-pause no inician el temporizador automáticamente. También puedes iniciarlo manualmente.</p></section>';
+  out += '<section class="card"><p class="sec-title">Recordatorio de entrenamiento</p><label class="field setting-toggle"><input type="checkbox" data-setting="reminderEnabled"' + (st.reminderEnabled?' checked':'') + '><span>Mostrar un recordatorio dentro de la app</span></label>' +
+    '<div class="field"><label class="lab" for="reminder-interval">Después de cuántos días sin entrenar</label><select id="reminder-interval" class="txt" data-setting="reminderIntervalDays">' +
+    [2,3,5,7].map(function(days){return '<option value="'+days+'"'+(Number(st.reminderIntervalDays)===days?' selected':'')+'>'+days+' días</option>';}).join('') +
+    '</select></div><p class="small muted">Aparece al abrir Hoy cuando haya pasado el intervalo desde tu último entreno. Solo es un aviso dentro de la app: no recibirás notificaciones con la app cerrada. Desactivado por defecto.</p></section>';
   out += '<section class="card"><details class="how"><summary>Cómo decide la app</summary><ul class="small">' +
     '<li>Cada ejercicio tiene series y un rango de repeticiones, por ejemplo 3×8–12.</li>' +
     '<li>Mantienes el peso y sumas repeticiones hasta llegar al tope en todas las series.</li>' +
@@ -2573,8 +2600,9 @@ function viewSet(){
   }
   out += accountHtml;
   out += '<section class="card"><p class="sec-title">Tus datos</p><p class="small">' +
-    (['db','cloud'].includes(S.kind) ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : S.syncUnavailable ? 'Se guardan en este navegador mientras la nube no esté disponible. Usa «Sincronizar ahora» cuando vuelva la conexión.' : 'Se guardan solo en este navegador. Inicia sesión arriba para sincronizarlos.') + '</p><div class="row">' +
-    '<button class="btn ghost sm" data-act="auto-restore">Restaurar última copia automática' + esc(autoBackupLabel()) + '</button>' +
+    (['db','cloud'].includes(S.kind) ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : S.syncUnavailable ? 'Se guardan en este navegador mientras la nube no esté disponible. Usa «Sincronizar ahora» cuando vuelva la conexión.' : 'Se guardan solo en este navegador. Inicia sesión arriba para sincronizarlos.') + '</p>' +
+    backupStatusHtml() + '<div class="row">' +
+    '<button class="btn ghost sm" data-act="auto-restore"' + (hasAutoBackup()?'':' disabled') + '>Restaurar última copia automática</button>' +
     '<button class="btn ghost sm" data-act="export">Descargar respaldo</button><button class="btn ghost sm" data-act="import">Restaurar respaldo</button>' +
     '<button class="btn ghost sm" data-act="export-csv">Exportar CSV</button><button class="btn ghost sm" data-act="import-csv">Importar CSV</button>' +
     '<button class="btn ghost sm" data-act="import-routine">Importar rutina</button>' +
@@ -2909,6 +2937,10 @@ function onClick(ev){
       break;
     case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
+    case 'reminder-dismiss':
+      try { localStorage.setItem(REMINDER_DISMISSED_KEY,String(t.dataset.session)+':'+iso(new Date())); }
+      catch(error){ console.warn('No se pudo guardar el estado del recordatorio',error); }
+      render(); break;
     case 'profile-open-exercise': S.tab='ejercicios'; S.librarySection='ejercicios'; S.openEx=t.dataset.id; try{localStorage.setItem(TK,S.tab);}catch(e){} render(); window.scrollTo(0,0); break;
     case 'measurement-new': S.measurementForm=true; render(); break;
     case 'measurement-cancel': S.measurementForm=false; render(); break;
@@ -3231,7 +3263,7 @@ function onClick(ev){
     case 'wipe-ok':
       var ids = S.sessions.map(function(s){ return s.id; });
       Store.deleteSessions(ids).then(function(){
-        S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.goals = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
+        S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.goals = {}; S.profile.recoveryRatings = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
         S.restEndsAt = null; saveRestEnd();
         return Store.saveProfileNow();
       }).then(function(){
@@ -3466,6 +3498,15 @@ function onChange(ev){
     if(!['kg','lb'].includes(t.value)){ render(); return; }
     S.profile.settings.weightUnit=t.value; Store.saveProfile(); render(); return;
   }
+  if(t.dataset.setting === 'reminderEnabled'){
+    if(t.type!=='checkbox'){ render(); return; }
+    S.profile.settings.reminderEnabled=t.checked; Store.saveProfile(); render(); return;
+  }
+  if(t.dataset.setting === 'reminderIntervalDays'){
+    var reminderDays=Number(t.value);
+    if(![2,3,5,7].includes(reminderDays)){ render(); return; }
+    S.profile.settings.reminderIntervalDays=reminderDays; Store.saveProfile(); render(); return;
+  }
   if(t.dataset.f === 'r' || t.dataset.f === 'w'){
     var autoEntry = S.draft.entries[+t.dataset.ei], autoRi=+t.dataset.ri;
     if(autoRi > 0 && autoEntry){
@@ -3618,16 +3659,40 @@ function onWorkoutKeydown(ev){
 }
 
 var AUTO_BACKUP_KEY='sobrecarga:auto-backup:v1';
+var BACKUP_EXPORT_KEY='sobrecarga:backup-export:v1';
 function createAutoBackup(){
   if(!S.ready) return;
   try { localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify({savedAt:Date.now(),profile:S.profile,sessions:S.sessions,draft:S.draft})); } catch(e){ toast('No se pudo crear la copia automática'); }
 }
-function autoBackupLabel(){
-  try { var backup=JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY)); if(!backup || !backup.savedAt) return ''; return ' · última copia: '+new Intl.DateTimeFormat('es-CL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(backup.savedAt)); } catch(e){ return ''; }
+function readStoredBackup(key){
+  try {
+    var value=JSON.parse(localStorage.getItem(key));
+    return value && typeof value==='object' ? value : null;
+  } catch(error){ console.warn('No se pudo leer la información del respaldo',error); return null; }
+}
+function hasAutoBackup(){
+  var backup=readStoredBackup(AUTO_BACKUP_KEY);
+  return !!(backup && Number.isFinite(Number(backup.savedAt)) && Array.isArray(backup.sessions));
+}
+function backupTimestamp(value){
+  var date=new Date(Number(value));
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat('es-CL',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(date)
+    : 'fecha no disponible';
+}
+function backupStatusHtml(){
+  var automatic=readStoredBackup(AUTO_BACKUP_KEY), exported=readStoredBackup(BACKUP_EXPORT_KEY);
+  var automaticStatus=automatic && Number.isFinite(Number(automatic.savedAt)) && Array.isArray(automatic.sessions)
+    ? 'Última copia automática en este navegador: '+backupTimestamp(automatic.savedAt)+' · '+automatic.sessions.length+' entrenos.'
+    : 'Aún no hay una copia automática disponible en este navegador.';
+  var exportStatus=exported && Number.isFinite(Number(exported.requestedAt))
+    ? 'Última descarga solicitada: '+backupTimestamp(exported.requestedAt)+' · '+(Number(exported.sessionCount)||0)+' entrenos. Comprueba que el archivo esté en tu dispositivo.'
+    : 'Todavía no has solicitado una descarga de respaldo desde este dispositivo.';
+  return '<div class="backup-status"><p><strong>'+esc(automaticStatus)+'</strong></p><p>'+esc(exportStatus)+'</p><p class="small muted">La copia automática vive solo en este navegador; descarga el respaldo JSON para conservarlo o moverlo a otro dispositivo.</p></div>';
 }
 function restoreAutoBackup(){
   try {
-    var backup=JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY));
+    var backup=readStoredBackup(AUTO_BACKUP_KEY);
     var data=SobrecargaBackup.migrateBackup({format:'sobrecarga-backup',version:1,profile:backup&&backup.profile,sessions:backup&&backup.sessions});
     if(!backup || !data || !validBackup(data)) throw new Error('invalid');
     if(S.cloudUser && S.kind==='cloud' && !S.ready){
@@ -3635,11 +3700,13 @@ function restoreAutoBackup(){
       return;
     }
     var merged=mergeBackupData(S.profile,S.sessions,normProfile(data.profile),data.sessions);
+    var addedSessions=merged.sessions.length-S.sessions.length;
     Store.replaceAll(merged.profile,merged.sessions).then(function(){
       if(!S.cloudUser && !S.draft.entries.length && !S.draft.startedAt && backup.draft && Array.isArray(backup.draft.entries)) {
         S.draft=Object.assign(blankDraft(),backup.draft); saveDraft();
       }
-      render(); toast('Copia automática combinada; se conservaron los datos existentes');
+      createAutoBackup();
+      render(); toast('Copia automática restaurada: '+addedSessions+' entreno'+(addedSessions===1?' nuevo':'s nuevos')+' agregado'+(addedSessions===1?'':'s'));
     }).catch(function(error){
       toast('Copia automática combinada aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
     });

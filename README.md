@@ -36,6 +36,11 @@ manual usa long-polling y deja de esperar cada escritura tras 15 segundos sin
 respuesta; muestra qué parte no respondió y conserva los datos locales para que
 puedas corregir la conexión y volver a intentarlo.
 
+En **Ajustes → Recordatorio de entrenamiento** puedes activar un aviso dentro
+de la app después de 2, 3, 5 o 7 días sin registrar un entreno. Está apagado
+por defecto y se muestra al abrir **Hoy**; no es una notificación del sistema
+y no llega mientras la app está cerrada. Puedes posponerlo por el día.
+
 Durante un entreno puedes copiar una serie ya completada a la siguiente serie
 vacía y avanzar entre todos los campos de los ejercicios con **Enter**; al
 terminar el último campo, se cierra el teclado. En móvil, el teclado muestra la
@@ -254,6 +259,13 @@ un aviso para instalarla.
 Los datos locales siguen vinculados al navegador y origen usados. Antes de
 cambiar de dirección, navegador o teléfono, descarga un respaldo JSON desde
 **Ajustes → Tus datos**.
+
+En **Ajustes → Tus datos** se muestran la fecha y cantidad de entrenos de la
+copia automática local, además de cuándo se solicitó la última descarga JSON.
+La copia automática solo existe en ese navegador. La app no puede confirmar que
+el navegador haya guardado el archivo descargado; comprueba que esté en tu
+dispositivo. Al restaurar una copia válida, se informa cuántos entrenos nuevos
+se agregaron y se actualiza la copia automática.
 
 ## Sincronización con Firebase
 
