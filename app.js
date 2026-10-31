@@ -315,6 +315,18 @@ function toast(msg, actionLabel, action){
 var profTimer = null, profBusy = false, profDirty = false;
 var cloudDraftTimer = null;
 var cloudLoadingTimer = null, cloudUnsubs = [];
+function withTimeout(promise, timeoutMs, message){
+  return new Promise(function(resolve,reject){
+    var timer=setTimeout(function(){ reject(new Error(message)); },timeoutMs);
+    Promise.resolve(promise).then(function(value){
+      clearTimeout(timer);
+      resolve(value);
+    },function(error){
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
 var Store = {
   ref:null, col:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null, cloudGeneration:0,
   detachCloudListeners:function(){
@@ -516,7 +528,11 @@ var Store = {
     var draft=clone(S.draft);
     draft.updatedAt=Date.now(); draft.restEndsAt=S.restEndsAt || null;
     var draftWrite=Store.firebaseDb.collection('users').doc(user.uid).collection('app').doc('draft').set(draft);
-    return Promise.all([profileWrite,sessionsWrite,draftWrite]).then(function(){
+    return withTimeout(
+      Promise.all([profileWrite,sessionsWrite,draftWrite]),
+      15000,
+      'Firebase no respondió en 15 segundos. Tus datos siguen guardados en este dispositivo; revisa la conexión o los bloqueadores y vuelve a intentar.'
+    ).then(function(){
       if(fallback) Store.startFirebase(user);
     });
   },
@@ -2604,7 +2620,7 @@ function onClick(ev){
       }).catch(function(error){
         console.error('No se pudo completar la sincronización',error);
         S.cloudSyncing=false; render();
-        toast('No se pudo completar la sincronización; tus datos locales se conservaron');
+        toast(error && error.message ? error.message : 'No se pudo completar la sincronización; tus datos locales se conservaron');
       });
       break;
     case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;

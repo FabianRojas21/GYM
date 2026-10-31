@@ -25,7 +25,10 @@ con accesos a tus rutinas y a los ejercicios que puedes retomar.
 Si Firebase no responde al iniciar, la app conserva los datos locales y cambia
 al guardado en este navegador en vez de habilitar una sincronización que no está
 lista. Cuando vuelva la conexión, usa **Sincronizar ahora** en Ajustes; espera
-el aviso de confirmación antes de cerrar o recargar la app.
+el aviso de confirmación antes de cerrar o recargar la app. La sincronización
+manual deja de esperar tras 15 segundos sin respuesta y muestra un error; tus
+datos locales se conservan para que puedas corregir la conexión y volver a
+intentarlo.
 
 Durante un entreno puedes copiar una serie ya completada a la siguiente serie
 vacía, avanzar entre campos con **Enter** y ver el estado de guardado debajo
