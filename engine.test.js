@@ -220,6 +220,9 @@ test('el volumen de unilaterales exige pares completos incluso en series especia
   assert.equal(entryVolume(sets,true),368);
   assert.equal(countEffectiveSets(sets,true),2);
   assert.equal(isUnilateralEntry({sets:[{pair:0,side:'left'}]},null),true);
+  const historicalBilateral={sets:[set(10,2,12),set(10,2,12),set(10,2,12)]};
+  assert.equal(isUnilateralEntry(historicalBilateral),false);
+  assert.equal(countEffectiveSets(historicalBilateral.sets,isUnilateralEntry(historicalBilateral)),3);
 });
 
 test('los accesorios aislados no heredan secundarios de su grupo', () => {
@@ -232,15 +235,28 @@ test('los accesorios aislados no heredan secundarios de su grupo', () => {
   assert.deepEqual(inferSecondaryMuscles('bicepsShort','Curl de bíceps'),[]);
   assert.deepEqual(inferSecondaryMuscles('chestMid','Aperturas'),[]);
   assert.deepEqual(inferSecondaryMuscles('chestMid','Press banca'),['tricepsLateral','tricepsMedial','shoulderAnterior']);
+  assert.deepEqual(inferSecondaryMuscles('chestMid','Push-ups'),['tricepsLateral','tricepsMedial','shoulderAnterior']);
+  assert.deepEqual(inferSecondaryMuscles('chestMid','Flexiones'),['tricepsLateral','tricepsMedial','shoulderAnterior']);
+  assert.deepEqual(inferSecondaryMuscles('quads','Zancadas'),['glutesMax','adductors']);
+  assert.deepEqual(inferSecondaryMuscles('quads','Leg press'),['glutesMax','adductors']);
+  assert.deepEqual(inferSecondaryMuscles('hamstrings','Romanian deadlift'),['glutesMax','lowerBack']);
+  assert.deepEqual(inferSecondaryMuscles('lowerBack','Hyperextensions'),['glutesMax']);
+  assert.deepEqual(inferSecondaryMuscles('lats','Pullover'),[]);
 });
 
 test('agrupa subdivisiones y calcula series directas e indirectas', () => {
-  const {muscleGroupId,muscleAssignments}=require('./engine.js');
+  const {muscleGroupId,muscleAssignments,groupFactors}=require('./engine.js');
   assert.equal(muscleGroupId('chestUpper'),'chest');
   assert.equal(muscleGroupId('chestMid'),'chest');
+  assert.equal(muscleGroupId('adductors'),'adductors');
+  assert.equal(muscleGroupId('hipFlexors'),'hipFlexors');
+  assert.equal(muscleGroupId('neck'),'neck');
+  assert.equal(muscleGroupId('unassigned'),'unassigned');
   assert.deepEqual(muscleAssignments('chestMid',['tricepsLateral','tricepsMedial']),[
     {id:'chestMid',factor:1},{id:'tricepsLateral',factor:0.5},{id:'tricepsMedial',factor:0.5}
   ]);
+  assert.deepEqual(groupFactors(muscleAssignments('chestMid',['tricepsLateral','tricepsMedial'])),{chest:1,triceps:0.5});
+  assert.deepEqual(groupFactors(muscleAssignments('lats',['bicepsShort','brachialis'])),{back:1,biceps:0.5});
 });
 
 test('compara días equivalentes y detecta tendencias sin semanas falsas', () => {
@@ -258,8 +274,8 @@ test('calcula peso corporal ponderado por ejercicio', () => {
 
 test('CSV unilateral mantiene su estado y las tendencias agrupan músculos', () => {
   const source=fs.readFileSync('./app.js','utf8');
-  assert.match(source,/unilateral:SobrecargaEngine\.isUnilateralEntry\(\{sets:sets\},exercise\)/);
-  assert.match(source,/var groupCounts=\{\}, groupDetails=\{\}/);
+  assert.match(source,/unilateral:!!exercise\.unilateral \|\| SobrecargaEngine\.isUnilateralEntry\(\{sets:sets\}\)/);
+  assert.match(source,/groupFactors\(muscleAssignments/);
   assert.match(source,/comparableWeekRange\(today,weekIndex\)/);
   assert.match(source,/indirectLabel\*0\.5/);
 });
