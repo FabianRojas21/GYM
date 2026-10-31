@@ -129,6 +129,15 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .head-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .head-row h2{font:700 34px/1 var(--font-display);letter-spacing:.03em;text-transform:uppercase}
 .workout-meta{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;text-align:right}
+.workout-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.workout-substitution{display:grid;gap:6px;padding:2px 0}
+.workout-substitution-confirm{padding:10px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in srgb,var(--warn) 8%,var(--surface))}
+.workout-substitution-confirm p{margin-bottom:8px}
+.workout-card-simple .goal,.workout-card-simple .workout-help,.workout-card-simple .live,.workout-card-simple .workout-card-tools,.workout-card-simple .workout-progress,.workout-card-simple [data-act="toggle-cfg"]{display:none!important}
+.workout-card-simple .sets{gap:10px}
+.workout-card-simple .set:not(.head) .in{min-height:50px;font-size:18px}
+.workout-card-simple .set-finish{min-height:46px;font-size:16px}
+.workout-card-simple .workout-card-name{font-size:26px}
 .workout-clock-label{font:500 14px/1.2 var(--font-display);color:var(--muted)}
 .workout-clock-label strong{color:var(--accent);font-size:20px}
 .rest-timer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:6px}
@@ -334,6 +343,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .backup-status p{margin:0}
 .backup-status .small{font-size:12px}
 @media (max-width:520px){.workout-reminder{align-items:stretch;flex-direction:column}.workout-reminder .row{width:100%}.backup-status{font-size:12px}}
+@media (max-width:520px){.workout-heading{align-items:flex-start;flex-direction:column}.workout-heading-actions{width:100%;justify-content:space-between}.workout-heading-actions .workout-meta{flex:1;justify-content:flex-end}}
 .home-first{border-radius:10px}
 .home-first>div:first-child{display:flex;flex-direction:column;gap:7px}
 .home-first .sec-title{color:var(--ink)}

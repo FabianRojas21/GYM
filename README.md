@@ -102,13 +102,27 @@ la unidad solo modifica la presentación y la conversión de las nuevas entradas
 El CSV exportado conserva la columna `peso_kg`; al importar, se aceptan también
 las columnas explícitas `peso_lb` y `weight_lb`, que se convierten a kg.
 
-Durante un entreno, las series normales muestran como referencia el peso y las
-repeticiones de la serie correspondiente de la última sesión. Si quitas una
-serie o un ejercicio por error, usa **Deshacer** en el aviso que aparece.
-También puedes mover ejercicios arriba o abajo durante el entreno; el nuevo
-orden se guarda en el borrador actual. Si empezaste desde una rutina, al
-terminar podrás elegir si guardas el orden y los ajustes en ella o si la dejas
-sin cambios.
+En **Ajustes → Valores anteriores al entrenar** puedes definir el alcance de
+búsqueda: la última vez que hiciste el ejercicio en cualquier rutina
+(predeterminado) o la última vez que lo hiciste dentro de la rutina actual.
+Al añadir el ejercicio, sus series normales precargan peso, repeticiones y
+esfuerzo de esa sesión; los valores siguen siendo editables y se muestra la
+fecha de referencia. El cambio de preferencia no sobrescribe las series que ya
+están en curso.
+
+En **Biblioteca → Ejercicios**, abre un ejercicio y marca sus **Ejercicios
+alternativos**. Durante el entrenamiento puedes elegir uno de ellos para la
+sesión actual. Si ya anotaste datos, la app pide confirmación antes de limpiar
+esas series. El sustituto queda registrado con su propio nombre y no cambia la
+rutina, salvo que al terminar elijas actualizarla.
+
+En **Hoy**, activa **Modo simple** para ampliar los campos y ocultar la ayuda y
+los paneles secundarios durante el entrenamiento; **Vista completa** los
+restaura. La app conserva esta preferencia en el navegador. Si quitas una serie
+o un ejercicio por error, usa **Deshacer** en el aviso que aparece. También
+puedes mover ejercicios arriba o abajo durante el entreno; el nuevo orden se
+guarda en el borrador actual. El temporizador de descanso y los controles para
+añadir o copiar series siguen disponibles en ambos modos.
 
 ## Tipos de serie
 

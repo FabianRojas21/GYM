@@ -773,3 +773,92 @@ test('la sincronización finaliza con error si Firebase deja una escritura pendi
   assert.match(source,/S\.cloudSyncing=false; render\(\);[\s\S]*?toast\(error && error\.message/);
   assert.match(source,/Promise\.resolve\(\)\.then\(function\(\)\{ return Store\.syncToCloud\(\); \}\)/);
 });
+
+test('precarga los valores de la última sesión y respeta el alcance de rutina elegido', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helperNames=['previousExerciseSessions','previousExerciseEntry','applyPreviousValues'];
+  const helpers=helperNames.map(name=>{
+    const match=source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`));
+    assert.ok(match,`missing ${name}`);
+    return match[0];
+  }).join('\n');
+  const context={
+    S:{profile:{settings:{previousExerciseScope:'any'}},sessions:[
+      {id:'a-old',date:'2026-01-01',ts:1,routineId:'routine-a',entries:[{exId:'press',sets:[{w:60,r:8,rir:2,type:'normal'}]}]},
+      {id:'b',date:'2026-01-10',ts:2,routineId:'routine-b',entries:[{exId:'press',sets:[{w:65,r:9,rir:1,type:'normal'}]}]},
+      {id:'a-new',date:'2026-01-20',ts:3,routineId:'routine-a',entries:[{exId:'press',sets:[{w:70,r:10,rir:0,type:'normal'}]}]}
+    ]},
+    setType:row=>row.type||'normal',
+    validWeight:value=>Number.isFinite(Number(value))&&Number(value)>=0,
+    validReps:value=>Number.isFinite(Number(value))&&Number(value)>0
+  };
+  vm.runInNewContext(helpers+';globalThis.applyPreviousValuesForTest=applyPreviousValues;',context);
+  const anyRows=[{type:'normal',w:'',r:'',rir:''}];
+  context.applyPreviousValuesForTest('press',anyRows,false,'routine-b');
+  assert.deepEqual(anyRows[0],{type:'normal',w:'70',r:'10',rir:'0'});
+  context.S.profile.settings.previousExerciseScope='sameRoutine';
+  const routineRows=[{type:'normal',w:'',r:'',rir:''}];
+  context.applyPreviousValuesForTest('press',routineRows,false,'routine-b');
+  assert.deepEqual(routineRows[0],{type:'normal',w:'65',r:'9',rir:'1'});
+  const noRoutineRows=[{type:'normal',w:'',r:'',rir:''}];
+  context.applyPreviousValuesForTest('press',noRoutineRows,false,null);
+  assert.deepEqual(noRoutineRows[0],{type:'normal',w:'',r:'',rir:''});
+});
+
+test('alternativas, modo simple y borrado reversible están conectados al entrenamiento', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
+  const readme=fs.readFileSync('./README.md','utf8');
+  assert.match(source,/previousExerciseScope:'any'/);
+  assert.match(source,/data-setting="previousExerciseScope"/);
+  assert.match(source,/function applyPreviousValues\(/);
+  assert.match(source,/data-cfg="substitution"/);
+  assert.match(source,/data-workout-substitution/);
+  assert.match(source,/function resetEntryExercise\(/);
+  assert.match(source,/case 'substitution-confirm':/);
+  assert.match(source,/data-act="workout-simple-toggle"/);
+  assert.match(source,/workout-card-simple/);
+  assert.ok(styles.includes('.workout-card-simple .set:not(.head) .in{min-height:50px'));
+  assert.match(source,/case 'rm-set':[\s\S]*?toast\('Serie quitada del entreno', 'Deshacer'/);
+  assert.match(source,/case 'rm-ex':[\s\S]*?toast\('Ejercicio quitado del entreno', 'Deshacer'/);
+  assert.match(readme,/ejercicios\s+alternativos/i);
+  assert.match(readme,/alcance de\s+búsqueda/);
+});
+
+test('un sustituto reemplaza solo el ejercicio actual y permite volver al original', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function resetEntryExercise\(entry, exerciseId\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const exercises={
+    original:{id:'original',sets:2,warmupSets:0,unilateral:false,min:6,max:10,inc:2},
+    alternate:{id:'alternate',sets:3,warmupSets:0,unilateral:true,min:8,max:12,inc:2}
+  };
+  const routine={items:[{exId:'original',sets:2,unilateral:false}]};
+  const context={
+    S:{draft:{routineId:'routine'},profile:{settings:{previousExerciseScope:'any'}}},
+    exById:id=>exercises[id],
+    clone:value=>JSON.parse(JSON.stringify(value)),
+    cancelRestForRow:()=>{},
+    effEx:entry=>Object.assign({},exercises[entry.exId],entry.cfg||{}),
+    planFor:()=>({nextW:20}),
+    newRow:(_weight,unilateral)=>unilateral?{type:'normal',right:{w:'',r:'',rir:''},left:{w:'',r:'',rir:''}}:{type:'normal',w:'',r:'',rir:''},
+    warmupSettings:()=>({warmupMode:'manual'}),
+    plannedRow:(_plan,unilateral)=>unilateral
+      ?{type:'normal',right:{w:'',r:'',rir:''},left:{w:'',r:'',rir:''}}
+      :{type:'normal',w:'',r:'',rir:''},
+    applyPreviousValues:()=>{},
+    syncAutoWarmupWeights:()=>{}
+  };
+  vm.runInNewContext(helper[0]+';globalThis.resetEntryExerciseForTest=resetEntryExercise;',context);
+  const entry={baseExId:'original',exId:'original',cfg:{sets:2,unilateral:false},routineCfg:{sets:2,unilateral:false},rows:[{type:'normal'}]};
+  assert.equal(context.resetEntryExerciseForTest(entry,'alternate'),true);
+  assert.equal(entry.exId,'alternate');
+  assert.equal(entry.substituteFor,'original');
+  assert.equal(entry.cfg.unilateral,true);
+  assert.equal(routine.items[0].exId,'original');
+  assert.equal(context.resetEntryExerciseForTest(entry,'original'),true);
+  assert.equal(entry.exId,'original');
+  assert.equal(entry.cfg.unilateral,false);
+  assert.equal(entry.substituteFor,undefined);
+  assert.equal(routine.items[0].exId,'original');
+});
