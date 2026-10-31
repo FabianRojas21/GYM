@@ -45,10 +45,17 @@ var LIB = [
   {name:'Elevaciones laterales', sets:3, min:12, max:20, inc:1}
 ];
 var MUSCLES = {
-  unassigned:'Sin asignar', chest:'Pecho', back:'Espalda', shoulders:'Hombros',
-  biceps:'Bíceps', triceps:'Tríceps', quads:'Cuádriceps', hamstrings:'Isquiotibiales',
-  glutes:'Glúteos', calves:'Pantorrillas', core:'Core', other:'Otro'
+  unassigned:'Sin asignar',
+  chestUpper:'Pecho superior', chestMid:'Pecho medio', chestLower:'Pecho inferior',
+  shoulderAnterior:'Hombro anterior', shoulderLateral:'Hombro lateral', shoulderPosterior:'Hombro posterior',
+  lats:'Dorsales', upperBack:'Espalda alta / romboides', lowerBack:'Lumbar', traps:'Trapecio', serratus:'Serrato anterior',
+  bicepsLong:'Bíceps · porción larga', bicepsShort:'Bíceps · porción corta', brachialis:'Braquial', forearms:'Antebrazos',
+  tricepsLong:'Tríceps · porción larga', tricepsLateral:'Tríceps · porción lateral', tricepsMedial:'Tríceps · porción medial',
+  quads:'Cuádriceps', adductors:'Aductores', hamstrings:'Isquiotibiales', glutesMax:'Glúteo mayor', glutesMed:'Glúteo medio',
+  calvesGastro:'Pantorrilla · gastrocnemio', calvesSoleus:'Pantorrilla · sóleo', tibialis:'Tibial anterior', hipFlexors:'Flexores de cadera',
+  rectusAbdominis:'Abdominal recto', obliques:'Oblicuos', transverseCore:'Transverso / core profundo', neck:'Cuello', other:'Otro'
 };
+var LEGACY_MUSCLE_IDS={shoulders:'shoulderLateral',back:'lats',chest:'chestMid',biceps:'bicepsShort',triceps:'tricepsLong',glutes:'glutesMax',calves:'calvesGastro',core:'rectusAbdominis'};
 var MEASUREMENT_FIELDS={
   weight:'Peso corporal', height:'Altura', chest:'Pecho', waist:'Cintura', abdomen:'Abdomen', hips:'Cadera', neck:'Cuello',
   armLeft:'Brazo izquierdo', armRight:'Brazo derecho', thighLeft:'Muslo izquierdo', thighRight:'Muslo derecho', calfLeft:'Pantorrilla izquierda', calfRight:'Pantorrilla derecha', bodyFat:'Grasa corporal'
@@ -75,37 +82,33 @@ function normProfile(p){
   return d;
 }
 function exerciseLoadStep(ex){ return Number(ex.loadStep) > 0 ? Number(ex.loadStep) : (Number(ex.inc) > 0 ? Number(ex.inc) : 2.5); }
-function muscleId(ex){ return Object.prototype.hasOwnProperty.call(MUSCLES, ex.muscle) ? ex.muscle : 'unassigned'; }
+function muscleId(ex){
+  var id=LEGACY_MUSCLE_IDS[ex.muscle] || ex.muscle;
+  return Object.prototype.hasOwnProperty.call(MUSCLES, id) ? id : 'unassigned';
+}
 function muscleOptions(selected){
   return Object.keys(MUSCLES).map(function(id){
     return '<option value="' + id + '"' + (muscleId({muscle:selected}) === id ? ' selected' : '') + '>' + MUSCLES[id] + '</option>';
   }).join('');
 }
 function normalizedSecondaryMuscles(ex){
+  var explicit=(ex.secondaryMuscles||[]).map(function(id){ return LEGACY_MUSCLE_IDS[id] || id; }).filter(function(id){ return MUSCLES[id] && id!==muscleId(ex); });
+  if(explicit.length || Array.isArray(ex.secondaryMuscles)) return explicit.filter(function(id,index){ return explicit.indexOf(id)===index; });
   var primary = muscleId(ex);
   var name = String(ex.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   var inferred = [];
   var matches = function(words){ return words.some(function(word){ return name.includes(word); }); };
-  if(primary === 'chest') {
-    inferred = ['triceps', 'shoulders'];
-  } else if(primary === 'back') {
-    inferred = matches(['remo', 'jalon', 'dominada', 'pull', 'row']) ? ['biceps'] : ['biceps'];
-    if(matches(['peso muerto', 'traccion', 'dominada'])) inferred.push('glutes');
-  } else if(primary === 'shoulders') {
-    inferred = ['triceps', 'core'];
-  } else if(primary === 'biceps' || primary === 'triceps') {
-    inferred = [primary === 'biceps' ? 'back' : 'chest'];
-  } else if(primary === 'quads') {
-    inferred = ['glutes', 'core'];
-    if(matches(['sentadilla', 'squat', 'prensa'])) inferred.push('hamstrings');
-  } else if(primary === 'hamstrings') {
-    inferred = ['glutes', 'core'];
-  } else if(primary === 'glutes') {
-    inferred = ['hamstrings', 'core'];
-  } else if(primary === 'core') {
-    inferred = primary === 'core' ? [] : [];
-  }
-  return inferred.filter(function(id, index){ return MUSCLES[id] && id !== primary && inferred.indexOf(id) === index; });
+  if(primary.indexOf('chest')===0) inferred=['tricepsLong','shoulderAnterior'];
+  else if(['lats','upperBack','traps','lowerBack'].indexOf(primary)>=0){ inferred=['bicepsShort','forearms']; if(matches(['peso muerto','traccion','dominada'])) inferred.push('glutesMax','lowerBack'); }
+  else if(primary.indexOf('shoulder')===0) inferred=['tricepsLong','upperBack'];
+  else if(primary.indexOf('biceps')===0 || primary==='brachialis') inferred=['forearms','lats'];
+  else if(primary.indexOf('triceps')===0) inferred=['chestMid','forearms'];
+  else if(primary==='quads' || primary==='hipFlexors') inferred=['glutesMax'];
+  else if(primary==='hamstrings') inferred=['glutesMax','lowerBack'];
+  else if(primary==='glutesMax') inferred=['hamstrings','lowerBack'];
+  else if(primary==='glutesMed') inferred=['quads'];
+  else if(primary==='calvesGastro'||primary==='calvesSoleus') inferred=['hamstrings'];
+  return inferred.filter(function(id,index){ return MUSCLES[id] && id!==primary && inferred.indexOf(id)===index; });
 }
 function muscleAssignments(ex){
   var primary = muscleId(ex);
@@ -618,7 +621,7 @@ function validBackup(data){
       (item.warmupPercents === undefined || (Array.isArray(item.warmupPercents) &&
         item.warmupPercents.every(function(percent){ return validNumber(percent) && percent >= 1 && percent <= 100; }))) &&
       (item.loadStep === undefined || (validNumber(item.loadStep) && item.loadStep > 0)) &&
-      (item.muscle === undefined || Object.prototype.hasOwnProperty.call(MUSCLES, item.muscle));
+      (item.muscle === undefined || Object.prototype.hasOwnProperty.call(MUSCLES, LEGACY_MUSCLE_IDS[item.muscle] || item.muscle));
   };
   var exerciseIds = Object.keys(profile.exercises || {});
   for(var i=0;i<exerciseIds.length;i++){
@@ -626,7 +629,7 @@ function validBackup(data){
     if(!isObject(ex) || typeof ex.name !== 'string' || !validNumber(ex.sets) || !validNumber(ex.min) || !validNumber(ex.max) || !validNumber(ex.inc) ||
       (ex.warmupSets !== undefined && !validNumber(ex.warmupSets)) || !validWarmupConfig(ex) ||
       (ex.loadMode !== undefined && !['external','bodyweight'].includes(ex.loadMode)) ||
-      (ex.secondaryMuscles !== undefined && (!Array.isArray(ex.secondaryMuscles) || !ex.secondaryMuscles.every(function(id){ return MUSCLES[id] && id !== 'unassigned' && id !== ex.muscle; })))) return false;
+      (ex.secondaryMuscles !== undefined && (!Array.isArray(ex.secondaryMuscles) || !ex.secondaryMuscles.every(function(id){ var normalizedId=LEGACY_MUSCLE_IDS[id] || id; return MUSCLES[normalizedId] && normalizedId !== 'unassigned' && normalizedId !== (LEGACY_MUSCLE_IDS[ex.muscle] || ex.muscle); })))) return false;
   }
   var routineIds = Object.keys(profile.routines || {});
   for(var j=0;j<routineIds.length;j++){
@@ -1334,7 +1337,7 @@ function entryEffectiveSets(entry){
   return Object.keys(pairs).filter(function(key){ return pairs[key].right && pairs[key].left; }).length;
 }
 function weeklyMuscleSummaryHtml(week){
-  var counts = {};
+  var counts = {}, directCounts = {}, indirectCounts = {};
   week.forEach(function(session){
     session.entries.forEach(function(entry){
       var count = entryEffectiveSets(entry);
@@ -1342,13 +1345,15 @@ function weeklyMuscleSummaryHtml(week){
       var exercise = exById(entry.exId);
       muscleAssignments(exercise || {}).forEach(function(assignment){
         counts[assignment.id] = (counts[assignment.id] || 0) + count * assignment.factor;
+        if(assignment.factor === 1) directCounts[assignment.id] = (directCounts[assignment.id] || 0) + count;
+        else indirectCounts[assignment.id] = (indirectCounts[assignment.id] || 0) + count;
       });
     });
   });
   var groups = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || MUSCLES[a].localeCompare(MUSCLES[b], 'es'); });
   var content = groups.length
     ? '<div class="weekly-muscle-list">' + groups.map(function(id){
-        return '<div class="weekly-muscle-row"><span>' + esc(MUSCLES[id]) + '</span><strong>' + fmt1(counts[id]) + '</strong></div>';
+        return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLES[id]) + '</span><small>' + fmt1(directCounts[id] || 0) + ' directas · ' + fmt1(indirectCounts[id] || 0) + ' indirectas est.</small></div><strong>' + fmt1(counts[id]) + ' estimadas</strong></div>';
       }).join('') + '</div>'
     : '<p class="home-weekly-note">Aún no hay series efectivas registradas esta semana.</p>';
   var now=new Date(); var recent=new Date(now); recent.setDate(now.getDate()-7);
@@ -1366,7 +1371,7 @@ function weeklyMuscleSummaryHtml(week){
     var fatigue=average===null?'':average<=1?' · fatiga alta':average<=2?' · fatiga media':' · fatiga baja';
     return '<div class="weekly-muscle-row"><span>'+esc(MUSCLES[id])+'</span><strong>'+esc(trend+fatigue)+'</strong></div>';
   }).join('');
-  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo y fatiga</h3><p>Cuenta series normales completas. La fatiga estimada usa el RIR/RPE registrado esta semana: menor RIR indica mayor fatiga reciente.</p></div>' +
+  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo y fatiga</h3><p>Las series directas cuentan completas; las indirectas se estiman al 50 % y el total efectivo suma ambas contribuciones. La fatiga estimada usa el RIR/RPE registrado: menor RIR indica mayor fatiga reciente.</p></div>' +
     content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
 }
 function suggestHtml(){
@@ -1776,6 +1781,10 @@ function exDetail(ex){
       f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (kg)', ex.inc) + f('loadStep', 'Peso disponible cada (kg)', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (kg)', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
       '</div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></div>' +
+      '<fieldset class="field"><legend class="lab">Músculos secundarios estimados</legend><p class="small muted">Aportan aproximadamente 0,5 serie efectiva. Puedes desmarcarlos si no participan en este ejercicio.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
+        var selected = normalizedSecondaryMuscles(ex).indexOf(id) >= 0;
+        return '<label class="secondary-muscle-option"><input type="checkbox" data-cfg="secondary-muscle" data-id="' + esc(ex.id) + '" value="' + esc(id) + '"' + (selected ? ' checked' : '') + '> <span>' + esc(MUSCLES[id]) + '</span></label>';
+      }).join('') + '</div></fieldset>' +
       '<div class="field"><label class="lab" for="cfg-loadMode">Tipo de carga</label><select id="cfg-loadMode" class="txt" data-cfg="loadMode" data-id="' + esc(ex.id) + '"><option value="external"' + (ex.loadMode !== 'bodyweight' ? ' selected' : '') + '>Peso externo</option><option value="bodyweight"' + (ex.loadMode === 'bodyweight' ? ' selected' : '') + '>Peso corporal + carga añadida</option></select></div>' + ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
         return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-cfg="warmupPercent" data-id="' + esc(ex.id) + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
       }).join('') + '</div></div>' : '') + '<div class="fields">' +
@@ -2647,8 +2656,13 @@ function onChange(ev){
     it2.efforts[+t.dataset.k] = Math.min(6, Math.max(0, rir));
     render(); return;
   }
-  var key = t.dataset.cfg; if(!key) return;
+  var key = t.dataset.cfg; if(!key && t.dataset.cfg !== 'secondary-muscle') return;
   var ex = exById(t.dataset.id); if(!ex) return;
+  if(key === 'secondary-muscle' || t.dataset.cfg === 'secondary-muscle'){
+    var container=t.closest('.secondary-muscle-grid');
+    ex.secondaryMuscles=container ? Array.from(container.querySelectorAll('input[data-cfg="secondary-muscle"]:checked')).map(function(input){ return input.value; }).filter(function(id){ return id !== muscleId(ex) && MUSCLES[id]; }) : [];
+    Store.saveProfile(); render(); return;
+  }
   if(key === 'loadMode'){
     if(!['external','bodyweight'].includes(t.value)){ render(); return; }
     ex.loadMode = t.value; Store.saveProfile(); render(); return;
@@ -2668,7 +2682,9 @@ function onChange(ev){
   }
   if(key === 'muscle'){
     if(!Object.prototype.hasOwnProperty.call(MUSCLES, t.value)){ render(); return; }
-    ex.muscle = t.value; Store.saveProfile(); render(); return;
+    ex.muscle = t.value;
+    if(Array.isArray(ex.secondaryMuscles)) ex.secondaryMuscles = ex.secondaryMuscles.filter(function(id){ return id !== t.value; });
+    Store.saveProfile(); render(); return;
   }
   var v = num(t.value);
   if(v === null){ render(); return; }
