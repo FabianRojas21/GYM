@@ -2643,14 +2643,14 @@ function historyCardHtml(s){
     var body = s.entries.map(function(e){
       var rests=e.sets.map(function(set){ return set.restMs; }).filter(function(value){ return Number(value)>0; });
       var avg=rests.length ? Math.round(rests.reduce(function(sum,value){ return sum+Number(value); },0)/rests.length/1000) : 0;
-      return '<div><strong>' + esc(exName(e.exId)) + '</strong><div class="small muted">' + esc(setsText(e.sets, true)) + (avg ? ' · descanso medio ' + humanDuration(avg*1000) : '') + '</div></div>';
+      return '<div class="history-exercise"><strong>' + esc(exName(e.exId)) + '</strong><div class="small muted">' + esc(setsText(e.sets, true)) + (avg ? ' · descanso medio ' + humanDuration(avg*1000) : '') + '</div></div>';
     }).join('');
     var editing = S.sessionEdit && S.sessionEdit.id === s.id;
     var duration = Number(s.durationMs) > 0 ? humanDuration(s.durationMs) : 'Sin duración';
-    return '<section class="card"><div class="card-head"><div><h3>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</h3>' +
-      '<p class="small muted">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</p></div></div>' +
-      '<div class="list" style="gap:8px">' + body + '</div>' +
-      (editing ? sessionEditorHtml(s) : '<div class="row"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar entrenamiento</button>' +
+    return '<section class="card history-session-card"><div class="card-head history-session-head"><div><h3>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</h3>' +
+      '<p class="small muted history-session-meta">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</p></div></div>' +
+      '<div class="list history-exercises">' + body + '</div>' +
+      (editing ? sessionEditorHtml(s) : '<div class="row history-actions"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar entrenamiento</button>' +
         (!s.demo ? '<button class="btn ghost sm" data-act="session-make-routine" data-id="' + esc(s.id) + '">Guardar como rutina</button>' : '') +
         (S.confirm === 'sess:' + s.id
           ? '<button class="btn danger sm" data-act="del-sess-ok" data-id="' + esc(s.id) + '">Confirmar: borrar entreno</button>'
@@ -2821,9 +2821,9 @@ function viewSet(){
     }
   }
   out += accountHtml;
-  out += '<section class="card"><p class="sec-title">Tus datos</p><p class="small">' +
+  out += '<section class="card settings-data-card"><p class="sec-title">Tus datos</p><p class="small">' +
     (['db','cloud'].includes(S.kind) ? 'Se guardan en tu cuenta y solo tú los ves. Los abres desde cualquier dispositivo.' : S.syncUnavailable ? 'Se guardan en este navegador mientras la nube no esté disponible. Usa «Sincronizar ahora» cuando vuelva la conexión.' : 'Se guardan solo en este navegador. Inicia sesión arriba para sincronizarlos.') + '</p>' +
-    backupStatusHtml() + '<div class="row">' +
+    backupStatusHtml() + '<div class="row settings-data-actions">' +
     '<button class="btn ghost sm" data-act="auto-restore"' + (hasAutoBackup()?'':' disabled') + '>Restaurar última copia automática</button>' +
     '<button class="btn ghost sm" data-act="export">Descargar respaldo</button><button class="btn ghost sm" data-act="import">Restaurar respaldo</button>' +
     '<button class="btn ghost sm" data-act="export-csv">Exportar CSV</button><button class="btn ghost sm" data-act="import-csv">Importar CSV</button>' +

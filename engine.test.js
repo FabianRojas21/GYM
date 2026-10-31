@@ -653,6 +653,11 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.set-fields\{gap:5px\}/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.library-card:not\(\.create-card\)\{flex-wrap:wrap/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?select\[data-it="warmupMode"\]/);
+  assert.match(app,/class="card history-session-card"/);
+  assert.match(app,/class="row history-actions"/);
+  assert.match(app,/class="row settings-data-actions"/);
+  assert.match(styles,/\.profile-nav\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.history-actions\{display:grid/);
   assert.match(app,/case 'finish-set':[\s\S]*?startRest\(finishRestSeconds, finishRow\.restToken\)/);
   assert.match(app,/set-finish-done/);
   assert.match(app,/data-act="toggle-entry"/);
