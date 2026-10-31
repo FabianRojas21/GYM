@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Sobrecarga</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=__BUILD_ID__">
 </head>
 <body>
 <a class="skip-link" href="#view">Ir al contenido principal</a>
@@ -41,10 +41,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
-<script src="engine.js"></script>
-<script src="backup.js"></script>
-<script src="app.js"></script>
+<script src="firebase-config.js?v=__BUILD_ID__"></script>
+<script src="engine.js?v=__BUILD_ID__"></script>
+<script src="backup.js?v=__BUILD_ID__"></script>
+<script src="app.js?v=__BUILD_ID__"></script>
 <div id="pwa-update" hidden><button type="button" id="pwa-update-button">Instalar nueva versión</button></div>
 <script>
 if (location.hostname === '0.0.0.0') {
@@ -52,7 +52,7 @@ if (location.hostname === '0.0.0.0') {
 }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').then(function(registration){
+    navigator.serviceWorker.register('./sw.js?v=__BUILD_ID__').then(function(registration){
       if (registration.waiting) document.getElementById('pwa-update').hidden=false;
       registration.addEventListener('updatefound', function(){
         var worker=registration.installing;

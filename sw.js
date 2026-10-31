@@ -1,5 +1,5 @@
 const CACHE='sobrecarga-__BUILD_ID__';
-const ASSETS=['./','./index.html','./styles.css','./app.js','./engine.js','./backup.js','./firebase-config.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
+const ASSETS=['./','./index.html','./index.html?v=__BUILD_ID__','./styles.css?v=__BUILD_ID__','./app.js?v=__BUILD_ID__','./engine.js?v=__BUILD_ID__','./backup.js?v=__BUILD_ID__','./firebase-config.js?v=__BUILD_ID__','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 function cacheResponse(request,response){
   let copy;
   try{
