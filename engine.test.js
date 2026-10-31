@@ -81,9 +81,11 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   const index=fs.readFileSync('./index.html','utf8');
   const manifest=JSON.parse(fs.readFileSync('./manifest.webmanifest','utf8'));
   const workflow=fs.readFileSync('./.github/workflows/pages.yml','utf8');
+  const app=fs.readFileSync('./app.js','utf8');
   assert.match(sw,/clients\.claim/);
   assert.match(sw,/SKIP_WAITING/);
   assert.match(index,/serviceWorker\.register/);
+  assert.match(app,/firebase\.firestore\(firebaseApp\);\s*Store\.firebaseDb\.settings\(\{experimentalForceLongPolling:true\}\)/);
   assert.equal(manifest.display,'standalone');
   assert.match(workflow,/actions\/deploy-pages/);
 });
@@ -329,7 +331,7 @@ test('no confirma la importación CSV antes de persistir y gestiona fallos de mi
   assert.match(source,/Los cambios se guardan en este navegador/);
   assert.match(source,/Store\.cloudGeneration\+\+/);
   assert.match(source,/function loadDemo\(\)[\s\S]*?return Store\.saveProfileNow\(\)\.then\(persistSessions\)/);
-  assert.match(source,/Store\.syncToCloud\(\)\.then/);
+  assert.match(source,/Store\.syncToCloud\(\)\.then|return Store\.syncToCloud\(\);/);
   assert.match(source,/parseNumber/);
   assert.match(source,/No se pudo borrar el entreno:/);
   assert.match(source,/throw error;\s*\}\);\s*\},\s*replaceAll:/);
@@ -415,6 +417,9 @@ test('la sincronización finaliza con error si Firebase deja una escritura pendi
     context.withTimeoutForTest(new Promise(()=>{}),5,'Firebase sin respuesta'),
     /Firebase sin respuesta/
   );
-  assert.match(source,/return withTimeout\([\s\S]*?15000,[\s\S]*?Firebase no respondió en 15 segundos/);
+  assert.match(source,/Firebase no respondió al guardar el perfil/);
+  assert.match(source,/Firebase no respondió al guardar tus entrenamientos/);
+  assert.match(source,/Firebase no respondió al guardar el entreno en curso/);
   assert.match(source,/S\.cloudSyncing=false; render\(\);[\s\S]*?toast\(error && error\.message/);
+  assert.match(source,/Promise\.resolve\(\)\.then\(function\(\)\{ return Store\.syncToCloud\(\); \}\)/);
 });

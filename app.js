@@ -369,6 +369,7 @@ var Store = {
         var firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(window.SOBRECARGA_FIREBASE_CONFIG);
         Store.firebaseAuth = firebase.auth(firebaseApp);
         Store.firebaseDb = firebase.firestore(firebaseApp);
+        Store.firebaseDb.settings({experimentalForceLongPolling:true});
         Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){ });
         var redirectPending=false;
         try{ redirectPending=sessionStorage.getItem('sobrecarga-google-redirect')==='1'; }catch(e){}
@@ -517,22 +518,31 @@ var Store = {
   syncToCloud:function(){
     if(!Store.firebaseUser || !Store.ref || !Store.col) return Promise.reject(new Error('No hay una cuenta de Firebase disponible'));
     var user=Store.firebaseUser, fallback=S.syncUnavailable;
-    var profileWrite=fallback ? Store.ref.set(clone(S.profile)) : Store.saveProfileNow();
+    var profileWrite=withTimeout(
+      fallback ? Store.ref.set(clone(S.profile)) : Store.saveProfileNow(),
+      15000,
+      'Firebase no respondió al guardar el perfil. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
+    );
     var sessionsWrite=S.sessions.reduce(function(queue,session){
       return queue.then(function(){
-        return fallback
+        var write=fallback
           ? Store.col.doc(session.id).set(clone(stampSession(session)))
           : Store.saveSession(session);
+        return withTimeout(
+          write,
+          15000,
+          'Firebase no respondió al guardar tus entrenamientos. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
+        );
       });
     },Promise.resolve());
     var draft=clone(S.draft);
     draft.updatedAt=Date.now(); draft.restEndsAt=S.restEndsAt || null;
-    var draftWrite=Store.firebaseDb.collection('users').doc(user.uid).collection('app').doc('draft').set(draft);
-    return withTimeout(
-      Promise.all([profileWrite,sessionsWrite,draftWrite]),
+    var draftWrite=withTimeout(
+      Store.firebaseDb.collection('users').doc(user.uid).collection('app').doc('draft').set(draft),
       15000,
-      'Firebase no respondió en 15 segundos. Tus datos siguen guardados en este dispositivo; revisa la conexión o los bloqueadores y vuelve a intentar.'
-    ).then(function(){
+      'Firebase no respondió al guardar el entreno en curso. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
+    );
+    return Promise.all([profileWrite,sessionsWrite,draftWrite]).then(function(){
       if(fallback) Store.startFirebase(user);
     });
   },
@@ -2613,7 +2623,7 @@ function onClick(ev){
     case 'cloud-sync':
       if(S.cloudSyncing) break;
       S.cloudSyncing=true; render();
-      Store.syncToCloud().then(function(){
+      Promise.resolve().then(function(){ return Store.syncToCloud(); }).then(function(){
         S.cloudSyncing=false;
         if(S.ready) render();
         toast('Sincronización completada');
