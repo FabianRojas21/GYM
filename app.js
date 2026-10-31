@@ -202,7 +202,7 @@ function saveDraft(syncCloud){
   try {
     localStorage.setItem(DK, JSON.stringify(S.draft));
     draftSaveWarningShown = false;
-    if(['cloud'].includes(S.kind) && Store.firebaseDb && Store.firebaseUser && syncCloud !== false){
+    if(S.kind==='cloud' && S.ready && !S.syncUnavailable && Store.firebaseDb && Store.firebaseUser && syncCloud !== false){
       S.draftSaveState='saving'; refreshDraftSaveStatus();
       clearTimeout(cloudDraftTimer);
       cloudDraftTimer=setTimeout(function(){
@@ -215,7 +215,7 @@ function saveDraft(syncCloud){
           toast('No se pudo sincronizar el entreno en curso');
         });
       }, 350);
-    }else if(S.syncUnavailable) S.draftSaveState='localOnly';
+    }else if(S.syncUnavailable || (S.kind==='cloud' && !S.ready)) S.draftSaveState='localOnly';
     else S.draftSaveState='saved';
     refreshDraftSaveStatus();
     return true;
@@ -458,11 +458,11 @@ var Store = {
     },12000);
     var migration=Promise.resolve();
     if(localData && (localData.profile || (localData.sessions && localData.sessions.length))){
-      migration=Store.ref.get().then(function(remoteProfile){
+      migration=Store.ref.get({source:'server'}).then(function(remoteProfile){
         var writes=[];
         if(!remoteProfile.exists && localData.profile){ writes.push(Store.ref.set(clone(localData.profile))); }
         if(writes.length) return Promise.all(writes);
-      }).then(function(){ return Store.col.get(); }).then(function(remoteSessions){
+      }).then(function(){ return Store.col.get({source:'server'}); }).then(function(remoteSessions){
         var remoteIds={}; remoteSessions.forEach(function(doc){ remoteIds[doc.id]=true; });
         return (localData.sessions || []).reduce(function(queue,session){
           if(remoteIds[session.id]) return queue;
@@ -474,8 +474,9 @@ var Store = {
       if(generation!==Store.cloudGeneration) return;
       var gotProfile=false, gotSessions=false, gotDraft=false;
       var done=function(){ if(gotProfile && gotSessions && gotDraft){ S.ready=true; createAutoBackup(); render(); } };
-      cloudUnsubs.push(Store.ref.onSnapshot(function(snap){
+      cloudUnsubs.push(Store.ref.onSnapshot({includeMetadataChanges:true},function(snap){
         if(generation!==Store.cloudGeneration) return;
+        if(!snap.metadata || snap.metadata.fromCache) return;
         if(!(profDirty || profBusy)){
           if(snap.exists) S.profile=normProfile(snap.data());
           else S.profile=defaultProfile();
@@ -488,8 +489,9 @@ var Store = {
         clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null;
         Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudieron descargar los datos de la cuenta. Se seguirá guardando en este navegador; usa «Sincronizar ahora» cuando vuelva la conexión.');
       }));
-      cloudUnsubs.push(Store.col.onSnapshot(function(snap){
+      cloudUnsubs.push(Store.col.onSnapshot({includeMetadataChanges:true},function(snap){
         if(generation!==Store.cloudGeneration) return;
+        if(!snap.metadata || snap.metadata.fromCache) return;
         S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
         gotSessions=true; done();
         if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
@@ -499,7 +501,7 @@ var Store = {
         clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null;
         Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudieron descargar los entrenos. Se seguirá guardando en este navegador; usa «Sincronizar ahora» cuando vuelva la conexión.');
       }));
-      root.collection('app').doc('draft').get().then(function(snap){
+      root.collection('app').doc('draft').get({source:'server'}).then(function(snap){
         if(generation!==Store.cloudGeneration) return;
         if(snap.exists && snap.data() && Array.isArray(snap.data().entries)){
           var remoteDraft=normalizeDraft(snap.data());
@@ -2339,9 +2341,20 @@ function viewSet(){
   out += goalsHtml();
   var accountHtml='';
   if(Store.firebaseAuth){
-    accountHtml=S.cloudUser
-      ? '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Conectado como <strong>'+esc(S.cloudUser.email || S.cloudUser.displayName || 'usuario')+'</strong>.'+(S.syncUnavailable?' La cuenta no terminó de cargar; los datos locales no se subirán hasta verificar primero los datos de la nube.':' Tus datos se sincronizan en todos tus dispositivos.')+'</p><div class="row"><span class="chip '+(S.syncUnavailable?'warn':'ok')+'">'+(S.syncUnavailable?'Guardado local':'Sincronización activa')+'</span><button class="btn ghost sm" data-act="cloud-sync"'+(S.cloudSyncing?' disabled':'')+'>'+(S.cloudSyncing?'Sincronizando…':S.syncUnavailable?'Reintentar conexión':'Sincronizar ahora')+'</button><button class="btn ghost sm" data-act="cloud-signout">Cerrar sesión</button></div></section>'
-      : '<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Inicia sesión con Google para mantener tus datos en varios dispositivos y recuperarlos si cambias de navegador.</p><div class="row"><button class="btn sm" data-act="cloud-signin">Continuar con Google</button></div></section>';
+    if(S.cloudUser){
+      var cloudLoading=!S.ready && !S.syncUnavailable;
+      var cloudStatus=S.syncUnavailable
+        ? 'La cuenta no terminó de cargar; los datos locales no se subirán hasta verificar primero la nube.'
+        : cloudLoading
+          ? 'Cargando y verificando los datos de la cuenta. No sincronices todavía.'
+          : 'Tus datos se sincronizan en todos tus dispositivos.';
+      var cloudChip=S.syncUnavailable ? 'Guardado local' : cloudLoading ? 'Cargando cuenta…' : 'Sincronización activa';
+      var cloudChipClass=S.syncUnavailable || cloudLoading ? 'warn' : 'ok';
+      var syncLabel=S.cloudSyncing ? 'Sincronizando…' : S.syncUnavailable ? 'Reintentar conexión' : cloudLoading ? 'Cargando cuenta…' : 'Sincronizar ahora';
+      accountHtml='<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Conectado como <strong>'+esc(S.cloudUser.email || S.cloudUser.displayName || 'usuario')+'</strong>. '+cloudStatus+'</p><div class="row"><span class="chip '+cloudChipClass+'">'+cloudChip+'</span><button class="btn ghost sm" data-act="cloud-sync"'+(S.cloudSyncing || cloudLoading?' disabled':'')+'>'+syncLabel+'</button><button class="btn ghost sm" data-act="cloud-signout">Cerrar sesión</button></div></section>';
+    }else{
+      accountHtml='<section class="card"><p class="sec-title">Cuenta y sincronización</p><p class="small">Inicia sesión con Google para mantener tus datos en varios dispositivos y recuperarlos si cambias de navegador.</p><div class="row"><button class="btn sm" data-act="cloud-signin">Continuar con Google</button></div></section>';
+    }
   }
   out += accountHtml;
   out += '<section class="card"><p class="sec-title">Tus datos</p><p class="small">' +

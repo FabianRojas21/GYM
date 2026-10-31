@@ -385,11 +385,19 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   assert.deepEqual(Array.from(fresh.sessions,m=>m.id),['same','new']);
   assert.match(source,/function restoreBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
   assert.match(source,/function restoreAutoBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
-  assert.match(source,/Cuenta y sincronización[\s\S]*?Reintentar conexión/);
+  assert.match(source,/var syncLabel=S\.cloudSyncing \? 'Sincronizando…' : S\.syncUnavailable \? 'Reintentar conexión'/);
   assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!==?'cloud'\)\{[\s\S]*?no se subieron datos/);
   assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!=='cloud'\)\{\s*return Promise\.reject/);
   assert.match(source,/gotProfile && gotSessions && gotDraft/);
   assert.match(source,/No se pudo comprobar el entreno en curso de la cuenta/);
+  assert.match(source,/Store\.ref\.get\(\{source:'server'\}\)/);
+  assert.match(source,/Store\.col\.get\(\{source:'server'\}\)/);
+  assert.match(source,/Store\.ref\.onSnapshot\(\{includeMetadataChanges:true\}/);
+  assert.match(source,/Store\.col\.onSnapshot\(\{includeMetadataChanges:true\}/);
+  assert.match(source,/if\(!snap\.metadata \|\| snap\.metadata\.fromCache\) return;/);
+  assert.match(source,/doc\('draft'\)\.get\(\{source:'server'\}\)/);
+  assert.match(source,/S\.kind==='cloud' && S\.ready && !S\.syncUnavailable/);
+  assert.match(source,/Cargando y verificando los datos de la cuenta/);
   assert.doesNotMatch(source.match(/function restoreBackup\(\)[\s\S]*?\n\}/)[0],/blankDraft\(\)/);
 });
 
