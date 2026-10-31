@@ -417,6 +417,27 @@ test('los objetivos personalizados permiten actualizar progreso y calculan el av
   assert.match(source,/goalType==='weekly'\?'entrenos\/7 días'/);
 });
 
+test('el objetivo semanal cuenta hoy y los seis días anteriores', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const goal=source.match(/function goalProgress\(goal\)\{[\s\S]*?\n\}/);
+  const bounds=source.match(/function historyWindowBounds\(days,today\)\{[\s\S]*?\n\}/);
+  assert.ok(goal && bounds);
+  const RealDate=Date;
+  function FixedDate(){ return arguments.length ? new RealDate(...arguments) : new RealDate(2026,0,10); }
+  const iso=date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  const context={
+    Date:FixedDate,
+    parseISO:value=>new RealDate(Number(value.slice(0,4)),Number(value.slice(5,7))-1,Number(value.slice(8,10))),
+    iso,
+    S:{sessions:['2026-01-10','2026-01-09','2026-01-07','2026-01-04','2026-01-03'].map(date=>({date}))},
+    personalRecords:()=>({}),
+    exById:()=>null
+  };
+  vm.runInNewContext(bounds[0]+';'+goal[0]+';globalThis.goalProgressForTest=goalProgress;',context);
+  assert.equal(context.goalProgressForTest({type:'weekly',target:4}).current,4);
+  assert.match(source,/var recentStart=historyWindowBounds\(7,iso\(new Date\(\)\)\)\.start/);
+});
+
 test('no confirma la importación CSV antes de persistir y gestiona fallos de migración y borrado', () => {
   const source=fs.readFileSync('./app.js','utf8');
   assert.match(source,/return Store\.saveProfileNow\(\)\.then\(persistSessions\)/);
@@ -429,6 +450,45 @@ test('no confirma la importación CSV antes de persistir y gestiona fallos de mi
   assert.match(source,/parseNumber/);
   assert.match(source,/No se pudo borrar el entreno:/);
   assert.match(source,/throw error;\s*\}\);\s*\},\s*replaceAll:/);
+  assert.match(source,/var migratedKey='sobrecarga:migrated:'\+userId/);
+  assert.match(source,/if\(!alreadyMigrated && localData/);
+  assert.match(source,/var migrateSessions=!remoteProfile\.exists && remoteSessions\.empty/);
+  assert.match(source,/localStorage\.setItem\(migratedKey,'1'\)/);
+});
+
+test('la migración local no resucita sesiones borradas al volver a abrir la cuenta', async () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function migrateLocalDataOnce\([\s\S]*?\n\}/);
+  assert.ok(helper);
+  const values=new Map();
+  const remote={profile:null,sessions:Object.create(null)};
+  const localStorage={
+    getItem:key=>values.has(key)?values.get(key):null,
+    setItem:(key,value)=>values.set(key,value)
+  };
+  const ref={
+    get:()=>Promise.resolve({exists:!!remote.profile}),
+    set:value=>{remote.profile=JSON.parse(JSON.stringify(value));return Promise.resolve();}
+  };
+  const col={
+    get:()=>Promise.resolve({empty:Object.keys(remote.sessions).length===0}),
+    doc:id=>({set:value=>{remote.sessions[id]=JSON.parse(JSON.stringify(value));return Promise.resolve();}})
+  };
+  const context={localStorage,console,clone:value=>JSON.parse(JSON.stringify(value)),stampSession:value=>value};
+  vm.runInNewContext(helper[0]+';globalThis.migrateLocalDataOnceForTest=migrateLocalDataOnce;',context);
+  const staleLocalData={
+    profile:{settings:{mode:'rir'}},
+    sessions:['A','B','C'].map(id=>({id}))
+  };
+  await context.migrateLocalDataOnceForTest('user-1',ref,col,staleLocalData);
+  assert.deepEqual(Object.keys(remote.sessions).sort(),['A','B','C']);
+  assert.equal(values.get('sobrecarga:migrated:user-1'),'1');
+  delete remote.sessions.B;
+  await context.migrateLocalDataOnceForTest('user-1',ref,col,staleLocalData);
+  assert.deepEqual(Object.keys(remote.sessions).sort(),['A','C']);
+  values.delete('sobrecarga:migrated:user-1');
+  await context.migrateLocalDataOnceForTest('user-1',ref,col,staleLocalData);
+  assert.deepEqual(Object.keys(remote.sessions).sort(),['A','C']);
 });
 
 test('restaurar un respaldo combina datos y conserva los actuales ante IDs duplicados', () => {
@@ -477,8 +537,8 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!=='cloud'\)\{\s*return Promise\.reject/);
   assert.match(source,/gotProfile && gotSessions && gotDraft/);
   assert.match(source,/No se pudo comprobar el entreno en curso de la cuenta/);
-  assert.match(source,/Store\.ref\.get\(\{source:'server'\}\)/);
-  assert.match(source,/Store\.col\.get\(\{source:'server'\}\)/);
+  assert.match(source,/ref\.get\(\{source:'server'\}\)/);
+  assert.match(source,/col\.get\(\{source:'server'\}\)/);
   assert.match(source,/Store\.ref\.onSnapshot\(\{includeMetadataChanges:true\}/);
   assert.match(source,/Store\.col\.onSnapshot\(\{includeMetadataChanges:true\}/);
   assert.match(source,/if\(!snap\.metadata \|\| snap\.metadata\.fromCache\) return;/);
@@ -550,15 +610,41 @@ test('el error de renderizado muestra sus detalles técnicos sin alterar los dat
 test('la app mantiene el parseo numérico si backup.js está desactualizado', () => {
   const source=fs.readFileSync('./app.js','utf8');
   const parser=source.match(/var num = [\s\S]*?\n    };/);
-  const validWeight=source.match(/var validWeight = function\(v\)\{ var n=num\(v\); return n !== null && n >= 0; \};/);
-  assert.ok(parser && validWeight);
+  const limits=source.match(/var MAX_WEIGHT_KG = \d+;\nvar MAX_REPS = \d+;/);
+  const validWeight=source.match(/var validWeight = function\(v\)\{[^\n]*\};/);
+  const validReps=source.match(/var validReps = function\(v\)\{[^\n]*\};/);
+  assert.ok(parser && limits && validWeight && validReps);
   const context={SobrecargaBackup:{}};
-  vm.runInNewContext(parser[0]+';'+validWeight[0]+';globalThis.parseNumberForTest=num;globalThis.validWeightForTest=validWeight;',context);
+  vm.runInNewContext(limits[0]+';'+parser[0]+';'+validWeight[0]+';'+validReps[0]+';globalThis.parseNumberForTest=num;globalThis.validWeightForTest=validWeight;globalThis.validRepsForTest=validReps;',context);
   assert.equal(context.parseNumberForTest('62,5'),62.5);
   assert.equal(context.parseNumberForTest(''),null);
   assert.equal(context.parseNumberForTest('62 kg'),null);
   assert.equal(context.validWeightForTest('0'),true);
   assert.equal(context.validWeightForTest('-1'),false);
+  assert.equal(context.validWeightForTest('1000'),true);
+  assert.equal(context.validWeightForTest('1000.01'),false);
+  assert.equal(context.validRepsForTest('500'),true);
+  assert.equal(context.validRepsForTest('501'),false);
+});
+
+test('los gráficos limitan marcas y filtran valores no finitos', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const chart=source.match(/function niceStep\(raw\)\{[\s\S]*?\n\}\nfunction chartSvg\(pts, unit\)\{[\s\S]*?\n\}/);
+  assert.ok(chart);
+  const context={
+    Number,Math,
+    document:{documentElement:{clientWidth:400}},
+    fmt:value=>String(Math.round(value*100)/100),
+    fmt1:value=>String(Math.round(value*10)/10),
+    esc:value=>String(value)
+  };
+  vm.runInNewContext(chart[0]+';globalThis.chartSvgForTest=chartSvg;globalThis.niceStepForTest=niceStep;',context);
+  assert.equal(context.niceStepForTest(2100),2500);
+  const ordinary=context.chartSvgForTest([{label:'A',y:4000},{label:'B',y:10000}],'kg·reps');
+  assert.equal((ordinary.match(/stroke="var\(--line\)"/g)||[]).length,3);
+  const huge=context.chartSvgForTest([{label:'A',y:99999999},{label:'B',y:100000000},{label:'invalid',y:Infinity}],'kg');
+  assert.ok((huge.match(/stroke="var\(--line\)"/g)||[]).length<=12);
+  assert.ok(huge.length<10000);
 });
 
 test('el selector de unidad convierte valores de entrada a kg sin reescribir datos', () => {

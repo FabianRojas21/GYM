@@ -16,6 +16,8 @@ var num = typeof SobrecargaBackup !== 'undefined' && typeof SobrecargaBackup.par
       return Number.isFinite(number) ? number : null;
     };
 var KG_PER_LB = 0.45359237;
+var MAX_WEIGHT_KG = 1000;
+var MAX_REPS = 500;
 function currentWeightUnit(){ return S && S.profile && S.profile.settings.weightUnit === 'lb' ? 'lb' : 'kg'; }
 function fromKg(value){
   var number=Number(value);
@@ -36,7 +38,8 @@ function weightText(value){
 }
 function weightUnitLabel(){ return currentWeightUnit(); }
 function loadVolume(value){ return currentWeightUnit()==='lb' ? Number(value)/KG_PER_LB : Number(value); }
-var validWeight = function(v){ var n=num(v); return n !== null && n >= 0; };
+var validWeight = function(v){ var n=num(v); return n !== null && n >= 0 && n <= MAX_WEIGHT_KG; };
+var validReps = function(v){ var n=num(v); return n !== null && n > 0 && n <= MAX_REPS; };
 var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
 var roundTo = function(x, step){ return Math.round(x/step)*step; };
 var iso = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
@@ -381,6 +384,35 @@ function withTimeout(promise, timeoutMs, message){
     });
   });
 }
+function migrateLocalDataOnce(userId, ref, col, localData){
+  var migratedKey='sobrecarga:migrated:'+userId, alreadyMigrated=false;
+  try { alreadyMigrated=localStorage.getItem(migratedKey)==='1'; }
+  catch(error){ console.warn('No se pudo comprobar el estado de migración local',error); }
+  var migration=Promise.resolve();
+  if(!alreadyMigrated && localData && (localData.profile || (localData.sessions && localData.sessions.length))){
+    migration=Promise.all([
+      ref.get({source:'server'}),
+      col.get({source:'server'})
+    ]).then(function(remoteData){
+      var remoteProfile=remoteData[0], remoteSessions=remoteData[1];
+      var migrateSessions=!remoteProfile.exists && remoteSessions.empty;
+      var writes=[];
+      if(!remoteProfile.exists && localData.profile) writes.push(ref.set(clone(localData.profile)));
+      return Promise.all(writes).then(function(){
+        if(!migrateSessions) return;
+        return (localData.sessions || []).reduce(function(queue,session){
+          return queue.then(function(){ return col.doc(session.id).set(clone(stampSession(session))); });
+        }, Promise.resolve());
+      });
+    });
+  }
+  return migration.then(function(){
+    if(!alreadyMigrated){
+      try { localStorage.setItem(migratedKey,'1'); }
+      catch(error){ console.warn('No se pudo guardar el estado de migración local',error); }
+    }
+  });
+}
 var Store = {
   ref:null, col:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null, cloudGeneration:0,
   detachCloudListeners:function(){
@@ -478,20 +510,7 @@ var Store = {
     cloudLoadingTimer=setTimeout(function(){
       Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudo conectar con la cuenta. Los cambios se guardan en este navegador; al recuperar conexión, usa «Sincronizar ahora».');
     },12000);
-    var migration=Promise.resolve();
-    if(localData && (localData.profile || (localData.sessions && localData.sessions.length))){
-      migration=Store.ref.get({source:'server'}).then(function(remoteProfile){
-        var writes=[];
-        if(!remoteProfile.exists && localData.profile){ writes.push(Store.ref.set(clone(localData.profile))); }
-        if(writes.length) return Promise.all(writes);
-      }).then(function(){ return Store.col.get({source:'server'}); }).then(function(remoteSessions){
-        var remoteIds={}; remoteSessions.forEach(function(doc){ remoteIds[doc.id]=true; });
-        return (localData.sessions || []).reduce(function(queue,session){
-          if(remoteIds[session.id]) return queue;
-          return queue.then(function(){ return Store.col.doc(session.id).set(clone(stampSession(session))); });
-        }, Promise.resolve());
-      });
-    }
+    var migration=migrateLocalDataOnce(user.uid,Store.ref,Store.col,localData);
     migration.then(function(){
       if(generation!==Store.cloudGeneration) return;
       var gotProfile=false, gotSessions=false, gotDraft=false;
@@ -776,9 +795,9 @@ function autoRestEligible(row){ return ['normal','warmup','backoff'].includes(se
 function rowComplete(row, unilateral){
   if(unilateral){
     var sides = ensureRowMode(row, true);
-    return ['right','left'].every(function(side){ return validWeight(sides[side].w) && num(sides[side].r) > 0; });
+    return ['right','left'].every(function(side){ return validWeight(sides[side].w) && validReps(sides[side].r); });
   }
-  return validWeight(row.w) && num(row.r) > 0;
+  return validWeight(row.w) && validReps(row.r);
 }
 /* ejercicio efectivo: ajustes base + ajustes propios de la rutina (solo en esa rutina) */
 function effEx(en){ return Object.assign({}, exById(en.exId), en.cfg || {}); }
@@ -910,7 +929,8 @@ function validBackup(data){
     return session.entries.every(function(entry){
       return isObject(entry) && typeof entry.exId === 'string' && Array.isArray(entry.sets) &&
         entry.sets.every(function(set){
-          return isObject(set) && validPositiveNumber(set.w) && validPositiveNumber(set.r) &&
+          return isObject(set) && validPositiveNumber(set.w) && set.w <= MAX_WEIGHT_KG &&
+            validPositiveNumber(set.r) && set.r <= MAX_REPS &&
             (set.rir === undefined || set.rir === null || validNumber(set.rir)) &&
             (set.type === undefined || Object.prototype.hasOwnProperty.call(SET_TYPES, set.type)) &&
             (set.restMs === undefined || validPositiveNumber(set.restMs));
@@ -1014,7 +1034,7 @@ function importSessionsCsv(text){
     var date=(r.fecha||r.date||'').trim(), name=(r.ejercicio||r.exercise||'').trim();
     var weightKg=num(r.peso_kg||r.peso), weightLb=num(r.peso_lb||r.weight_lb);
     var weight=weightKg!==null?weightKg:(weightLb!==null?weightLb*KG_PER_LB:num(r.weight)), reps=num(r.repeticiones||r.reps);
-    if(!validDate(date) || !name || !Number.isFinite(weight) || weight < 0 || !(reps>0)) return;
+    if(!validDate(date) || !name || !validWeight(weight) || !validReps(reps)) return;
     var effort=num(r.esfuerzo||r.rir||r.effort);
     var duration=num(r.duracion_min||r.duration_min||r.duration); if(Number.isFinite(duration) && duration>=0) durations[date]=Math.max(durations[date]||0,duration);
     var side=(r.lado||r.side||'').trim().toLowerCase(), pair=num(r.ronda||r.round||r.pair);
@@ -1750,7 +1770,7 @@ function sessionEditorHtml(session){
     '<div class="row"><button class="btn sm" data-act="session-edit-save"' + (edit.saving ? ' disabled' : '') + '>Guardar cambios</button><button class="btn ghost sm" data-act="session-edit-cancel"' + (edit.saving ? ' disabled' : '') + '>Cancelar</button></div></section>';
 }
 function sessionEditSetValid(set){
-  return !!set && Number.isFinite(set.w) && set.w >= 0 && Number.isInteger(set.r) && set.r > 0;
+  return !!set && validWeight(set.w) && Number.isInteger(set.r) && validReps(set.r);
 }
 function sessionEntryIsUnilateral(entry, exercise){
   return typeof entry.unilateral === 'boolean' ? entry.unilateral : !!(exercise && exercise.unilateral);
@@ -1840,7 +1860,7 @@ function saveSessionEdit(){
   var validSets = edit.session.entries.every(function(entry){
     if(!entry.sets || !entry.sets.length) return false;
     return entry.sets.every(function(set){
-      return Number.isFinite(set.w) && set.w >= 0 && Number.isInteger(set.r) && set.r > 0 &&
+      return validWeight(set.w) && Number.isInteger(set.r) && validReps(set.r) &&
         (set.rir === null || set.rir === undefined || (Number.isFinite(set.rir) && set.rir >= 0 && set.rir <= 10));
     });
   });
@@ -2107,16 +2127,25 @@ function routineEditor(){
   return out;
 }
 
-function niceStep(raw){ var c = [0.5,1,2,2.5,5,10,20,25,50,100]; for(var i=0;i<c.length;i++){ if(c[i] >= raw) return c[i]; } return 100; }
+function niceStep(raw){
+  if(!(raw > 0) || !Number.isFinite(raw)) return 1;
+  var base=Math.pow(10,Math.floor(Math.log10(raw))), multipliers=[1,2,2.5,5,10];
+  for(var i=0;i<multipliers.length;i++){
+    var step=multipliers[i]*base;
+    if(Number.isFinite(step) && step>=raw) return step;
+  }
+  return raw;
+}
 function chartSvg(pts, unit){
   unit = unit || 'kg';
+  pts = (pts || []).filter(function(point){ return point && Number.isFinite(point.y); });
   if(pts.length < 2) return '<p class="muted small">Con dos entrenos aparece la curva de progreso.</p>';
   var W = Math.max(280, Math.min(600, document.documentElement.clientWidth - 64)), H = 190, L = 42, R = 16, T = 18, B = 26;
   var ys = pts.map(function(p){ return p.y; });
   var lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
   var span = Math.max(hi - lo, 4); lo -= span*0.2; hi += span*0.2;
   var step = niceStep((hi - lo) / 4), t = Math.ceil(lo/step)*step, ticks = [];
-  for(; t <= hi; t += step) ticks.push(Math.round(t*100)/100);
+  for(; t <= hi && ticks.length < 12; t += step) ticks.push(Math.round(t*100)/100);
   var X = function(i){ return L + i*(W-L-R)/(pts.length-1); };
   var Y = function(v){ return T + (hi - v)/(hi - lo)*(H - T - B); };
   var g = '', i;
@@ -2337,7 +2366,7 @@ function goalProgress(goal){
   } else if(goal.type==='sessions'){
     current=S.sessions.length;
   } else if(goal.type==='weekly'){
-    var from=new Date(); from.setDate(from.getDate()-7); var threshold=iso(from);
+    var threshold=historyWindowBounds(7,iso(new Date())).start;
     current=S.sessions.filter(function(s){ return s.date>=threshold; }).length;
   }
   var target=Number(goal.target)||0, start=Number(goal.start)||0;
@@ -2383,7 +2412,8 @@ function profileSummary(){
   var totalVolume=0, totalDuration=0;
   S.sessions.forEach(function(session){ var stats=sessionStats(session); totalVolume+=stats.volume; totalDuration+=Number(session.durationMs)||0; });
   var sorted=S.sessions.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
-  var recent=sorted.filter(function(session){return session.date>=iso(new Date(Date.now()-7*86400000));});
+  var recentStart=historyWindowBounds(7,iso(new Date())).start;
+  var recent=sorted.filter(function(session){return session.date>=recentStart;});
   var latestWeight=S.profile.measurements.slice().filter(function(m){return m.values&&Number.isFinite(Number(m.values.weight));}).sort(function(a,b){return b.date.localeCompare(a.date);})[0];
   var effectiveSets=0; S.sessions.forEach(function(session){session.entries.forEach(function(entry){effectiveSets+=entryEffectiveSets(entry);});});
   var uniqueExercises={}; S.sessions.forEach(function(session){session.entries.forEach(function(entry){uniqueExercises[entry.exId]=(uniqueExercises[entry.exId]||0)+1;});});
@@ -2752,7 +2782,7 @@ function finish(updateRoutine){
   var entries = [], saved = [];
   S.draft.entries.forEach(function(en){
     var ex = effEx(en);
-    var sets = rowsToSets(en.rows, ex.unilateral).filter(function(s){ return validWeight(s.w) && s.r > 0; })
+    var sets = rowsToSets(en.rows, ex.unilateral).filter(function(s){ return validWeight(s.w) && validReps(s.r); })
       .map(function(s){
         var set = {w:s.w, r:s.r, rir:s.rir, type:setType(s)};
         if(s.restMs > 0){ set.restMs = Math.round(s.restMs); }
@@ -3558,8 +3588,8 @@ function anomalyWarnings(){
       else sets=[{w:row.w,r:row.r,label:'serie '+(rowIndex+1)}];
       sets.forEach(function(set){
         var weight=num(set.w), reps=num(set.r), reasons=[];
-        if(weight!==null&&(weight>500||weight<0)) reasons.push('peso fuera de rango');
-        if(reps!==null&&(reps>100||reps<0)) reasons.push('repeticiones fuera de rango');
+        if(weight!==null&&(weight>MAX_WEIGHT_KG||weight<0)) reasons.push('peso fuera de rango');
+        if(reps!==null&&(reps>MAX_REPS||reps<0)) reasons.push('repeticiones fuera de rango');
         if(historyMax!==null&&weight!==null&&weight>0&&weight>historyMax*1.5) reasons.push('peso más de 50 % sobre tu récord');
         if(reasons.length) suspicious.push(exerciseName+' · serie '+(rowIndex+1)+' '+set.label+': '+reasons.join(', '));
       });

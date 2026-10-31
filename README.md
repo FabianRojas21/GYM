@@ -26,7 +26,7 @@ En **Yo → Resumen → Objetivos**, las metas de peso en un ejercicio, entrenos
 totales y entrenos de los últimos 7 días se actualizan con tus datos. Los
 objetivos personalizados requieren una unidad y permiten actualizar el
 progreso manualmente; cada tarjeta muestra cuánto falta o si ya alcanzaste la
-meta.
+meta. «Últimos 7 días» incluye hoy y los seis días anteriores.
 
 Si Firebase no responde al iniciar, la app conserva los datos locales y cambia
 al guardado en este navegador en vez de habilitar una sincronización que no está
@@ -48,6 +48,10 @@ Desde un entrenamiento guardado puedes elegir **Guardar como rutina** para
 crear una plantilla reutilizable con sus ejercicios, series normales,
 aproximaciones y ajustes de progresión. Las series especiales no se convierten
 en series de trabajo de la plantilla.
+
+Para evitar registros accidentales extremos, las series aceptan hasta 1000 kg
+(o su equivalente en lb) y 500 repeticiones. Los gráficos descartan valores no
+finitos y limitan la cantidad de marcas del eje.
 
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
 del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes
@@ -253,8 +257,11 @@ configuración pública ya está en `firebase-config.js`.
 3. Crea Firestore Database en modo producción.
 4. Publica `firestore.rules` desde Firebase CLI con `firebase deploy --rules
    firestore.rules`, o pega su contenido en Reglas de Firestore.
-5. Abre Ajustes, pulsa **Continuar con Google** y autoriza la cuenta. La primera
-   vez, los datos locales existentes se suben si la cuenta aún está vacía.
+5. Abre Ajustes, pulsa **Continuar con Google** y autoriza la cuenta. Los datos
+   locales se migran una sola vez cuando la cuenta remota está vacía. Los datos
+   locales antiguos no se vuelven a mezclar automáticamente en una cuenta que
+   ya tiene información; para agregar un respaldo, usa la restauración aditiva
+   desde Ajustes.
 
 Las reglas restringen cada documento bajo `/users/{uid}` al usuario autenticado
 con ese UID. Firebase Hosting no es obligatorio; GitHub Pages puede usar los
