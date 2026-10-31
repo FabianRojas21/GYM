@@ -369,7 +369,7 @@ var Store = {
         var firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(window.SOBRECARGA_FIREBASE_CONFIG);
         Store.firebaseAuth = firebase.auth(firebaseApp);
         Store.firebaseDb = firebase.firestore(firebaseApp);
-        Store.firebaseDb.settings({experimentalForceLongPolling:true},{merge:true});
+        Store.firebaseDb.settings({experimentalForceLongPolling:true,merge:true});
         Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){ });
         var redirectPending=false;
         try{ redirectPending=sessionStorage.getItem('sobrecarga-google-redirect')==='1'; }catch(e){}

@@ -25,7 +25,13 @@ jobs:
       - name: Run automated tests
         run: node --test engine.test.js
       - name: Version deployed assets
-        run: sed -i "s/__BUILD_ID__/${GITHUB_SHA}/g" index.html sw.js
+        run: sed -i 's/__BUILD_ID__/${{ github.sha }}/g' index.html sw.js
+      - name: Verify deployed asset versions
+        run: |
+          if grep -q '__BUILD_ID__' index.html sw.js; then
+            echo "Asset build IDs were not replaced"
+            exit 1
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
