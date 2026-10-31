@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
 const {analyze, analyzeCore, effTxt} = require('./engine.js');
 const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType, csvSessionSignature, parseNumber} = require('./backup.js');
 
@@ -367,4 +368,17 @@ test('el error de renderizado muestra sus detalles técnicos sin alterar los dat
   assert.match(app,/var errorDetails=error && \(error\.stack \|\| error\.message\)/);
   assert.match(app,/<details class="render-error-details"><summary>Detalles técnicos<\/summary><pre>' \+ esc\(errorDetails\)/);
   assert.ok(styles.includes('.render-error-details pre{'));
+});
+
+test('la app mantiene el parseo numérico si backup.js está desactualizado', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const parser=source.match(/var num = [\s\S]*?;\nvar validWeight = function\(v\)\{ var n=num\(v\); return n !== null && n >= 0; \};/);
+  assert.ok(parser);
+  const context={SobrecargaBackup:{}};
+  vm.runInNewContext(parser[0]+';globalThis.parseNumberForTest=num;globalThis.validWeightForTest=validWeight;',context);
+  assert.equal(context.parseNumberForTest('62,5'),62.5);
+  assert.equal(context.parseNumberForTest(''),null);
+  assert.equal(context.parseNumberForTest('62 kg'),null);
+  assert.equal(context.validWeightForTest('0'),true);
+  assert.equal(context.validWeightForTest('-1'),false);
 });

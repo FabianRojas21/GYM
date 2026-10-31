@@ -6,7 +6,15 @@ var $ = function(s, el){ return (el||document).querySelector(s); };
 var esc = function(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
 var fmt = function(n){ return (Math.round(n*100)/100).toString().replace('.', ','); };
 var fmt1 = function(n){ return (Math.round(n*10)/10).toString().replace('.', ','); };
-var num = SobrecargaBackup.parseNumber;
+var num = typeof SobrecargaBackup !== 'undefined' && typeof SobrecargaBackup.parseNumber === 'function'
+  ? SobrecargaBackup.parseNumber
+  : function(value){
+      if(value === null || value === undefined || String(value).trim() === '') return null;
+      var raw = String(value).trim();
+      if(!/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(raw)) return null;
+      var number = Number(raw.replace(',', '.'));
+      return Number.isFinite(number) ? number : null;
+    };
 var validWeight = function(v){ var n=num(v); return n !== null && n >= 0; };
 var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
 var roundTo = function(x, step){ return Math.round(x/step)*step; };
