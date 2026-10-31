@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {analyze, analyzeCore, effTxt} = require('./engine.js');
-const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType, csvSessionSignature} = require('./backup.js');
+const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType, csvSessionSignature, parseNumber} = require('./backup.js');
 
 const rirSettings = {mode:'rir', targetRir:2};
 const baseExercise = {sets:3, min:8, max:10, inc:2, efforts:[2,2,2]};
@@ -172,6 +172,15 @@ test('normaliza tipos de CSV sin cambiar tipos válidos ni producir tipos invál
   assert.equal(csvSetType('rest-pause'),'restpause');
 });
 
+test('parsea números completos con coma decimal y rechaza texto agregado', () => {
+  assert.equal(parseNumber('60'),60);
+  assert.equal(parseNumber(' 2,5 '),2.5);
+  assert.equal(parseNumber('.75'),0.75);
+  assert.equal(parseNumber(''),null);
+  assert.equal(parseNumber('60kg'),null);
+  assert.equal(parseNumber('1.2.3'),null);
+});
+
 test('la firma CSV distingue esfuerzo y lado de cada ronda', () => {
   const left=[{exId:'curl',sets:[{w:12,r:10,rir:2,type:'normal',side:'left',pair:0}]}];
   const right=[{exId:'curl',sets:[{w:12,r:10,rir:2,type:'normal',side:'right',pair:0}]}];
@@ -293,7 +302,12 @@ test('no confirma la importación CSV antes de persistir y gestiona fallos de mi
   const source=fs.readFileSync('./app.js','utf8');
   assert.match(source,/return Store\.saveProfileNow\(\)\.then\(persistSessions\)/);
   assert.match(source,/Migración local a Firebase fallida/);
-  assert.match(source,/Se mantienen tus datos en este navegador/);
+  assert.match(source,/fallbackToLocal:function/);
+  assert.match(source,/Los cambios se guardan en este navegador/);
+  assert.match(source,/Store\.cloudGeneration\+\+/);
+  assert.match(source,/function loadDemo\(\)[\s\S]*?return Store\.saveProfileNow\(\)\.then\(persistSessions\)/);
+  assert.match(source,/Store\.syncToCloud\(\)\.then/);
+  assert.match(source,/parseNumber/);
   assert.match(source,/No se pudo borrar el entreno:/);
   assert.match(source,/throw error;\s*\}\);\s*\},\s*replaceAll:/);
 });

@@ -10,6 +10,13 @@
     return JSON.parse(JSON.stringify(value));
   }
   function isObject(value){ return value!==null && typeof value==='object' && !Array.isArray(value); }
+  function parseNumber(value){
+    if(value===null || value===undefined || String(value).trim()==='') return null;
+    var raw=String(value).trim();
+    if(!/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(raw)) return null;
+    var number=Number(raw.replace(',','.'));
+    return Number.isFinite(number) ? number : null;
+  }
   function migrateBackup(data){
     if(!isObject(data)) return null;
     var version=Number(data.version || 1);
@@ -74,5 +81,5 @@
     try { return migrateBackup(JSON.parse(String(text))); }
     catch(e){ return null; }
   }
-  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict, csvSetType:csvSetType, csvSessionSignature:csvSessionSignature};
+  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict, csvSetType:csvSetType, csvSessionSignature:csvSessionSignature, parseNumber:parseNumber};
 });

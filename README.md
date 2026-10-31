@@ -22,6 +22,11 @@ reglas de progresión.
 La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
 con accesos a tus rutinas y a los ejercicios que puedes retomar.
 
+Si Firebase no responde al iniciar, la app conserva los datos locales y cambia
+al guardado en este navegador en vez de habilitar una sincronización que no está
+lista. Cuando vuelva la conexión, usa **Sincronizar ahora** en Ajustes; espera
+el aviso de confirmación antes de cerrar o recargar la app.
+
 En **Historial**, usa **Editar fecha y duración** para corregir el día exacto
 del entrenamiento y ajustar el tiempo registrado. Desde el mismo editor puedes
 corregir el peso, las repeticiones, el esfuerzo y el tipo de las series. La
