@@ -70,6 +70,7 @@ var DK = 'sobrecarga:draft:v1';
 var LK = 'sobrecarga:data:v1';
 var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
+var RTOK = RTK + ':owner';
 function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[]}; }
 function normProfile(p){
   var d = defaultProfile();
@@ -125,13 +126,19 @@ function loadDraft(){
 function loadRestEnd(){
   try { var value = Number(localStorage.getItem(RTK)); return isFinite(value) && value > Date.now() ? value : null; } catch(e){ return null; }
 }
+function loadRestOwner(){
+  try {
+    if(!loadRestEnd()){ localStorage.removeItem(RTOK); return null; }
+    return localStorage.getItem(RTOK) || null;
+  } catch(e){ return null; }
+}
 var S = {
   ready:false, kind:'local', canDownload:false, syncUnavailable:false, cloudSyncing:false,
   draftSaveState:'saved', historyQuery:'', historyRange:'all',
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(),
-  restEndsAt:loadRestEnd(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:''
+  restEndsAt:loadRestEnd(), restOwner:loadRestOwner(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:''
 };
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -184,15 +191,30 @@ function updateWorkoutClock(){
 }
 function saveRestEnd(){
   try {
-    if(S.restEndsAt) localStorage.setItem(RTK, String(S.restEndsAt));
-    else localStorage.removeItem(RTK);
+    if(S.restEndsAt){
+      localStorage.setItem(RTK, String(S.restEndsAt));
+      if(S.restOwner) localStorage.setItem(RTOK, S.restOwner);
+      else localStorage.removeItem(RTOK);
+    }else{
+      S.restOwner=null;
+      localStorage.removeItem(RTK);
+      localStorage.removeItem(RTOK);
+    }
     if(['cloud'].includes(S.kind)) saveDraft();
   } catch(e){ toast('No se pudo guardar el temporizador'); }
 }
-function startRest(seconds){
+function startRest(seconds, owner){
   S.restEndsAt = Date.now() + seconds * 1000;
+  S.restOwner = owner || null;
   saveRestEnd();
   refreshRestTimerSection();
+}
+function cancelRestForRow(row){
+  if(row && row.restToken && S.restOwner === row.restToken){
+    S.restEndsAt=null;
+    S.restOwner=null;
+    saveRestEnd();
+  }
 }
 function restTimerHtml(){
   if(!S.draft.entries.length) return '';
@@ -220,7 +242,7 @@ function updateRestTimer(){
   if(!S.restEndsAt){ if(el) el.textContent = 'Listo'; return; }
   var remaining = S.restEndsAt - Date.now();
   if(remaining <= 0){
-    S.restEndsAt = null; saveRestEnd();
+    S.restEndsAt = null; S.restOwner=null; saveRestEnd();
     refreshRestTimerSection();
     toast('Descanso terminado');
     return;
@@ -1191,7 +1213,7 @@ function goalHtml(ex){
 function completedWorkSets(en, ex){
   var target = Math.max(1, Number(ex.sets) || 1);
   return Math.min(target, en.rows.filter(function(row){
-    return setType(row) === 'normal' && row.restTriggered && rowComplete(row, ex.unilateral);
+    return setType(row) === 'normal' && row.restTriggered;
   }).length);
 }
 function entryHtml(en, ei){
@@ -1231,7 +1253,7 @@ function entryHtml(en, ei){
       '<select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select>' +
       (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral) : '') +
       (r.restTriggered
-        ? '<span class="set-finish set-finish-done" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Serie ' + (ri+1) + ' terminada"><span aria-hidden="true">✓</span> Hecha</span>'
+        ? '<button class="set-finish set-finish-done" data-act="undo-finish-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Deshacer fin de la serie ' + (ri+1) + '"><span aria-hidden="true">✓</span> Hecha · deshacer</button>'
         : '<button class="btn ghost sm set-finish" data-act="finish-set" data-ei="' + ei + '" data-ri="' + ri + '"' +
           (!rowComplete(r, ex.unilateral) ? ' disabled' : '') + '>Terminar serie</button>') + '</div>';
   }).join('');
@@ -2521,6 +2543,7 @@ function onClick(ev){
     case 'rm-ex':
       var removedEntry = S.draft.entries[ei], entryIndex = ei, draftAtRemoval = S.draft;
       if(!removedEntry) break;
+      removedEntry.rows.forEach(cancelRestForRow);
       S.draft.entries.splice(ei, 1); saveDraft(); render();
       toast('Ejercicio quitado del entreno', 'Deshacer', function(){
         if(S.draft !== draftAtRemoval || S.draft.entries.indexOf(removedEntry) >= 0) return;
@@ -2549,13 +2572,23 @@ function onClick(ev){
       }
       finishRow.restTriggered = true;
       finishRow.restCompletedAt = finishedAt;
-      saveDraft();
+      finishRow.restToken = uid('rest_');
       var finishRestSeconds = restSecondsFor(finishRow);
       if(autoRestEligible(finishRow) && finishRestSeconds > 0){
-        startRest(finishRestSeconds);
+        startRest(finishRestSeconds, finishRow.restToken);
       }
+      saveDraft();
       render();
       break;
+    case 'undo-finish-set':
+      var undoEntry=S.draft.entries[ei], undoRow=undoEntry&&undoEntry.rows[ri];
+      if(!undoRow || !undoRow.restTriggered) break;
+      cancelRestForRow(undoRow);
+      delete undoRow.restTriggered;
+      delete undoRow.restCompletedAt;
+      delete undoRow.restMs;
+      delete undoRow.restToken;
+      saveDraft(); render(); break;
     case 'repeat-set':
       var repeatEntry=S.draft.entries[ei], repeatExercise=repeatEntry&&effEx(repeatEntry);
       if(!repeatEntry||!repeatExercise) break;
@@ -2586,10 +2619,12 @@ function onClick(ev){
         copiedRow.rir=previousRow.rir;
       }
       delete copiedRow.restTriggered; delete copiedRow.restCompletedAt; delete copiedRow.restMs;
+      delete copiedRow.restToken;
       saveDraft(); render(); toast('Serie copiada; ajusta reps o esfuerzo si hace falta'); break;
     case 'rm-set':
       var removeFrom = S.draft.entries[ei], removedRow = removeFrom && removeFrom.rows[ri], rowIndex = ri, draftForRow = S.draft;
       if(!removedRow) break;
+      cancelRestForRow(removedRow);
       removeFrom.rows.splice(ri, 1); saveDraft(); render();
       toast('Serie quitada del entreno', 'Deshacer', function(){
         if(S.draft !== draftForRow || S.draft.entries.indexOf(removeFrom) < 0 || removeFrom.rows.indexOf(removedRow) >= 0) return;
@@ -2604,11 +2639,11 @@ function onClick(ev){
     case 'rest-start': startRest(Number(S.profile.settings.restSeconds) || 90); render(); break;
     case 'rest-add':
       if(S.restEndsAt) S.restEndsAt += 30000;
-      else S.restEndsAt = Date.now() + ((Number(S.profile.settings.restSeconds) || 90) + 30) * 1000;
+      else { S.restEndsAt = Date.now() + ((Number(S.profile.settings.restSeconds) || 90) + 30) * 1000; S.restOwner=null; }
       saveRestEnd(); updateRestTimer(); render(); break;
-    case 'rest-stop': S.restEndsAt = null; saveRestEnd(); render(); break;
+    case 'rest-stop': S.restEndsAt = null; S.restOwner=null; saveRestEnd(); render(); break;
     case 'discard': S.confirm = 'discard'; render(); break;
-    case 'discard-ok': S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null; render(); break;
+    case 'discard-ok': S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; S.restOwner=null; saveRestEnd(); S.confirm = null; render(); break;
     case 'dismiss-saved': S.justSaved = null; render(); break;
     case 'toggle-ex': S.openEx = S.openEx === t.dataset.id ? null : t.dataset.id; S.confirm = null; render(); break;
     case 'progress-metric': if(['weight','estimated','volume'].includes(t.dataset.metric)){ S.progressMetric=t.dataset.metric; render(); } break;
@@ -2756,14 +2791,13 @@ function onInput(ev){
   }
   var entry = S.draft.entries[ei], exercise = effEx(entry);
   if(f === 'w' && setType(row) === 'normal') refreshAutoWarmupInputs(ei, entry, exercise);
-  if(row.restTriggered){
-    delete row.restTriggered;
-    delete row.restCompletedAt;
-    delete row.restMs;
-  }
   var finishControl = $('.set-finish[data-ei="' + ei + '"][data-ri="' + ri + '"]');
   if(finishControl){
-    if(finishControl.tagName === 'BUTTON'){
+    if(row.restTriggered){
+      if(finishControl.dataset.act !== 'undo-finish-set'){
+        finishControl.outerHTML = '<button class="set-finish set-finish-done" data-act="undo-finish-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Deshacer fin de la serie ' + (ri+1) + '"><span aria-hidden="true">✓</span> Hecha · deshacer</button>';
+      }
+    }else if(finishControl.tagName === 'BUTTON'){
       finishControl.disabled = !rowComplete(row, exercise.unilateral);
     }else{
       var finishButton = document.createElement('button');
@@ -2945,8 +2979,10 @@ function onChange(ev){
   if(t.dataset.setType !== undefined){
     var setRow = S.draft.entries[+t.dataset.ei] && S.draft.entries[+t.dataset.ei].rows[+t.dataset.ri];
     if(!setRow || !Object.prototype.hasOwnProperty.call(SET_TYPES, t.value)){ render(); return; }
+    cancelRestForRow(setRow);
     setRow.type = t.value; delete setRow.warm;
     delete setRow.restTriggered; delete setRow.restCompletedAt; delete setRow.restMs;
+    delete setRow.restToken;
     saveDraft(); render(); return;
   }
   if(t.dataset.hc || t.dataset.hef !== undefined){

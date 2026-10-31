@@ -189,7 +189,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 }
 .set-finish{grid-column:2 / -1;min-height:36px}
 .set-finish:disabled{cursor:not-allowed;opacity:.55}
-.set-finish-done{display:flex;align-items:center;justify-content:center;gap:6px;color:var(--go);font-size:14px;font-weight:700}
+.set-finish-done{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0;border:0;background:transparent;color:var(--go);font-size:14px;font-weight:700}
 .set-type-head{grid-column:2 / -1;text-align:left}
 .set-reference{grid-column:2 / -1;font-size:12px;line-height:1.2;color:var(--muted);padding:0 2px}
 .set-unilateral{grid-template-columns:24px minmax(0,1fr) 34px;grid-template-rows:auto auto auto}
