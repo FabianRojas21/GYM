@@ -25,13 +25,21 @@ jobs:
       - name: Run automated tests
         run: node --test engine.test.js
       - name: Version deployed assets
-        run: sed -i 's/__BUILD_ID__/${{ github.sha }}/g' index.html sw.js
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          echo "Versioning deployed assets with $BUILD_ID"
+          sed -i "s/__BUILD_ID__/${BUILD_ID}/g" index.html sw.js
       - name: Verify deployed asset versions
+        env:
+          BUILD_ID: ${{ github.sha }}
         run: |
           if grep -q '__BUILD_ID__' index.html sw.js; then
             echo "Asset build IDs were not replaced"
             exit 1
           fi
+          grep -Fq "app.js?v=${BUILD_ID}" index.html
+          grep -Fq "sobrecarga-${BUILD_ID}" sw.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
