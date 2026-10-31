@@ -360,3 +360,11 @@ test('el editor del historial mantiene avance, plegado y estado de series', () =
   assert.ok(styles.includes('.session-entry-edit .session-set-edit .set-finish'));
   assert.match(readme,/Al \*\*editar un entrenamiento del historial\*\*[\s\S]*?no inicia un descanso/);
 });
+
+test('el error de renderizado muestra sus detalles técnicos sin alterar los datos', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
+  assert.match(app,/var errorDetails=error && \(error\.stack \|\| error\.message\)/);
+  assert.match(app,/<details class="render-error-details"><summary>Detalles técnicos<\/summary><pre>' \+ esc\(errorDetails\)/);
+  assert.ok(styles.includes('.render-error-details pre{'));
+});
