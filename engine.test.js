@@ -91,7 +91,7 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.match(workflow,/Verify deployed asset versions[\s\S]*grep -q '__BUILD_ID__' index\.html sw\.js/);
   assert.match(workflow,/grep -Fq "app\.js\?v=\$\{BUILD_ID\}" index\.html/);
   assert.match(workflow,/grep -Fq "sobrecarga-\$\{BUILD_ID\}" sw\.js/);
-  assert.match(app,/firebase\.firestore\(firebaseApp\);\s*Store\.firebaseDb\.settings\(\{experimentalForceLongPolling:true,merge:true\}\)/);
+  assert.match(app,/firebase\.firestore\(firebaseApp\);\s*Store\.firebaseDb\.settings\(\{experimentalForceLongPolling:true,experimentalAutoDetectLongPolling:false,merge:true\}\)/);
   assert.equal(manifest.display,'standalone');
   assert.match(workflow,/actions\/deploy-pages/);
 });
