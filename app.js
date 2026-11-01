@@ -1644,12 +1644,19 @@ function workoutOverviewHtml(){
   return '<section class="workout-overview" aria-label="Resumen del entrenamiento">'+
     '<div class="workout-overview-stats">'+
       '<div><span>Duración</span><strong class="num" id="workout-clock">'+formatDuration(Date.now()-(S.draft.startedAt||Date.now()))+'</strong></div>'+
-      '<div><span>Volumen</span><strong class="num" id="workout-volume">'+volumeText(totals.volume)+' '+weightUnitLabel()+'</strong></div>'+
+      '<div><span>Carga × reps</span><strong class="num" id="workout-volume">'+volumeText(totals.volume)+' '+weightUnitLabel()+'·reps</strong></div>'+
       '<div><span>Series</span><strong class="num"><span id="done-count">'+totals.done+'</span><span class="workout-stat-divider"> / </span><span id="planned-count">'+totals.planned+'</span></strong></div>'+
     '</div><div class="workout-overview-progress"><div class="progress" role="progressbar" aria-label="Series completadas" aria-valuemin="0" aria-valuemax="'+progressMax+'" aria-valuenow="'+totals.done+'"><span id="workout-progress-bar" style="width:'+progress.toFixed(1)+'%"></span></div><span id="workout-progress-label">'+totals.done+' de '+totals.planned+' series</span></div></section>';
 }
-function calculatorTargetForEntry(entry){
-  var ex=effEx(entry), row=entry.rows.find(function(item){return setType(item)==='normal'&&!item.restTriggered;})||entry.rows[0];
+function calculatorRowIndexForEntry(entry){
+  var next=entry.rows.findIndex(function(item){return setType(item)==='normal'&&!item.restTriggered;});
+  if(next>=0) return next;
+  var last=-1;
+  entry.rows.forEach(function(item,index){if(setType(item)==='normal') last=index;});
+  return last;
+}
+function calculatorTargetForEntry(entry,rowIndex){
+  var ex=effEx(entry), selectedIndex=Number.isInteger(rowIndex)?rowIndex:calculatorRowIndexForEntry(entry), row=entry.rows[selectedIndex];
   if(row){
     var values=ex.unilateral?[ensureRowMode(row,true).right.w,ensureRowMode(row,true).left.w]:[row.w];
     var entered=values.map(num).filter(function(value){return value!==null&&value>=0;})[0];
@@ -1664,6 +1671,9 @@ function entryHtml(en, ei){
   var mode = S.profile.settings.mode;
   var effLab = mode === 'rpe' ? 'RPE' : 'RIR';
   var p = planFor(ex);
+  var calculatorRowIndex=calculatorRowIndexForEntry(en), calculatorTarget=calculatorTargetForEntry(en,calculatorRowIndex);
+  var calculatorTool=loadTools().filter(function(tool){return tool.id===ex.loadToolId;})[0];
+  var calculatorHint=calculatorTarget===null?'Calcula el peso de una serie':'Serie '+(calculatorRowIndex+1)+' · '+weightText(calculatorTarget)+(calculatorTool&&calculatorTool.type==='independent'?' por brazo':' total');
   var targetSets = Math.max(1, Number(ex.sets) || 1);
   var completedSets = completedWorkSets(en, ex);
   var collapsed = S.collapsedEntries.has(en.uiId);
@@ -1729,7 +1739,7 @@ function entryHtml(en, ei){
     '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
     substitutionHtml +
     (collapsed ? '' : '<div class="workout-card-body">' + goalHtml(ex) +
-    '<button class="workout-calculator-trigger" data-act="open-loading-calculator" data-ei="' + ei + '"><span aria-hidden="true">＋</span><span><strong>Calculadora de discos</strong><small>Ver qué discos cargar para este peso</small></span><span aria-hidden="true">›</span></button>' +
+    '<button class="workout-calculator-trigger" data-act="open-loading-calculator" data-ei="' + ei + '"><span aria-hidden="true">＋</span><span><strong>Calculadora de discos</strong><small>'+esc(calculatorHint)+'</small></span><span aria-hidden="true">›</span></button>' +
     '<div class="sets">' + rows + '</div>' +
     '<details class="workout-help"><summary>Ayuda con las series</summary><p class="hint">' + (ex.unilateral
       ? 'Cada ronda registra ambos lados. Cuenta como una serie cuando completaste derecho e izquierdo; la progresión espera que ambos lados cumplan el objetivo. '
@@ -1983,11 +1993,14 @@ function recoveryHtml(){
       '<small class="muted recovery-stimulus">'+esc(stimulus)+'</small>'+
       '</article>';
   }).join('');
-  return '<section class="recovery-panel"><div><h3>Carga muscular y sensación</h3><p class="small muted">La carga es una estimación del entrenamiento reciente y no mide la recuperación fisiológica. Tu sensación es subjetiva, se registra por separado y ninguna de las dos decide si debes entrenar.</p></div>'+
+  return '<section class="recovery-panel"><div><h3>Carga muscular y sensación</h3><p class="small muted">Estimación de los últimos 7 días hasta hoy; no mide la recuperación fisiológica. Tu sensación es subjetiva, se registra por separado y ninguna de las dos decide si debes entrenar.</p></div>'+
     (rows?'<div class="recovery-grid">'+rows+'</div>':'<p class="home-weekly-note">Registra series efectivas y asigna músculos a tus ejercicios para ver su carga reciente.</p>')+
-    '<details class="volume-help"><summary>Cómo interpretar estos datos</summary><p>La carga suma series efectivas recientes: las secundarias cuentan al 50 %, el esfuerzo registrado ajusta ligeramente el aporte y las sesiones más antiguas pesan menos. Como referencia visual, menos de 1,5 series equivalentes es carga baja, de 1,5 a menos de 4 es moderada y 4 o más es alta. «Sin carga reciente» o «Sin datos suficientes» no significan que el músculo esté recuperado. La autoevaluación es opcional y no cambia tus recomendaciones de peso.</p></details></section>';
+    '<details class="volume-help"><summary>Cómo interpretar estos datos</summary><p>La carga suma series efectivas recientes: las secundarias cuentan al 50 %, el esfuerzo registrado ajusta ligeramente el aporte y cada sesión pierde peso estimado con el paso de los días. Como referencia visual, menos de 1,5 series equivalentes es carga baja, de 1,5 a menos de 4 es moderada y 4 o más es alta. Estas etiquetas describen la estimación, no son metas ni una indicación para entrenar o descansar. «Sin carga reciente» o «Sin datos suficientes» no significan que el músculo esté recuperado. La autoevaluación es opcional y no cambia tus recomendaciones de peso.</p></details></section>';
 }
 function weeklyMuscleSummaryHtml(week){
+  var today=iso(new Date()), currentDate=parseISO(today);
+  currentDate.setDate(currentDate.getDate()-((currentDate.getDay()+6)%7));
+  var weekStart=iso(currentDate);
   var counts = {}, groupCounts = {}, groupDirect = {}, groupIndirect = {};
   week.forEach(function(session){
     session.entries.forEach(function(entry){
@@ -2020,10 +2033,9 @@ function weeklyMuscleSummaryHtml(week){
         var directLabel=groupDirect[group]||0;
         var indirectLabel=groupIndirect[group]||0;
         var secondary=' · '+fmt1(indirectLabel)+' series secundarias → '+fmt1(indirectLabel*0.5)+' estimadas';
-        return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLE_GROUPS[group] || group) + '</span><small>' + fmt1(directLabel) + ' series directas' + secondary + (details.length===1 ? ' · '+esc(MUSCLES[details[0]]) : '') + '</small>' + subgroups + '</div><strong>' + fmt1(groupCounts[group]) + ' equivalentes</strong></div>';
+        return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLE_GROUPS[group] || group) + '</span><small>' + fmt1(directLabel) + ' series directas' + secondary + (details.length===1 ? ' · '+esc(MUSCLES[details[0]]) : '') + '</small>' + subgroups + '</div><strong>' + fmt1(groupCounts[group]) + ' series equivalentes</strong></div>';
       }).join('') + '</div>'
     : '<p class="home-weekly-note">Aún no hay series efectivas registradas esta semana.</p>';
-  var now=new Date(), today=iso(now);
   var previousGroupValues={};
   for(var weekIndex=1; weekIndex<=4; weekIndex++){
     var range=SobrecargaEngine.comparableWeekRange(today,weekIndex);
@@ -2039,7 +2051,10 @@ function weeklyMuscleSummaryHtml(week){
         });
       }
     });
-    Object.keys(weekCounts).forEach(function(group){ previousGroupValues[group]=previousGroupValues[group]||[]; previousGroupValues[group].push(weekCounts[group]); });
+    groupIds.forEach(function(group){
+      previousGroupValues[group]=previousGroupValues[group]||[];
+      previousGroupValues[group].push(weekCounts[group]||0);
+    });
   }
   var effortByMuscle={};
   week.forEach(function(session){ session.entries.forEach(function(entry){ var ex=exById(entry.exId), id=muscleId(ex||{}); entry.sets.forEach(function(set){ if(!countsForProgress(set)) return; if(set.rir!==null && set.rir!==undefined && isFinite(Number(set.rir))){ effortByMuscle[id]=effortByMuscle[id]||[]; effortByMuscle[id].push(Number(set.rir)); } }); }); });
@@ -2052,8 +2067,8 @@ function weeklyMuscleSummaryHtml(week){
     var effort=average===null?'':' · esfuerzo registrado '+(average<=1?'alto':average<=2?'moderado':'bajo');
     return '<div class="weekly-muscle-row"><span>'+esc(MUSCLE_GROUPS[group] || group)+'</span><strong>'+esc(trend+effort)+'</strong></div>';
   }).join('');
-  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><p class="home-weekly-note">Las series equivalentes estiman el estímulo muscular; no son el volumen de carga (peso × repeticiones).</p><details class="volume-help"><summary>Cómo se calcula el volumen y el esfuerzo</summary><p>Las series directas cuentan completas; cada serie secundaria se estima como 0,5. El total equivalente suma ambas contribuciones. Las porciones de un mismo grupo no se duplican. El esfuerzo se resume a partir del RIR/RPE guardado; no equivale por sí solo a medir la fatiga o recuperación muscular.</p></details></div>' +
-    content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
+  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><p class="home-weekly-note">Semana actual: '+esc(dFmt(weekStart,{day:'numeric',month:'short'}))+' — '+esc(dFmt(today,{day:'numeric',month:'short'}))+' (lunes a hoy). Las series equivalentes estiman el estímulo muscular; no son carga × repeticiones.</p><details class="volume-help"><summary>Cómo se calcula el volumen y el esfuerzo</summary><p>Las series directas cuentan completas; cada serie secundaria se estima como 0,5. El total equivalente suma ambas contribuciones. Las porciones de un mismo grupo no se duplican. La tendencia compara esta ventana parcial con el promedio de las mismas fechas de las 4 semanas anteriores. El esfuerzo se resume a partir del RIR/RPE guardado; no equivale por sí solo a medir la fatiga o recuperación muscular.</p></details></div>' +
+    content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio de las ventanas semanales comparables anteriores</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
 }
 function suggestHtml(){
   var ids = Object.keys(S.profile.exercises).filter(function(k){
@@ -2279,7 +2294,8 @@ function homeDashboard(){
   var start = new Date(), mondayOffset = (start.getDay() + 6) % 7;
   start.setDate(start.getDate() - mondayOffset); start.setHours(0, 0, 0, 0);
   var from = iso(start);
-  var week = S.sessions.filter(function(session){ return session.date >= from; });
+  var through=iso(new Date());
+  var week = S.sessions.filter(function(session){ return session.date >= from&&session.date<=through; });
   var stats = week.reduce(function(total, session){
     var values = sessionStats(session);
     total.duration += Number(session.durationMs) || 0;
@@ -2421,12 +2437,38 @@ function viewRut(){
   return out;
 }
 function libraryRoutineCard(routine){
-  var count = routine.items.length, replacing = S.confirm === 'start:' + routine.id;
-  return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="' + esc(routine.id) + '"><span class="library-cover routine-cover">' + esc(routine.name.trim().charAt(0).toUpperCase() || 'R') + '</span><span><strong>' + esc(routine.name) + '</strong><small>' + count + ' ejercicio' + (count === 1 ? '' : 's') + '</small></span></button>' +
+  var count = routine.items.length, replacing = S.confirm === 'start:' + routine.id, summary=routineSummary(routine);
+  return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="' + esc(routine.id) + '"><span class="library-cover routine-cover">' + esc(routine.name.trim().charAt(0).toUpperCase() || 'R') + '</span><span><strong>' + esc(routine.name) + '</strong><small>' + count + ' ejercicio' + (count === 1 ? '' : 's') + ' · '+summary.workingSets+' series</small><small class="routine-card-meta">'+esc(routineMuscleLabel(summary))+' · '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</small></span></button>' +
     '<div class="library-card-actions"><button class="btn sm" data-act="rut-start" data-id="' + esc(routine.id) + '">' + (replacing ? 'Reemplazar' : 'Entrenar') + '</button><button class="mini" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar ' + esc(routine.name) + '">✎</button><button class="mini" data-act="rut-duplicate" data-id="' + esc(routine.id) + '" aria-label="Duplicar ' + esc(routine.name) + '">⧉</button>' +
     (S.confirm === 'delr:' + routine.id
       ? '<button class="mini danger" data-act="rut-del-ok" data-id="' + esc(routine.id) + '" aria-label="Confirmar borrar rutina">✓</button>'
       : '<button class="mini" data-act="rut-del" data-id="' + esc(routine.id) + '" aria-label="Borrar ' + esc(routine.name) + '">×</button>') + '</div></div>';
+}
+function routineSummary(routine){
+  var workingSets=0,warmupSets=0,muscles=[];
+  routine.items.forEach(function(item){
+    workingSets+=Math.max(1,Number(item.sets)||1);
+    warmupSets+=Math.max(0,Number(item.warmupSets)||0);
+    muscleAssignments(exById(item.exId)||item).forEach(function(assignment){
+      var group=muscleGroupId(assignment.id);
+      if(group&&group!=='unassigned'&&MUSCLE_GROUPS[group]&&muscles.indexOf(group)<0) muscles.push(group);
+    });
+  });
+  var sessions=S.sessions.filter(function(session){return session.routineId===routine.id;})
+    .sort(function(a,b){return a.date===b.date?(Number(b.ts)||0)-(Number(a.ts)||0):b.date.localeCompare(a.date);});
+  return {workingSets:workingSets,warmupSets:warmupSets,muscles:muscles,lastSession:sessions[0]||null};
+}
+function routineMuscleLabel(summary){
+  if(!summary.muscles.length) return 'Músculos sin asignar';
+  return summary.muscles.slice(0,3).map(function(group){return MUSCLE_GROUPS[group];}).join(', ')+
+    (summary.muscles.length>3?' + '+(summary.muscles.length-3):'');
+}
+function routineExerciseHistory(exId){
+  var history=entriesFor(exId);
+  if(!history.length) return 'Sin registro previo';
+  var latest=history[history.length-1], ex=exById(exId);
+  var effective=entryEffectiveSets({sets:effectiveSetsFor(ex||{},latest.sets,latest.date),unilateral:!!(ex&&ex.unilateral)});
+  return 'Último registro: '+dFmt(latest.date)+' · '+effective+' series efectivas';
 }
 function programEditor(){
   var program = S.pedit, isNew = !program.id;
@@ -2436,15 +2478,16 @@ function programEditor(){
 }
 function routineLibraryDetail(routine){
   var program = routine.programId && S.profile.programs[routine.programId];
+  var summary=routineSummary(routine);
   var exercises = routine.items.map(function(item){
     var warmups = Number(item.warmupSets) || 0;
     return '<div class="library-exercise-row"><span class="exercise-mark" aria-hidden="true">' + esc(exName(item.exId).trim().charAt(0).toUpperCase()) + '</span><span><strong>' + esc(exName(item.exId)) + '</strong><small>' +
       (warmups ? warmups + ' aprox. + ' : '') + item.sets + ' series · ' + item.min + '–' + item.max + ' reps' + (item.unilateral ? ' · por lado' : '') +
-      (exById(item.exId) && exById(item.exId).archived ? ' · ejercicio archivado (se omitirá al entrenar)' : '') + '</small></span></div>';
+      (exById(item.exId) && exById(item.exId).archived ? ' · ejercicio archivado (se omitirá al entrenar)' : '') + '</small><small class="routine-exercise-history">'+esc(routineExerciseHistory(item.exId))+'</small></span></div>';
   }).join('');
   return '<div class="library-heading"><div><button class="text-button library-back" data-act="routine-back">‹ ' + (program ? esc(program.name) : 'Biblioteca') + '</button><h2>' + esc(routine.name) + '</h2></div>' +
     '<button class="library-add" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar rutina">✎</button></div>' +
-    '<div class="library-routine-summary"><span>' + routine.items.length + ' ejercicio' + (routine.items.length === 1 ? '' : 's') + '</span>' +
+    '<div class="library-routine-summary"><span>' + routine.items.length + ' ejercicio' + (routine.items.length === 1 ? '' : 's') + '</span><span>'+summary.workingSets+' series de trabajo'+(summary.warmupSets?' · '+summary.warmupSets+' aproximaciones':'')+'</span><span>'+esc(routineMuscleLabel(summary))+'</span><span>Último entreno: '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</span>' +
     (program ? '<span>' + esc(program.name) + '</span>' : '') + '</div>' +
     '<div class="library-exercises">' + (exercises || '<p class="muted">Añade ejercicios a esta rutina desde Editar.</p>') + '</div>' +
     '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn ghost" data-act="rut-duplicate" data-id="' + esc(routine.id) + '">Duplicar rutina</button><button class="btn ghost" data-act="rut-export" data-id="' + esc(routine.id) + '">Compartir rutina</button></div>';
@@ -2572,9 +2615,17 @@ function loadToolSettingsHtml(){
         '<label class="field"><span class="lab">Discos disponibles para cada lado'+(tool.type==='independent'?' / brazo':'')+' ('+weightUnitLabel()+' por disco)</span><input class="txt" data-load-tool="plates" data-id="'+esc(tool.id)+'" value="'+esc(tool.plates.map(function(weight){return weightInput(weight);}).join('; '))+'" placeholder="20; 10; 5; 2,5"></label>'+
         '<p class="small muted">'+(tool.type==='bar'?'El peso objetivo incluye la barra.':'El objetivo se interpreta por brazo; la calculadora también mostrará el total de los dos brazos.')+'</p>'+
         ((typeof tool.baseWeight!=='number'||!Number.isFinite(tool.baseWeight)||!tool.plates.length)?'<p class="small warn-text">Para habilitar el cálculo, indica el peso base y al menos un disco disponible por lado. No se asumirá un peso estándar.</p>':'')+
-        '<div class="row">'+(isConfirm?'<button class="btn danger sm" data-act="load-tool-remove-ok" data-id="'+esc(tool.id)+'">Confirmar eliminar</button><button class="btn ghost sm" data-act="load-tool-remove-cancel">Cancelar</button>':'<button class="btn ghost sm" data-act="load-tool-remove" data-id="'+esc(tool.id)+'">Eliminar equipo</button>')+'</div></article>';
+        '<div class="row">'+(isConfirm?'<button class="btn danger sm" data-act="load-tool-remove-ok" data-id="'+esc(tool.id)+'">Confirmar eliminar</button><button class="btn ghost sm" data-act="load-tool-remove-cancel">Cancelar</button>':'<button class="btn ghost sm" data-act="load-tool-copy" data-id="'+esc(tool.id)+'">Duplicar configuración</button><button class="btn ghost sm" data-act="load-tool-remove" data-id="'+esc(tool.id)+'">Eliminar equipo</button>')+'</div></article>';
     }).join(''):'<p class="small muted">Todavía no has configurado una barra o máquina cargable.</p>')+
     '<button class="btn ghost sm" data-act="load-tool-add"'+(tools.length>=10?' disabled':'')+'>Añadir equipo cargable</button></section>';
+}
+function plateStackHtml(plates,sideLabel){
+  var sorted=plates.slice().sort(function(a,b){return a-b;});
+  var disks=sorted.map(function(weight){
+    var width=Math.max(15,Math.min(30,11+Math.sqrt(weight)*3));
+    return '<span class="plate-disk" style="--plate-width:'+width.toFixed(1)+'px" title="'+esc(weightText(weight))+'">'+esc(fmt(fromKg(weight)))+'</span>';
+  }).join('');
+  return '<div class="plate-side"><span class="plate-side-label">'+sideLabel+'</span><div class="plate-stack">'+disks+'</div></div>';
 }
 function loadingCalculatorHtml(ex){
   var tools=loadTools();
@@ -2582,23 +2633,56 @@ function loadingCalculatorHtml(ex){
   var selected=tools.filter(function(tool){return tool.id===ex.loadToolId;})[0]||tools[0];
   var current=S.loadingCalc&&S.loadingCalc.exId===ex.id&&S.loadingCalc.toolId===selected.id?S.loadingCalc:null;
   var options=tools.map(function(tool){return '<option value="'+esc(tool.id)+'"'+(tool.id===selected.id?' selected':'')+'>'+esc(tool.name)+'</option>';}).join('');
-  var inputId='loading-target-'+esc(ex.id);
+  var inputId='loading-target-'+esc(ex.id), activeCalc=S.loadingCalc&&S.loadingCalc.exId===ex.id?S.loadingCalc:null;
+  var workoutEntry=activeCalc&&activeCalc.open&&Number.isInteger(activeCalc.entryIndex)?S.draft.entries[activeCalc.entryIndex]:null;
+  var rowIndex=workoutEntry?(Number.isInteger(activeCalc.rowIndex)?activeCalc.rowIndex:calculatorRowIndexForEntry(workoutEntry)):null;
+  var rowOptions=workoutEntry?workoutEntry.rows.map(function(row,index){
+    if(setType(row)!=='normal') return '';
+    return '<option value="'+index+'"'+(index===rowIndex?' selected':'')+'>Serie '+(index+1)+(row.restTriggered?' · completada':'')+'</option>';
+  }).join(''):'';
+  var canApply=!!(workoutEntry&&rowOptions);
+  var targetValue=current&&Number.isFinite(current.targetKg)?fmt(fromKg(current.targetKg)):(activeCalc&&Number.isFinite(activeCalc.targetKg)?fmt(fromKg(activeCalc.targetKg)):'');
+  var quickPlates=Array.from(new Set(selected.plates.map(function(weight){return Math.round(Number(weight)*1000)/1000;}))).sort(function(a,b){return b-a;});
+  var quickChoices=quickPlates.length?'<div class="plate-quick"><span class="lab">Atajos: añadir disco '+(selected.type==='bar'?'por lado':'por brazo')+'</span><div class="plate-quick-list">'+quickPlates.map(function(weight){
+    var increase=selected.type==='bar'?weight*2:weight;
+    return '<button class="plate-quick-chip" data-act="loading-target-step" data-weight="'+weight+'" type="button">+'+weightText(increase)+'</button>';
+  }).join('')+'</div></div>':'';
+  var pendingApply=activeCalc&&activeCalc.pendingApply;
+  var pendingTool=activeCalc&&loadToolProfiles().filter(function(tool){return tool.id===activeCalc.toolId;})[0];
+  var pendingRow=workoutEntry&&pendingApply&&workoutEntry.rows[pendingApply.rowIndex];
+  var pendingUnilateral=workoutEntry?!!effEx(workoutEntry).unilateral:!!ex.unilateral;
+  var pendingHasWeight=pendingRow&&(pendingUnilateral
+    ? [ensureRowMode(pendingRow,true).right.w,ensureRowMode(pendingRow,true).left.w].some(function(value){return String(value===null||value===undefined?'':value).trim()!=='';})
+    : String(pendingRow.w===null||pendingRow.w===undefined?'':pendingRow.w).trim()!=='');
+  var pendingWeightLabel=pendingApply?weightText(pendingApply.weightKg)+(pendingTool&&pendingTool.type==='independent'?' por brazo':''):'';
   var result='';
   if(current&&current.result){
-    var optionHtml=function(label,option){
+    var optionHtml=function(label,option,choice){
       if(!option) return '';
       var plates=option.plates.length?option.plates.map(function(weight){return weightText(weight);}).join(' + '):'sin discos adicionales';
-      return '<div class="load-result-option"><strong>'+label+'</strong>'+(selected.type==='bar'
+      var targetWeight=selected.type==='bar'?option.totalKg:option.perArmKg;
+      var appliedLabel=selected.type==='bar'?weightText(option.totalKg):weightText(option.perArmKg)+' por brazo';
+      return '<article class="load-result-option"><div class="load-result-copy"><strong>'+label+'</strong>'+(selected.type==='bar'
         ? '<span>Total: '+weightText(option.totalKg)+' · barra: '+weightText(selected.baseWeight)+' · discos por lado: '+plates+'</span>'
-        : '<span>Por brazo: '+weightText(option.perArmKg)+' · discos en cada brazo: '+plates+' · ambos brazos: '+weightText(option.totalKg)+' total</span>')+'</div>';
+        : '<span>Por brazo: '+weightText(option.perArmKg)+' · discos en cada brazo: '+plates+' · ambos brazos: '+weightText(option.totalKg)+' total</span>')+
+        '<div class="plate-visual" role="img" aria-label="'+esc((selected.type==='bar'?'Barra: discos por lado ':'Máquina: discos por brazo ')+plates)+'">'+
+        plateStackHtml(option.plates,selected.type==='bar'?'Lado izquierdo':'Brazo izquierdo')+
+        '<span class="plate-visual-center">'+(selected.type==='bar'?'Barra':'Equipo')+'<strong>'+weightText(selected.baseWeight)+(selected.type==='bar'?' total':' por lado')+'</strong></span>'+
+        plateStackHtml(option.plates,selected.type==='bar'?'Lado derecho':'Brazo derecho')+'</div>'+
+        (canApply?'<button class="btn ghost sm" data-act="prepare-loading-apply" data-choice="'+choice+'">Usar '+appliedLabel+' en la serie elegida</button>':'')+
+        '</div></article>';
     };
     result='<div class="load-result" aria-live="polite">'+(current.result.exact
-      ? '<p class="small"><strong>Combinación exacta</strong></p>'+optionHtml('Objetivo',current.result.lower)
-      : '<p class="small"><strong>No hay una combinación exacta con los discos configurados.</strong></p>'+optionHtml('Más cercano por debajo',current.result.lower)+optionHtml('Más cercano por encima',current.result.upper))+'</div>';
+      ? '<p class="small"><strong>Combinación exacta</strong></p>'+optionHtml('Objetivo',current.result.lower,'lower')
+      : '<p class="small"><strong>No hay una combinación exacta con los discos configurados.</strong></p>'+optionHtml('Más cercano por debajo',current.result.lower,'lower')+optionHtml('Más cercano por encima',current.result.upper,'upper'))+
+      (pendingApply?'<div class="loading-apply-confirm" role="alert"><p>¿Aplicar <strong>'+pendingWeightLabel+'</strong> a la serie '+(pendingApply.rowIndex+1)+'?'+(pendingUnilateral?' Se copiará a ambos lados.':'')+(pendingHasWeight?' Se reemplazará el peso ya anotado.':'')+'</p><div class="row"><button class="btn sm" data-act="confirm-loading-apply">Confirmar aplicación</button><button class="btn ghost sm" data-act="cancel-loading-apply">Cancelar</button></div></div>':'')+'</div>';
   }
+  var rowSelector=activeCalc&&workoutEntry?(canApply?'<label class="field"><span class="lab">Aplicar a serie</span><select class="txt" data-loading-row>'+rowOptions+'</select></label>':'<p class="small muted">Añade una serie normal para poder aplicar una carga desde aquí.</p>'):'';
+  var targetActions=workoutEntry?quickChoices:'';
   return '<section class="load-calculator"><h3 id="loading-calculator-title">Calculadora de discos</h3><p class="small muted">Calcula una combinación orientativa; verifica los discos y la carga real del equipo antes de usarla.</p>'+
     '<label class="field"><span class="lab">Barra o máquina</span><select class="txt" data-cfg="loadToolId" data-id="'+esc(ex.id)+'">'+options+'</select></label>'+
-    '<label class="field"><span class="lab">'+(selected.type==='bar'?'Peso total objetivo':'Peso objetivo por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" inputmode="decimal" data-loading-target value="'+(current&&current.targetKg!==null?esc(fmt(fromKg(current.targetKg))):'')+'" id="'+inputId+'"></label>'+
+    rowSelector+
+    '<label class="field"><span class="lab">'+(selected.type==='bar'?'Peso total objetivo':'Peso objetivo por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" inputmode="decimal" data-loading-target value="'+esc(targetValue)+'" id="'+inputId+'"></label>'+targetActions+
     '<button class="btn ghost sm" data-act="calculate-loading" data-id="'+esc(ex.id)+'">Calcular discos</button>'+result+'</section>';
 }
 function workoutCalculatorSheetHtml(){
@@ -2868,7 +2952,8 @@ function profileSummary(){
   var effectiveSets=0; S.sessions.forEach(function(session){session.entries.forEach(function(entry){effectiveSets+=entryEffectiveSets(entry);});});
   var uniqueExercises={}; S.sessions.forEach(function(session){session.entries.forEach(function(entry){uniqueExercises[entry.exId]=(uniqueExercises[entry.exId]||0)+1;});});
   var start=new Date(); start.setDate(start.getDate()-((start.getDay()+6)%7)); start.setHours(0,0,0,0);
-  var week=S.sessions.filter(function(session){return session.date>=iso(start);});
+  var weekStart=iso(start), weekEnd=iso(new Date());
+  var week=S.sessions.filter(function(session){return session.date>=weekStart&&session.date<=weekEnd;});
   return '<section class="card"><p class="sec-title">Resumen personal</p><div class="weekly-stats">'+
     '<div class="weekly-stat"><span>Entrenos</span><strong>'+S.sessions.length+'</strong><small>'+recent.length+' últimos 7 días</small></div>'+
     '<div class="weekly-stat"><span>Ejercicios usados</span><strong>'+Object.keys(uniqueExercises).length+'</strong><small>'+effectiveSets+' series efectivas totales</small></div>'+
@@ -3115,7 +3200,7 @@ function refreshWorkoutOverview(){
   var bar=$('#workout-progress-bar'), label=$('#workout-progress-label'), track=overview.querySelector('[role="progressbar"]');
   if(done) done.textContent=String(totals.done);
   if(planned) planned.textContent=String(totals.planned);
-  if(volume) volume.textContent=volumeText(totals.volume)+' '+weightUnitLabel();
+  if(volume) volume.textContent=volumeText(totals.volume)+' '+weightUnitLabel()+'·reps';
   if(bar) bar.style.width=progress.toFixed(1)+'%';
   if(label) label.textContent=totals.done+' de '+totals.planned+' series';
   if(track){track.setAttribute('aria-valuemax',String(Math.max(totals.planned,totals.done,1)));track.setAttribute('aria-valuenow',String(totals.done));}
@@ -3296,7 +3381,8 @@ function onClick(ev){
       if(!calculatorEntry) break;
       var calculatorEx=effEx(calculatorEntry), calculatorTools=loadTools();
       var calculatorTool=calculatorTools.filter(function(tool){return tool.id===calculatorEx.loadToolId;})[0]||calculatorTools[0];
-      S.loadingCalc={exId:calculatorEntry.exId,entryIndex:ei,toolId:calculatorTool?calculatorTool.id:null,targetKg:calculatorTargetForEntry(calculatorEntry),result:null,open:true};
+      var calculatorRowIndex=calculatorRowIndexForEntry(calculatorEntry);
+      S.loadingCalc={exId:calculatorEntry.exId,entryIndex:ei,rowIndex:calculatorRowIndex,toolId:calculatorTool?calculatorTool.id:null,targetKg:calculatorTargetForEntry(calculatorEntry,calculatorRowIndex),result:null,pendingApply:null,open:true};
       render();
       var calculatorClose=$('.loading-sheet-close');
       if(calculatorClose) calculatorClose.focus();
@@ -3343,6 +3429,15 @@ function onClick(ev){
       var newTool={id:uid('tool_'),name:'Equipo cargable '+(loadingTools.length+1),type:'bar',baseWeight:null,plates:[]};
       S.profile.settings.loadingTools=loadingTools.concat([newTool]);
       Store.saveProfile();render();break;
+    case 'load-tool-copy':
+      var sourceTool=loadToolProfiles().filter(function(tool){return tool.id===t.dataset.id;})[0];
+      var configuredTools=S.profile.settings.loadingTools||[];
+      if(!sourceTool){toast('No se encontró la configuración para duplicar');break;}
+      if(configuredTools.length>=10){toast('Puedes configurar hasta 10 equipos');break;}
+      var copiedTool=clone(sourceTool);
+      copiedTool.id=uid('tool_');copiedTool.name=(sourceTool.name+' (copia)').slice(0,50);
+      S.profile.settings.loadingTools=configuredTools.concat([copiedTool]);
+      Store.saveProfile();render();toast('Configuración duplicada; cada equipo conserva su inventario independiente');break;
     case 'load-tool-remove':
       if(loadToolProfiles().some(function(tool){return tool.id===t.dataset.id;})){S.confirm='load-tool:'+t.dataset.id;render();}
       break;
@@ -3358,14 +3453,62 @@ function onClick(ev){
       var calcExercise=exById(t.dataset.id), calcContainer=t.closest('.load-calculator');
       if(!calcExercise||!calcContainer) break;
       var calcTarget=num(calcContainer.querySelector('[data-loading-target]').value);
-      if(calcTarget===null||calcTarget<0||calcTarget>1000){toast('Introduce un peso objetivo válido');break;}
+      if(calcTarget===null||calcTarget<0){toast('Introduce un peso objetivo válido');break;}
+      var targetKg=toKg(calcTarget);
+      if(targetKg>1000){toast('El objetivo no puede superar 1000 kg');break;}
       var availableTools=loadTools(), selectedTool=availableTools.filter(function(tool){return tool.id===calcExercise.loadToolId;})[0]||availableTools[0];
       if(!selectedTool){toast('Configura primero una barra o máquina');break;}
-      var targetKg=toKg(calcTarget), calculation=SobrecargaEngine.calculatePlateLoad(selectedTool,targetKg);
+      var calculation=SobrecargaEngine.calculatePlateLoad(selectedTool,targetKg);
       if(!calculation){toast('Revisa el peso base y los discos configurados');break;}
       calcExercise.loadToolId=selectedTool.id;
-      S.loadingCalc={exId:calcExercise.id,entryIndex:S.loadingCalc&&S.loadingCalc.exId===calcExercise.id?S.loadingCalc.entryIndex:null,toolId:selectedTool.id,targetKg:targetKg,result:calculation,open:!!(S.loadingCalc&&S.loadingCalc.open)};
+      S.loadingCalc={exId:calcExercise.id,entryIndex:S.loadingCalc&&S.loadingCalc.exId===calcExercise.id?S.loadingCalc.entryIndex:null,rowIndex:S.loadingCalc&&S.loadingCalc.exId===calcExercise.id?S.loadingCalc.rowIndex:null,toolId:selectedTool.id,targetKg:targetKg,result:calculation,pendingApply:null,open:!!(S.loadingCalc&&S.loadingCalc.open)};
       Store.saveProfile();render();break;
+    case 'loading-target-step':
+      if(!S.loadingCalc||!Number.isFinite(Number(t.dataset.weight))) break;
+      var stepTool=loadToolProfiles().filter(function(tool){return tool.id===S.loadingCalc.toolId;})[0];
+      if(!stepTool) break;
+      var targetInput=$('[data-loading-target]'), currentTarget=targetInput?toKg(targetInput.value):S.loadingCalc.targetKg;
+      if(currentTarget===null||!Number.isFinite(currentTarget)) currentTarget=0;
+      var increment=Number(t.dataset.weight)*(stepTool.type==='bar'?2:1);
+      var nextTarget=Math.round((currentTarget+increment)*1000)/1000;
+      if(nextTarget>1000){toast('El objetivo no puede superar 1000 kg');break;}
+      S.loadingCalc.targetKg=nextTarget;
+      S.loadingCalc.result=null;S.loadingCalc.pendingApply=null;render();
+      var updatedTarget=$('[data-loading-target]');
+      if(updatedTarget){updatedTarget.focus();updatedTarget.select();}
+      break;
+    case 'prepare-loading-apply':
+      var applyCalc=S.loadingCalc, applyChoice=t.dataset.choice;
+      var applyTool=applyCalc&&loadToolProfiles().filter(function(tool){return tool.id===applyCalc.toolId;})[0];
+      var applyResult=applyCalc&&applyCalc.result&&applyCalc.result[applyChoice];
+      var applyEntry=applyCalc&&Number.isInteger(applyCalc.entryIndex)?S.draft.entries[applyCalc.entryIndex]:null;
+      var applyRowIndex=applyCalc&&Number.isInteger(applyCalc.rowIndex)?applyCalc.rowIndex:-1;
+      if(!applyTool||!applyResult||!applyEntry||applyEntry.exId!==applyCalc.exId||
+        !applyEntry.rows[applyRowIndex]||setType(applyEntry.rows[applyRowIndex])!=='normal'){
+        toast('No se pudo preparar la aplicación; vuelve a calcular y elige una serie normal');break;
+      }
+      var applyWeight=applyTool.type==='bar'?applyResult.totalKg:applyResult.perArmKg;
+      if(!Number.isFinite(applyWeight)||applyWeight<0){toast('La combinación calculada no contiene un peso válido');break;}
+      applyCalc.pendingApply={weightKg:applyWeight,rowIndex:applyRowIndex};
+      render();break;
+    case 'confirm-loading-apply':
+      var confirmedCalc=S.loadingCalc, confirmedPending=confirmedCalc&&confirmedCalc.pendingApply;
+      var confirmedEntry=confirmedCalc&&Number.isInteger(confirmedCalc.entryIndex)?S.draft.entries[confirmedCalc.entryIndex]:null;
+      var confirmedRow=confirmedEntry&&confirmedEntry.rows[confirmedPending&&confirmedPending.rowIndex];
+      if(!confirmedPending||!confirmedEntry||confirmedEntry.exId!==confirmedCalc.exId||!confirmedRow||setType(confirmedRow)!=='normal'){
+        toast('No se pudo aplicar el peso; la serie ya no está disponible');break;
+      }
+      var confirmedExercise=effEx(confirmedEntry);
+      if(confirmedExercise.unilateral){
+        var confirmedSides=ensureRowMode(confirmedRow,true);
+        confirmedSides.right.w=String(confirmedPending.weightKg);
+        confirmedSides.left.w=String(confirmedPending.weightKg);
+      }else confirmedRow.w=String(confirmedPending.weightKg);
+      confirmedCalc.targetKg=confirmedPending.weightKg;confirmedCalc.pendingApply=null;
+      saveDraft();render();toast('Peso aplicado a la serie '+(confirmedPending.rowIndex+1));break;
+    case 'cancel-loading-apply':
+      if(S.loadingCalc){S.loadingCalc.pendingApply=null;render();}
+      break;
     case 'tab': if(t.dataset.tab!=='hoy'&&S.loadingCalc) S.loadingCalc.open=false; S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
     case 'reminder-dismiss':
@@ -3807,6 +3950,16 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.loadingRow!==undefined){
+    var rowCalc=S.loadingCalc, rowEntry=rowCalc&&Number.isInteger(rowCalc.entryIndex)?S.draft.entries[rowCalc.entryIndex]:null;
+    var selectedRowIndex=Number(t.value), selectedRow=rowEntry&&rowEntry.rows[selectedRowIndex];
+    if(!rowCalc||!rowEntry||!Number.isInteger(selectedRowIndex)||!selectedRow||setType(selectedRow)!=='normal'){
+      toast('Elige una serie normal válida');render();return;
+    }
+    rowCalc.rowIndex=selectedRowIndex;
+    rowCalc.targetKg=calculatorTargetForEntry(rowEntry,selectedRowIndex);
+    rowCalc.result=null;rowCalc.pendingApply=null;render();return;
+  }
   if(t.dataset.loadTool!==undefined){
     var tool=S.profile.settings.loadingTools&&S.profile.settings.loadingTools.filter(function(item){return item.id===t.dataset.id;})[0];
     if(!tool){render();return;}
@@ -3836,7 +3989,7 @@ function onChange(ev){
     if(!selectedForExercise||!selectedToolExists){render();return;}
     selectedForExercise.loadToolId=t.value;
     if(S.loadingCalc&&S.loadingCalc.exId===selectedForExercise.id){
-      S.loadingCalc.toolId=t.value;S.loadingCalc.result=null;
+      S.loadingCalc.toolId=t.value;S.loadingCalc.result=null;S.loadingCalc.pendingApply=null;
     }else S.loadingCalc=null;
     Store.saveProfile();render();return;
   }

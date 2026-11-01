@@ -451,10 +451,14 @@ test('agrupa subdivisiones y calcula series directas e indirectas', () => {
 
 test('compara días equivalentes y detecta tendencias sin semanas falsas', () => {
   const {comparableWeekRange,compareWeeklyTrend}=require('./engine.js');
+  const app=fs.readFileSync('./app.js','utf8');
   assert.deepEqual(comparableWeekRange('2026-10-31',1),{start:'2026-10-19',end:'2026-10-24'});
   assert.equal(compareWeeklyTrend(5,[10,10]),'Carga a la baja');
   assert.equal(compareWeeklyTrend(10,[10]),'Carga estable');
   assert.equal(compareWeeklyTrend(10,[]),'Carga nueva');
+  assert.match(app,/groupIds\.forEach\(function\(group\)\{[\s\S]*?weekCounts\[group\]\|\|0/);
+  assert.match(app,/Semana actual:[\s\S]*?lunes a hoy/);
+  assert.match(app,/ventana parcial con el promedio de las mismas fechas de las 4 semanas/);
 });
 
 test('el resumen del historial compara ventanas exactas y métricas acumuladas', () => {
@@ -774,9 +778,21 @@ test('la interfaz configura equipo cargable y diferencia peso por brazo del tota
   assert.match(source,/No se asumirá un peso estándar/);
   assert.match(source,/function loadingCalculatorHtml\(ex\)/);
   assert.match(source,/Peso objetivo por brazo/);
+  assert.match(source,/data-act="load-tool-copy"/);
+  assert.match(source,/cada equipo conserva su inventario independiente/);
   assert.match(source,/ambos brazos: '\+weightText\(option\.totalKg\)\+' total/);
   assert.match(source,/calculatePlateLoad\(selectedTool,targetKg\)/);
   assert.match(source,/saveProfile:function\(\)\{[\s\S]*?Store\.saveLocal\(\);[\s\S]*?profDirty = true/);
+});
+
+test('la biblioteca resume rutinas y muestra la última actividad de sus ejercicios', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const readme=fs.readFileSync('./README.md','utf8');
+  assert.match(app,/function routineSummary\(routine\)/);
+  assert.match(app,/summary\.workingSets\+' series<\/small>/);
+  assert.match(app,/function routineExerciseHistory\(exId\)/);
+  assert.match(app,/Último registro: '\+dFmt\(latest\.date\)/);
+  assert.match(readme,/Las tarjetas de \*\*Rutinas\*\* resumen sus series planificadas/);
 });
 
 test('el entrenamiento muestra un resumen y abre la calculadora contextual en una hoja inferior', () => {
@@ -786,7 +802,14 @@ test('el entrenamiento muestra un resumen y abre la calculadora contextual en un
   assert.match(app,/function workoutOverviewHtml\(\)/);
   assert.match(app,/id="workout-volume"/);
   assert.match(app,/data-act="open-loading-calculator"/);
-  assert.match(app,/calculatorTargetForEntry\(calculatorEntry\)/);
+  assert.match(app,/calculatorTargetForEntry\(calculatorEntry,calculatorRowIndex\)/);
+  assert.match(app,/function plateStackHtml\(plates,sideLabel\)/);
+  assert.match(app,/data-act="loading-target-step"/);
+  assert.match(app,/data-loading-row/);
+  assert.match(app,/data-act="prepare-loading-apply"/);
+  assert.match(app,/data-act="confirm-loading-apply"/);
+  assert.match(app,/confirmedSides\.right\.w=String\(confirmedPending\.weightKg\)/);
+  assert.match(styles,/\.plate-visual\{/);
   assert.match(app,/function workoutCalculatorSheetHtml\(\)/);
   assert.match(app,/role="dialog" aria-modal="true"/);
   assert.match(app,/data-act="close-loading-calculator"/);

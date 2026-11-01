@@ -21,7 +21,8 @@ Antes de guardar cambios en el motor, ejecuta `node --test` para comprobar sus
 reglas de progresión.
 
 La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
-con accesos a tus rutinas y a los ejercicios que puedes retomar.
+con accesos a tus rutinas y a los ejercicios que puedes retomar. La semana del
+resumen va del lunes al día actual e ignora sesiones fechadas en el futuro.
 
 En **Yo → Resumen → Objetivos**, las metas de peso en un ejercicio, entrenos
 totales y entrenos de los últimos 7 días se actualizan con tus datos. Los
@@ -75,7 +76,10 @@ pueden seguir sin programa. Desde el detalle de una rutina puedes duplicarla,
 editar la copia y guardarla como una nueva versión.
 
 En **Hoy**, el resumen semanal también muestra las series efectivas equivalentes
-por grupo muscular. Asigna un músculo principal a cada ejercicio desde
+por grupo muscular para la semana actual (lunes a hoy). La tendencia compara
+esa ventana parcial con las mismas fechas de cada una de las cuatro semanas
+anteriores; las semanas sin carga para un grupo cuentan como cero. Asigna un
+músculo principal a cada ejercicio desde
 **Biblioteca → Ejercicios**; los registros anteriores quedan como «Sin asignar»
 hasta que lo clasifiques. Los ejercicios sugeridos tienen asignaciones iniciales
 curadas; en ejercicios propios la app solo sugiere músculos secundarios cuando
@@ -93,7 +97,7 @@ En **Yo → Resumen** puedes consultar la carga reciente por músculo y registra
 opcionalmente cómo lo sientes hoy: recuperado, algo cansado o muy fatigado. La
 carga estimada suma series efectivas de los últimos 7 días, pondera las
 contribuciones indirectas al 50 %, ajusta suavemente por esfuerzo registrado y
-da menos peso a sesiones más antiguas. La carga y la autoevaluación se muestran
+reduce progresivamente el peso de sesiones más antiguas. La carga y la autoevaluación se muestran
 por separado; son referencias personales, no una medición fisiológica, consejo
 médico ni una indicación para evitar entrenar. La app conserva la última
 autoevaluación por grupo muscular en el perfil y la sincroniza con los demás
@@ -120,9 +124,13 @@ En **Ajustes → Barras y máquinas cargables** puedes crear hasta diez equipos
 para la calculadora de discos. Durante el entrenamiento, cada ejercicio tiene
 un acceso directo que abre la calculadora en un panel inferior sin salir de la
 sesión; toma como objetivo el peso escrito para la siguiente serie o, si aún no
-lo hay, el recomendado para el ejercicio. El panel muestra el reparto de
-discos y permanece abierto al calcular. La vista del entreno también resume
-duración, volumen y avance de series, con un tema oscuro de alto contraste.
+lo hay, el recomendado para el ejercicio. El panel muestra el reparto visual
+de discos y permanece abierto al calcular. Puedes elegir una serie, preparar
+una combinación exacta o aproximada y confirmar antes de aplicar el peso; si
+la serie es unilateral, lo aplica a ambos lados. Los atajos suman el peso del
+par de discos para una barra y el peso de un disco por brazo en una máquina
+independiente. La vista del entreno también resume duración, carga × reps y
+avance de series, con un tema oscuro de alto contraste.
 Configura el tipo, peso base y cada disco
 disponible por lado, en la unidad elegida; repite un valor si hay más discos
 iguales por lado. Para una barra, el objetivo es el peso total e incluye la
@@ -131,8 +139,12 @@ por brazo y la app también muestra el total de ambos; no divide el peso entre
 los brazos. No se suponen pesos estándar: para habilitar el cálculo debes
 indicar el peso base y al menos un disco por lado o brazo. El cálculo usa los
 discos configurados, se guarda en kg y solo es una referencia: confirma la
-carga real de la barra o máquina. No modifica las series ni el peso guardado
-en los entrenos.
+carga real de la barra o máquina. En Ajustes puedes duplicar una configuración
+como punto de partida; cada equipo conserva su inventario independiente.
+
+Las tarjetas de **Rutinas** resumen sus series planificadas, grupos musculares
+asignados y fecha del último entreno con esa rutina. El detalle muestra además
+la última fecha registrada y las series efectivas de cada ejercicio.
 
 En **Ajustes → Valores anteriores al entrenar** puedes definir el alcance de
 búsqueda: la última vez que hiciste el ejercicio en cualquier rutina
