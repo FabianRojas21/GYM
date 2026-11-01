@@ -966,6 +966,7 @@ function validBackup(data){
     }))) return false;
   if(profile.settings && profile.settings.loadingTools !== undefined && (!Array.isArray(profile.settings.loadingTools) || profile.settings.loadingTools.length>10 ||
     !profile.settings.loadingTools.every(function(tool){return isObject(tool)&&typeof tool.id==='string'&&typeof tool.name==='string'&&tool.name.trim().length>0&&tool.name.length<=50&&
+      (tool.category===undefined||(typeof tool.category==='string'&&tool.category.trim().length<=40))&&
       ['bar','independent'].includes(tool.type)&&(tool.baseWeight===null||(validNumber(tool.baseWeight)&&tool.baseWeight>=0&&tool.baseWeight<=1000))&&Array.isArray(tool.plates)&&tool.plates.length<=30&&
       tool.plates.every(function(weight){return validNumber(weight)&&weight>0&&weight<=100;})&&
       (tool.plateProfileId===undefined||(typeof tool.plateProfileId==='string'&&profile.settings.plateProfiles&&profile.settings.plateProfiles.some(function(profileItem){return profileItem.id===tool.plateProfileId;})));}))) return false;
@@ -2633,7 +2634,7 @@ function loadToolProfiles(){
       ['bar','independent'].includes(tool.type)&&(tool.baseWeight===null||(typeof tool.baseWeight==='number'&&Number.isFinite(tool.baseWeight)&&tool.baseWeight>=0&&tool.baseWeight<=1000));
   }).map(function(tool){
     var linked=profiles.filter(function(profile){return profile.id===tool.plateProfileId;})[0];
-    return Object.assign({},tool,{plates:linked?linked.plates:tool.plates});
+    return Object.assign({},tool,{category:typeof tool.category==='string'&&tool.category.trim().length<=40?tool.category.trim():'',plates:linked?linked.plates:tool.plates});
   }).filter(function(tool){
     return Array.isArray(tool.plates)&&tool.plates.length<=30&&
       tool.plates.every(function(weight){return Number.isFinite(Number(weight))&&Number(weight)>0&&Number(weight)<=100;});
@@ -2643,6 +2644,12 @@ function parsePlateWeights(value){
   var raw=String(value).trim()?String(value).split(';'):[];
   var parsed=raw.map(function(weight){return toKg(weight.trim());});
   return parsed.length>30||parsed.some(function(weight){return weight===null||weight<=0||weight>100;})?null:parsed;
+}
+function loadToolStatusMessage(tool){
+  var missing=[];
+  if(typeof tool.baseWeight!=='number'||!Number.isFinite(tool.baseWeight)) missing.push('el peso base');
+  if(!tool.plates.length) missing.push('al menos un disco disponible por lado o brazo');
+  return missing.length?'Para habilitar el cálculo, indica '+missing.join(' y ')+'. No se asumirá un peso estándar.':'';
 }
 function plateProfileSettingsHtml(){
   var profiles=plateProfiles();
@@ -2660,20 +2667,24 @@ function plateProfileSettingsHtml(){
 function loadToolSettingsHtml(){
   var tools=loadToolProfiles();
   var profiles=plateProfiles();
-  return plateProfileSettingsHtml()+'<section class="card"><p class="sec-title">Barras y máquinas cargables</p><p class="small muted">Configura cada barra o estación con su peso base. Puedes usar una lista de discos propia o vincularla a un perfil reutilizable. Los pesos se guardan en kg y se muestran en la unidad elegida.</p>' +
+  var categories=['Barra','Prensa','Polea','Máquina','Máquina de hip thrust'];
+  tools.forEach(function(tool){if(tool.category&&!categories.some(function(category){return category.toLocaleLowerCase()===tool.category.toLocaleLowerCase();})) categories.push(tool.category);});
+  var categoryOptions=categories.map(function(category){return '<option value="'+esc(category)+'"></option>';}).join('');
+  return plateProfileSettingsHtml()+'<section class="card" id="load-tool-settings"><p class="sec-title">Barras y máquinas cargables</p><p class="small muted">Configura cada barra o estación con su peso base. Puedes usar una lista de discos propia o vincularla a un perfil reutilizable. Los pesos se guardan en kg y se muestran en la unidad elegida.</p><datalist id="load-tool-categories">'+categoryOptions+'</datalist>' +
     (tools.length?'<div class="load-tool-list">'+tools.map(function(tool,index){
       var isConfirm=S.confirm==='load-tool:'+tool.id;
       var profileOptions='<option value="">Discos propios de este equipo</option>'+profiles.map(function(profile){return '<option value="'+esc(profile.id)+'"'+(profile.id===tool.plateProfileId?' selected':'')+'>'+esc(profile.name)+'</option>';}).join('');
       var currentProfile=profiles.filter(function(profile){return profile.id===tool.plateProfileId;})[0];
       return '<article class="load-tool-card"><h3>'+esc(tool.name||('Equipo '+(index+1)))+'</h3>'+
         '<label class="field"><span class="lab">Nombre</span><input class="txt" data-load-tool="name" data-id="'+esc(tool.id)+'" value="'+esc(tool.name)+'" maxlength="50"></label>'+
-        '<div class="fields"><label class="field"><span class="lab">Tipo de equipo</span><select class="txt" data-load-tool="type" data-id="'+esc(tool.id)+'"><option value="bar"'+(tool.type==='bar'?' selected':'')+'>Barra con discos en ambos lados</option><option value="independent"'+(tool.type==='independent'?' selected':'')+'>Máquina de brazos independientes</option></select></label>'+
+        '<label class="field"><span class="lab">Categoría (opcional)</span><input class="txt" data-load-tool="category" data-id="'+esc(tool.id)+'" list="load-tool-categories" value="'+esc(tool.category)+'" maxlength="40" placeholder="Prensa, polea, máquina de hip thrust…"></label>'+
+        '<div class="fields"><label class="field"><span class="lab">Mecánica de carga</span><select class="txt" data-load-tool="type" data-id="'+esc(tool.id)+'"><option value="bar"'+(tool.type==='bar'?' selected':'')+'>Barra: discos por lado</option><option value="independent"'+(tool.type==='independent'?' selected':'')+'>Brazos independientes: discos por brazo</option></select></label>'+
         '<label class="field"><span class="lab">'+(tool.type==='bar'?'Peso total de la barra sin discos':'Resistencia base por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" data-load-tool="baseWeight" data-id="'+esc(tool.id)+'" inputmode="decimal" value="'+esc(weightInput(tool.baseWeight))+'"></label></div>'+
         '<label class="field"><span class="lab">Lista de discos para este equipo</span><select class="txt" data-load-tool="plateProfile" data-id="'+esc(tool.id)+'">'+profileOptions+'</select></label>'+
         (currentProfile?'<p class="small muted">Usa el perfil «'+esc(currentProfile.name)+'»: '+esc(currentProfile.plates.map(weightText).join('; '))+' por lado o brazo.</p>':
           '<label class="field"><span class="lab">Discos disponibles por lado'+(tool.type==='independent'?' / brazo':'')+' ('+weightUnitLabel()+' por disco)</span><input class="txt" data-load-tool="plates" data-id="'+esc(tool.id)+'" value="'+esc(tool.plates.map(weightInput).join('; '))+'" placeholder="20; 10; 5; 2,5"></label>')+
         '<p class="small muted">'+(tool.type==='bar'?'El peso objetivo incluye la barra.':'El objetivo se interpreta por brazo; la calculadora también mostrará el total de los dos brazos.')+'</p>'+
-        ((typeof tool.baseWeight!=='number'||!Number.isFinite(tool.baseWeight)||!tool.plates.length)?'<p class="small warn-text">Para habilitar el cálculo, indica el peso base y al menos un disco disponible por lado. No se asumirá un peso estándar.</p>':'')+
+        '<p class="small warn-text" data-load-tool-status="'+esc(tool.id)+'"'+(loadToolStatusMessage(tool)?'':' hidden')+'>'+esc(loadToolStatusMessage(tool))+'</p>'+
         '<div class="row">'+(isConfirm?'<button class="btn danger sm" data-act="load-tool-remove-ok" data-id="'+esc(tool.id)+'">Confirmar eliminar</button><button class="btn ghost sm" data-act="load-tool-remove-cancel">Cancelar</button>':'')+
         (!isConfirm&&!currentProfile&&tool.plates.length&&profiles.length<20?'<button class="btn ghost sm" data-act="load-tool-share" data-id="'+esc(tool.id)+'">Guardar discos como perfil reutilizable</button>':'')+
         (!isConfirm?'<button class="btn ghost sm" data-act="load-tool-copy" data-id="'+esc(tool.id)+'">Duplicar configuración</button><button class="btn ghost sm" data-act="load-tool-remove" data-id="'+esc(tool.id)+'">Eliminar equipo</button>':'')+'</div></article>';
@@ -2690,10 +2701,24 @@ function plateStackHtml(plates,sideLabel){
 }
 function loadingCalculatorHtml(ex){
   var tools=loadTools();
-  if(!tools.length) return '<section class="load-calculator"><h3 id="loading-calculator-title">Calculadora de discos</h3><p class="small muted">Configura el peso base y los discos de una barra o máquina en Ajustes → Barras y máquinas cargables. La app no supondrá pesos de fábrica.</p><button class="btn ghost sm" data-act="tab" data-tab="ajustes">Configurar equipo</button></section>';
+  if(!tools.length){
+    var configuredTools=loadToolProfiles();
+    var incompleteTools=configuredTools.filter(function(tool){
+      return typeof tool.baseWeight!=='number'||!Number.isFinite(tool.baseWeight)||!tool.plates.length;
+    });
+    var incompleteMessage=configuredTools.length
+      ? 'Configuración pendiente: '+incompleteTools.map(function(tool){
+          var missing=[];
+          if(typeof tool.baseWeight!=='number'||!Number.isFinite(tool.baseWeight)) missing.push('peso base');
+          if(!tool.plates.length) missing.push('al menos un disco por lado o brazo');
+          return '«'+esc(tool.name)+'» ('+missing.join(' y ')+')';
+        }).join('; ')+'. Completa estos datos para habilitar el cálculo.'
+      : 'Configura el peso base y al menos un disco disponible por lado o brazo. La app no supondrá pesos de fábrica.';
+    return '<section class="load-calculator"><h3 id="loading-calculator-title">Calculadora de discos</h3><p class="small muted">'+incompleteMessage+'</p><button class="btn ghost sm" data-act="configure-load-tools">'+(configuredTools.length?'Revisar equipo':'Configurar equipo')+'</button></section>';
+  }
   var selected=tools.filter(function(tool){return tool.id===ex.loadToolId;})[0]||tools[0];
   var current=S.loadingCalc&&S.loadingCalc.exId===ex.id&&S.loadingCalc.toolId===selected.id?S.loadingCalc:null;
-  var options=tools.map(function(tool){return '<option value="'+esc(tool.id)+'"'+(tool.id===selected.id?' selected':'')+'>'+esc(tool.name)+'</option>';}).join('');
+  var options=tools.map(function(tool){return '<option value="'+esc(tool.id)+'"'+(tool.id===selected.id?' selected':'')+'>'+esc(tool.category?tool.category+' · '+tool.name:tool.name)+'</option>';}).join('');
   var inputId='loading-target-'+esc(ex.id), activeCalc=S.loadingCalc&&S.loadingCalc.exId===ex.id?S.loadingCalc:null;
   var workoutEntry=activeCalc&&activeCalc.open&&Number.isInteger(activeCalc.entryIndex)?S.draft.entries[activeCalc.entryIndex]:null;
   var rowIndex=workoutEntry?(Number.isInteger(activeCalc.rowIndex)?activeCalc.rowIndex:calculatorRowIndexForEntry(workoutEntry)):null;
@@ -2728,7 +2753,7 @@ function loadingCalculatorHtml(ex){
         : '<span>Por brazo: '+weightText(option.perArmKg)+' · discos en cada brazo: '+plates+' · ambos brazos: '+weightText(option.totalKg)+' total</span>')+
         '<div class="plate-visual" role="img" aria-label="'+esc((selected.type==='bar'?'Barra: discos por lado ':'Máquina: discos por brazo ')+plates)+'">'+
         plateStackHtml(option.plates,selected.type==='bar'?'Lado izquierdo':'Brazo izquierdo')+
-        '<span class="plate-visual-center">'+(selected.type==='bar'?'Barra':'Equipo')+'<strong>'+weightText(selected.baseWeight)+(selected.type==='bar'?' total':' por lado')+'</strong></span>'+
+        '<span class="plate-visual-center">'+(selected.type==='bar'?'Barra':'Equipo')+'<strong>'+weightText(selected.baseWeight)+(selected.type==='bar'?' total':' por brazo')+'</strong></span>'+
         plateStackHtml(option.plates,selected.type==='bar'?'Lado derecho':'Brazo derecho')+'</div>'+
         (canApply?'<button class="btn ghost sm" data-act="prepare-loading-apply" data-choice="'+choice+'">Usar '+appliedLabel+' en la serie elegida</button>':'')+
         '</div></article>';
@@ -3610,6 +3635,12 @@ function onClick(ev){
     case 'cancel-loading-apply':
       if(S.loadingCalc){S.loadingCalc.pendingApply=null;render();}
       break;
+    case 'configure-load-tools':
+      S.loadingCalc=null;S.tab='ajustes';S.confirm=null;
+      try { localStorage.setItem(TK,S.tab); } catch(e){}
+      render();window.scrollTo(0,0);
+      if($('#load-tool-settings')) $('#load-tool-settings').scrollIntoView({block:'start'});
+      break;
     case 'tab': if(t.dataset.tab!=='hoy'&&S.loadingCalc) S.loadingCalc.open=false; S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
     case 'reminder-dismiss':
@@ -3987,6 +4018,25 @@ function onClick(ev){
 }
 function onInput(ev){
   var t = ev.target;
+  if(t.dataset.loadTool!==undefined){
+    var inputTool=(S.profile.settings.loadingTools||[]).filter(function(tool){return tool&&tool.id===t.dataset.id;})[0];
+    if(!inputTool) return;
+    if(t.dataset.loadTool==='name'){
+      var inputName=t.value.trim();
+      if(inputName&&inputName.length<=50){inputTool.name=inputName;Store.saveProfile();}
+    }else if(t.dataset.loadTool==='category'){
+      var inputCategory=t.value.trim();
+      if(inputCategory.length<=40){inputTool.category=inputCategory;Store.saveProfile();}
+    }else if(t.dataset.loadTool==='baseWeight'){
+      var inputBaseWeight=t.value.trim()===''?null:toKg(t.value);
+      if((inputBaseWeight===null&&t.value.trim()!=='')||(inputBaseWeight!==null&&(inputBaseWeight<0||inputBaseWeight>1000))) return;
+      inputTool.baseWeight=inputBaseWeight;Store.saveProfile();
+    }else if(t.dataset.loadTool==='plates'){
+      var inputPlates=parsePlateWeights(t.value);
+      if(inputPlates!==null){inputTool.plates=inputPlates;Store.saveProfile();}
+    }
+    return;
+  }
   if(t.dataset.historySearch!==undefined){
     S.historyQuery=t.value;
     refreshHistoryResults();
@@ -4087,6 +4137,10 @@ function onChange(ev){
       var toolName=t.value.trim();
       if(!toolName||toolName.length>50){toast('Escribe un nombre de hasta 50 caracteres');render();return;}
       tool.name=toolName;
+    }else if(t.dataset.loadTool==='category'){
+      var toolCategory=t.value.trim();
+      if(toolCategory.length>40){toast('La categoría debe tener hasta 40 caracteres');render();return;}
+      tool.category=toolCategory;
     }else if(t.dataset.loadTool==='type'){
       if(!['bar','independent'].includes(t.value)){render();return;}
       tool.type=t.value;S.loadingCalc=null;
@@ -4110,7 +4164,18 @@ function onChange(ev){
       }
       tool.plates=parsedPlates;
     }else{render();return;}
-    S.loadingCalc=null;Store.saveProfile();render();return;
+    Store.saveProfile();
+    if(['name','category','baseWeight','plates'].includes(t.dataset.loadTool)){
+      var toolCard=t.closest('.load-tool-card'), toolTitle=toolCard&&toolCard.querySelector('h3');
+      var toolStatus=toolCard&&toolCard.querySelector('[data-load-tool-status]');
+      if(toolTitle) toolTitle.textContent=tool.name;
+      if(toolStatus){
+        toolStatus.textContent=loadToolStatusMessage(tool);
+        toolStatus.hidden=!toolStatus.textContent;
+      }
+      return;
+    }
+    S.loadingCalc=null;render();return;
   }
   if(t.dataset.cfg==='loadToolId'){
     var selectedForExercise=exById(t.dataset.id), selectedToolExists=loadTools().some(function(tool){return tool.id===t.value;});

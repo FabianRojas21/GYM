@@ -790,9 +790,16 @@ test('la interfaz configura equipo cargable y diferencia peso por brazo del tota
   assert.match(source,/tool\.plates=clone\(removePlateProfile\.plates\)/);
   assert.match(source,/plateProfileId===removePlateProfileId/);
   assert.match(source,/data-load-tool="plates"/);
+  assert.match(source,/data-load-tool="category"/);
+  assert.match(source,/Categoría \(opcional\)/);
+  assert.match(source,/Mecánica de carga/);
   assert.match(source,/baseWeight:null,plates:\[\]/);
   assert.match(source,/typeof tool\.baseWeight==='number'&&Number\.isFinite\(tool\.baseWeight\)&&tool\.plates\.length>0/);
   assert.match(source,/No se asumirá un peso estándar/);
+  assert.match(source,/data-act="configure-load-tools"/);
+  assert.match(source,/Configuración pendiente:/);
+  assert.match(source,/tool\.category===undefined\|\|\(typeof tool\.category==='string'/);
+  assert.match(source,/function onInput\(ev\)[\s\S]*?if\(t\.dataset\.loadTool!==undefined\)[\s\S]*?inputTool\.plates=inputPlates;Store\.saveProfile\(\)/);
   assert.match(source,/function loadingCalculatorHtml\(ex\)/);
   assert.match(source,/Peso objetivo por brazo/);
   assert.match(source,/data-act="load-tool-copy"/);
@@ -812,7 +819,7 @@ test('los perfiles compartidos alimentan las calculadoras vinculadas y se conser
     S:{profile:{settings:{
       plateProfiles:[{id:'shared',name:'Discos olimpicos',plates:[20,10,5]}],
       loadingTools:[
-        {id:'bar',name:'Barra',type:'bar',baseWeight:20,plates:[2.5],plateProfileId:'shared'},
+        {id:'bar',name:'Barra',category:'Prensa',type:'bar',baseWeight:20,plates:[2.5],plateProfileId:'shared'},
         {id:'machine',name:'Maquina',type:'independent',baseWeight:0,plates:[1.25]}
       ]
     }}},
@@ -822,6 +829,7 @@ test('los perfiles compartidos alimentan las calculadoras vinculadas y se conser
     ';globalThis.toolsForTest=loadToolProfiles;globalThis.parsePlatesForTest=parsePlateWeights;',context);
   const tools=context.toolsForTest();
   assert.deepEqual(Array.from(tools[0].plates),[20,10,5]);
+  assert.equal(tools[0].category,'Prensa');
   assert.deepEqual(Array.from(tools[1].plates),[1.25]);
   assert.deepEqual(Array.from(context.parsePlatesForTest('20; 10; 2,5')), [20,10,2.5]);
   assert.equal(context.parsePlatesForTest('0; 5'),null);

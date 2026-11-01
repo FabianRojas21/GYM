@@ -135,9 +135,12 @@ la serie es unilateral, lo aplica a ambos lados. Los atajos suman el peso del
 par de discos para una barra y el peso de un disco por brazo en una máquina
 independiente. La vista del entreno también resume duración, carga × reps y
 avance de series, con un tema oscuro de alto contraste.
-Configura el tipo, peso base y cada disco
-disponible por lado, en la unidad elegida; repite un valor si hay más discos
-iguales por lado. Para una barra, el objetivo es el peso total e incluye la
+En cada equipo puedes escribir una categoría propia —por ejemplo, prensa,
+polea o máquina de hip thrust— para identificarlo en los ajustes y en la
+calculadora. Esa categoría es descriptiva; no cambia el cálculo. Configura
+también la mecánica de carga, el peso base y cada disco disponible por lado,
+en la unidad elegida; repite un valor si hay más discos iguales por lado.
+Para una barra, el objetivo es el peso total e incluye la
 barra sin discos. Para una máquina de brazos independientes, el objetivo es
 por brazo y la app también muestra el total de ambos; no divide el peso entre
 los brazos. No se suponen pesos estándar: para habilitar el cálculo debes
