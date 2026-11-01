@@ -2112,7 +2112,9 @@ function routineQuick(){
   }).join('') + '</div>';
 }
 function humanDuration(ms){
-  var minutes = Math.floor(Math.max(0, ms) / 60000), hours = Math.floor(minutes / 60);
+  var duration=Math.max(0,Number(ms)||0);
+  if(duration>0&&duration<60000) return Math.max(1,Math.floor(duration/1000))+' s';
+  var minutes = Math.floor(duration / 60000), hours = Math.floor(minutes / 60);
   var rest = minutes % 60;
   return hours ? hours + ' h' + (rest ? ' ' + rest + ' min' : '') : minutes + ' min';
 }

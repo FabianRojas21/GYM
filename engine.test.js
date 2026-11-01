@@ -861,6 +861,20 @@ test('el entrenamiento muestra un resumen y abre la calculadora contextual en un
   assert.match(styles,/\.loading-sheet\{position:relative/);
 });
 
+test('la duración humana no muestra cero minutos en entrenos de menos de un minuto', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function humanDuration\(ms\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={Math,Number};
+  vm.runInNewContext(helper[0]+';globalThis.durationForTest=humanDuration;',context);
+  assert.equal(context.durationForTest(0),'0 min');
+  assert.equal(context.durationForTest(1),'1 s');
+  assert.equal(context.durationForTest(25000),'25 s');
+  assert.equal(context.durationForTest(59999),'59 s');
+  assert.equal(context.durationForTest(60000),'1 min');
+  assert.equal(context.durationForTest(3660000),'1 h 1 min');
+});
+
 test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
