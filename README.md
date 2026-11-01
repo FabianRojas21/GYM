@@ -120,8 +120,12 @@ la unidad solo modifica la presentación y la conversión de las nuevas entradas
 El CSV exportado conserva la columna `peso_kg`; al importar, se aceptan también
 las columnas explícitas `peso_lb` y `weight_lb`, que se convierten a kg.
 
-En **Ajustes → Barras y máquinas cargables** puedes crear hasta diez equipos
-para la calculadora de discos. Durante el entrenamiento, cada ejercicio tiene
+En **Ajustes → Perfiles de discos reutilizables** puedes crear hasta veinte
+listas de discos compartibles y asignarlas a varios equipos. Si editas el perfil,
+el cambio se refleja en todos los equipos vinculados. También puedes conservar
+una lista propia para cada equipo o convertir una lista existente en un perfil.
+No se registran cantidades de discos físicos. En **Barras y máquinas cargables**
+puedes crear hasta diez equipos para la calculadora. Durante el entrenamiento, cada ejercicio tiene
 un acceso directo que abre la calculadora en un panel inferior sin salir de la
 sesión; toma como objetivo el peso escrito para la siguiente serie o, si aún no
 lo hay, el recomendado para el ejercicio. El panel muestra el reparto visual
@@ -140,7 +144,12 @@ los brazos. No se suponen pesos estándar: para habilitar el cálculo debes
 indicar el peso base y al menos un disco por lado o brazo. El cálculo usa los
 discos configurados, se guarda en kg y solo es una referencia: confirma la
 carga real de la barra o máquina. En Ajustes puedes duplicar una configuración
-como punto de partida; cada equipo conserva su inventario independiente.
+como punto de partida; al duplicar un equipo vinculado, ambos siguen usando el
+mismo perfil, mientras que los equipos con listas propias reciben una copia
+independiente. Los
+perfiles compartidos se guardan en los respaldos y se sincronizan con el perfil
+de usuario. Al eliminar un perfil, sus discos se copian a los equipos que lo
+usaban para conservar su configuración.
 
 Las tarjetas de **Rutinas** resumen sus series planificadas, grupos musculares
 asignados y fecha del último entreno con esa rutina. El detalle muestra además

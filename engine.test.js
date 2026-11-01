@@ -712,7 +712,7 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   const context={clone:value=>JSON.parse(JSON.stringify(value))};
   vm.runInNewContext(helper[0]+';globalThis.mergeBackupDataForTest=mergeBackupData;',context);
   const currentProfile={
-    settings:{mode:'rpe'},
+    settings:{mode:'rpe',loadingTools:[{id:'bar-current',name:'Barra actual',type:'bar',baseWeight:20,plates:[10],plateProfileId:'plates-current'}],plateProfiles:[{id:'plates-current',name:'Discos actuales',plates:[10]}]},
     exercises:{same:{name:'Ejercicio actual'}},
     routines:{current:{name:'Rutina actual'}},
     programs:{},goals:{},
@@ -720,7 +720,7 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
     measurements:[{id:'current',values:{weight:80}},{id:'shared',values:{weight:81}}]
   };
   const backupProfile={
-    settings:{mode:'rir'},
+    settings:{mode:'rir',loadingTools:[{id:'machine-backup',name:'Máquina respaldo',type:'independent',baseWeight:0,plates:[5],plateProfileId:'plates-backup'}],plateProfiles:[{id:'plates-backup',name:'Discos respaldo',plates:[5]}]},
     exercises:{same:{name:'Ejercicio del respaldo'},added:{name:'Ejercicio nuevo'}},
     routines:{current:{name:'Rutina antigua'},added:{name:'Rutina nueva'}},
     programs:{added:{name:'Programa nuevo'}},goals:{},
@@ -731,6 +731,9 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   const backupSessions=[{id:'same',notes:'respaldo antiguo'},{id:'new',notes:'respaldo nuevo'}];
   const merged=context.mergeBackupDataForTest(currentProfile,currentSessions,backupProfile,backupSessions);
   assert.equal(merged.profile.settings.mode,'rpe');
+  assert.deepEqual(Array.from(merged.profile.settings.plateProfiles,profile=>profile.id),['plates-current','plates-backup']);
+  assert.deepEqual(Array.from(merged.profile.settings.loadingTools,tool=>tool.id),['bar-current','machine-backup']);
+  assert.equal(merged.profile.settings.loadingTools[1].plateProfileId,'plates-backup');
   assert.equal(merged.profile.exercises.same.name,'Ejercicio actual');
   assert.equal(merged.profile.exercises.added.name,'Ejercicio nuevo');
   assert.equal(merged.profile.routines.current.name,'Rutina actual');
@@ -747,6 +750,7 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
     backupSessions
   );
   assert.equal(fresh.profile.exercises.added.name,'Ejercicio nuevo');
+  assert.equal(fresh.profile.settings.plateProfiles[0].id,'plates-backup');
   assert.deepEqual(Array.from(fresh.sessions,m=>m.id),['same','new']);
   assert.match(source,/function restoreBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
   assert.match(source,/function restoreAutoBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
@@ -772,6 +776,13 @@ test('la interfaz configura equipo cargable y diferencia peso por brazo del tota
   const source=fs.readFileSync('./app.js','utf8');
   assert.match(source,/function loadToolSettingsHtml\(\)/);
   assert.match(source,/Barras y máquinas cargables/);
+  assert.match(source,/function plateProfileSettingsHtml\(\)/);
+  assert.match(source,/data-plate-profile="plates"/);
+  assert.match(source,/data-load-tool="plateProfile"/);
+  assert.match(source,/data-act="load-tool-share"/);
+  assert.match(source,/if\(oldProfile\) tool\.plates=clone\(oldProfile\.plates\)/);
+  assert.match(source,/tool\.plates=clone\(removePlateProfile\.plates\)/);
+  assert.match(source,/plateProfileId===removePlateProfileId/);
   assert.match(source,/data-load-tool="plates"/);
   assert.match(source,/baseWeight:null,plates:\[\]/);
   assert.match(source,/typeof tool\.baseWeight==='number'&&Number\.isFinite\(tool\.baseWeight\)&&tool\.plates\.length>0/);
@@ -779,10 +790,35 @@ test('la interfaz configura equipo cargable y diferencia peso por brazo del tota
   assert.match(source,/function loadingCalculatorHtml\(ex\)/);
   assert.match(source,/Peso objetivo por brazo/);
   assert.match(source,/data-act="load-tool-copy"/);
-  assert.match(source,/cada equipo conserva su inventario independiente/);
+  assert.match(source,/usa el mismo perfil de discos/);
   assert.match(source,/ambos brazos: '\+weightText\(option\.totalKg\)\+' total/);
   assert.match(source,/calculatePlateLoad\(selectedTool,targetKg\)/);
   assert.match(source,/saveProfile:function\(\)\{[\s\S]*?Store\.saveLocal\(\);[\s\S]*?profDirty = true/);
+});
+
+test('los perfiles compartidos alimentan las calculadoras vinculadas y se conserva la lista propia al desvincular', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const profileHelper=source.match(/function plateProfiles\(\)\{[\s\S]*?\n\}/);
+  const toolsHelper=source.match(/function loadToolProfiles\(\)\{[\s\S]*?\n\}/);
+  const parser=source.match(/function parsePlateWeights\(value\)\{[\s\S]*?\n\}/);
+  assert.ok(profileHelper&&toolsHelper&&parser);
+  const context={
+    S:{profile:{settings:{
+      plateProfiles:[{id:'shared',name:'Discos olimpicos',plates:[20,10,5]}],
+      loadingTools:[
+        {id:'bar',name:'Barra',type:'bar',baseWeight:20,plates:[2.5],plateProfileId:'shared'},
+        {id:'machine',name:'Maquina',type:'independent',baseWeight:0,plates:[1.25]}
+      ]
+    }}},
+    toKg:value=>Number(String(value).replace(',','.'))
+  };
+  vm.runInNewContext(profileHelper[0]+';'+toolsHelper[0]+';'+parser[0]+
+    ';globalThis.toolsForTest=loadToolProfiles;globalThis.parsePlatesForTest=parsePlateWeights;',context);
+  const tools=context.toolsForTest();
+  assert.deepEqual(Array.from(tools[0].plates),[20,10,5]);
+  assert.deepEqual(Array.from(tools[1].plates),[1.25]);
+  assert.deepEqual(Array.from(context.parsePlatesForTest('20; 10; 2,5')), [20,10,2.5]);
+  assert.equal(context.parsePlatesForTest('0; 5'),null);
 });
 
 test('la biblioteca resume rutinas y muestra la última actividad de sus ejercicios', () => {

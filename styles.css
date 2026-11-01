@@ -380,7 +380,9 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .secondary-muscle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;max-height:280px;overflow:auto;padding:2px}
 .secondary-muscle-option{display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px;color:var(--text);font-size:13px;line-height:1.25}
 .secondary-muscle-option:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
-.load-tool-list{display:grid;gap:10px;margin-bottom:10px}
+.load-tool-list,.plate-profile-list{display:grid;gap:10px;margin-bottom:10px}
+.plate-profile-card{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
+.plate-profile-card .field{margin:0}
 .load-tool-card,.load-calculator{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
 .load-tool-card h3,.load-calculator h3{font:600 18px/1.1 var(--font-display);letter-spacing:.02em;text-transform:uppercase}
 .load-tool-card .field,.load-calculator .field{margin:0}

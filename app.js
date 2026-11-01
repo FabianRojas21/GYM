@@ -129,7 +129,7 @@ var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
 var RTOK = RTK + ':owner';
 var WORKOUT_SIMPLE_KEY='sobrecarga:workout-simple:v1';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', loadingTools:[]}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
@@ -137,6 +137,7 @@ function normProfile(p){
   d.settings = Object.assign(d.settings, p.settings || {});
   if(!['kg','lb'].includes(d.settings.weightUnit)) d.settings.weightUnit='kg';
   if(!Array.isArray(d.settings.loadingTools)) d.settings.loadingTools=[];
+  if(!Array.isArray(d.settings.plateProfiles)) d.settings.plateProfiles=[];
   d.settings.reminderEnabled=d.settings.reminderEnabled===true;
   if(![2,3,5,7].includes(Number(d.settings.reminderIntervalDays))) d.settings.reminderIntervalDays=3;
   if(!['any','sameRoutine'].includes(d.settings.previousExerciseScope)) d.settings.previousExerciseScope='any';
@@ -160,7 +161,8 @@ function normProfile(p){
 function mergeBackupData(currentProfile,currentSessions,backupProfile,backupSessions){
   var profileHasData=['exercises','routines','programs','goals','recoveryRatings'].some(function(key){
     return Object.keys(currentProfile[key] || {}).length>0;
-  }) || (currentProfile.measurements || []).length>0;
+  }) || (currentProfile.measurements || []).length>0 ||
+    (currentProfile.settings&&((currentProfile.settings.loadingTools||[]).length||(currentProfile.settings.plateProfiles||[]).length));
   var mergedProfile=profileHasData ? clone(currentProfile) : clone(backupProfile);
   if(profileHasData){
     ['exercises','routines','programs','goals','recoveryRatings'].forEach(function(key){
@@ -178,6 +180,15 @@ function mergeBackupData(currentProfile,currentSessions,backupProfile,backupSess
       }
     });
     mergedProfile.measurements=measurements;
+    mergedProfile.settings=Object.assign({},backupProfile.settings||{},currentProfile.settings||{});
+    ['loadingTools','plateProfiles'].forEach(function(key){
+      var combined=clone(currentProfile.settings&&currentProfile.settings[key]||[]), ids={};
+      combined.forEach(function(item){if(item&&typeof item.id==='string') ids[item.id]=true;});
+      (backupProfile.settings&&backupProfile.settings[key]||[]).forEach(function(item){
+        if(item&&typeof item.id==='string'&&!ids[item.id]){ids[item.id]=true;combined.push(clone(item));}
+      });
+      mergedProfile.settings[key]=combined;
+    });
   }
   var mergedSessions=clone(currentSessions), sessionIds={};
   mergedSessions.forEach(function(session){ sessionIds[session.id]=true; });
@@ -947,10 +958,17 @@ function validBackup(data){
   };
   if(profile.settings && profile.settings.mode && !['rir','rpe'].includes(profile.settings.mode)) return false;
   if(profile.settings && profile.settings.targetRir !== undefined && !validNumber(profile.settings.targetRir)) return false;
+  if(profile.settings && profile.settings.plateProfiles !== undefined && (!Array.isArray(profile.settings.plateProfiles)||profile.settings.plateProfiles.length>20||
+    !profile.settings.plateProfiles.every(function(profileItem,index,all){
+      return isObject(profileItem)&&typeof profileItem.id==='string'&&profileItem.id&&typeof profileItem.name==='string'&&profileItem.name.trim().length>0&&profileItem.name.length<=50&&
+        !all.slice(0,index).some(function(previous){return previous.id===profileItem.id;})&&Array.isArray(profileItem.plates)&&profileItem.plates.length<=30&&
+        profileItem.plates.every(function(weight){return validNumber(weight)&&weight>0&&weight<=100;});
+    }))) return false;
   if(profile.settings && profile.settings.loadingTools !== undefined && (!Array.isArray(profile.settings.loadingTools) || profile.settings.loadingTools.length>10 ||
     !profile.settings.loadingTools.every(function(tool){return isObject(tool)&&typeof tool.id==='string'&&typeof tool.name==='string'&&tool.name.trim().length>0&&tool.name.length<=50&&
       ['bar','independent'].includes(tool.type)&&(tool.baseWeight===null||(validNumber(tool.baseWeight)&&tool.baseWeight>=0&&tool.baseWeight<=1000))&&Array.isArray(tool.plates)&&tool.plates.length<=30&&
-      tool.plates.every(function(weight){return validNumber(weight)&&weight>0&&weight<=100;});}))) return false;
+      tool.plates.every(function(weight){return validNumber(weight)&&weight>0&&weight<=100;})&&
+      (tool.plateProfileId===undefined||(typeof tool.plateProfileId==='string'&&profile.settings.plateProfiles&&profile.settings.plateProfiles.some(function(profileItem){return profileItem.id===tool.plateProfileId;})));}))) return false;
   var validWarmupConfig = function(item){
     return (item.warmupMode === undefined || ['auto','manual'].includes(item.warmupMode)) &&
       (item.warmupStep === undefined || (validNumber(item.warmupStep) && item.warmupStep > 0)) &&
@@ -2594,28 +2612,69 @@ function loadTools(){
     return typeof tool.baseWeight==='number'&&Number.isFinite(tool.baseWeight)&&tool.plates.length>0;
   });
 }
+function plateProfiles(){
+  var profiles=S.profile.settings.plateProfiles, ids={};
+  if(!Array.isArray(profiles)) return [];
+  return profiles.filter(function(profile){
+    if(!profile||typeof profile.id!=='string'||!profile.id||ids[profile.id]||
+      typeof profile.name!=='string'||!profile.name.trim()||profile.name.length>50||
+      !Array.isArray(profile.plates)||profile.plates.length>30||
+      !profile.plates.every(function(weight){return Number.isFinite(Number(weight))&&Number(weight)>0&&Number(weight)<=100;})) return false;
+    ids[profile.id]=true;
+    return true;
+  });
+}
 function loadToolProfiles(){
-  var tools=S.profile.settings.loadingTools;
+  var tools=S.profile.settings.loadingTools, profiles=plateProfiles();
   return Array.isArray(tools)?tools.filter(function(tool){
     return tool&&typeof tool.id==='string'&&typeof tool.name==='string'&&tool.name.trim()&&
-      ['bar','independent'].includes(tool.type)&&(tool.baseWeight===null||(typeof tool.baseWeight==='number'&&Number.isFinite(tool.baseWeight)&&tool.baseWeight>=0&&tool.baseWeight<=1000))&&
-      Array.isArray(tool.plates)&&tool.plates.length<=30&&
+      ['bar','independent'].includes(tool.type)&&(tool.baseWeight===null||(typeof tool.baseWeight==='number'&&Number.isFinite(tool.baseWeight)&&tool.baseWeight>=0&&tool.baseWeight<=1000));
+  }).map(function(tool){
+    var linked=profiles.filter(function(profile){return profile.id===tool.plateProfileId;})[0];
+    return Object.assign({},tool,{plates:linked?linked.plates:tool.plates});
+  }).filter(function(tool){
+    return Array.isArray(tool.plates)&&tool.plates.length<=30&&
       tool.plates.every(function(weight){return Number.isFinite(Number(weight))&&Number(weight)>0&&Number(weight)<=100;});
   }):[];
 }
+function parsePlateWeights(value){
+  var raw=String(value).trim()?String(value).split(';'):[];
+  var parsed=raw.map(function(weight){return toKg(weight.trim());});
+  return parsed.length>30||parsed.some(function(weight){return weight===null||weight<=0||weight>100;})?null:parsed;
+}
+function plateProfileSettingsHtml(){
+  var profiles=plateProfiles();
+  return '<section class="card"><p class="sec-title">Perfiles de discos reutilizables</p><p class="small muted">Configura una lista de discos una sola vez y asígnala a varias barras o máquinas. La lista representa los discos disponibles por cada lado o brazo; no es un recuento de existencias.</p>'+
+    (profiles.length?'<div class="plate-profile-list">'+profiles.map(function(profile){
+      var isConfirm=S.confirm==='plate-profile:'+profile.id;
+      var linkedCount=(S.profile.settings.loadingTools||[]).filter(function(tool){return tool&&tool.plateProfileId===profile.id;}).length;
+      return '<article class="plate-profile-card"><label class="field"><span class="lab">Nombre del perfil</span><input class="txt" data-plate-profile="name" data-id="'+esc(profile.id)+'" value="'+esc(profile.name)+'" maxlength="50"></label>'+
+        '<label class="field"><span class="lab">Discos por lado o brazo ('+weightUnitLabel()+' por disco)</span><input class="txt" data-plate-profile="plates" data-id="'+esc(profile.id)+'" value="'+esc(profile.plates.map(weightInput).join('; '))+'" placeholder="20; 10; 5; 2,5"></label>'+
+        '<p class="small muted">'+linkedCount+' equipo'+(linkedCount===1?' vinculado':'s vinculados')+'</p>'+
+        '<div class="row">'+(isConfirm?'<button class="btn danger sm" data-act="plate-profile-remove-ok" data-id="'+esc(profile.id)+'">Eliminar perfil y conservar discos en equipos</button><button class="btn ghost sm" data-act="plate-profile-remove-cancel">Cancelar</button>':'<button class="btn ghost sm" data-act="plate-profile-remove" data-id="'+esc(profile.id)+'">Eliminar perfil</button>')+'</div></article>';
+    }).join(''):'<p class="small muted">Aún no tienes perfiles compartidos. Puedes crear uno aquí o convertir los discos de un equipo existente.</p>')+
+    '<button class="btn ghost sm" data-act="plate-profile-add"'+(profiles.length>=20?' disabled':'')+'>Crear perfil de discos</button></section>';
+}
 function loadToolSettingsHtml(){
   var tools=loadToolProfiles();
-  return '<section class="card"><p class="sec-title">Barras y máquinas cargables</p><p class="small muted">Configura cada barra o estación con su peso base y los discos disponibles por lado. Escribe un valor por cada disco y sepáralos con punto y coma; repite el valor si tienes varios iguales. Los pesos se guardan en kg y se muestran en la unidad elegida.</p>' +
+  var profiles=plateProfiles();
+  return plateProfileSettingsHtml()+'<section class="card"><p class="sec-title">Barras y máquinas cargables</p><p class="small muted">Configura cada barra o estación con su peso base. Puedes usar una lista de discos propia o vincularla a un perfil reutilizable. Los pesos se guardan en kg y se muestran en la unidad elegida.</p>' +
     (tools.length?'<div class="load-tool-list">'+tools.map(function(tool,index){
       var isConfirm=S.confirm==='load-tool:'+tool.id;
+      var profileOptions='<option value="">Discos propios de este equipo</option>'+profiles.map(function(profile){return '<option value="'+esc(profile.id)+'"'+(profile.id===tool.plateProfileId?' selected':'')+'>'+esc(profile.name)+'</option>';}).join('');
+      var currentProfile=profiles.filter(function(profile){return profile.id===tool.plateProfileId;})[0];
       return '<article class="load-tool-card"><h3>'+esc(tool.name||('Equipo '+(index+1)))+'</h3>'+
         '<label class="field"><span class="lab">Nombre</span><input class="txt" data-load-tool="name" data-id="'+esc(tool.id)+'" value="'+esc(tool.name)+'" maxlength="50"></label>'+
         '<div class="fields"><label class="field"><span class="lab">Tipo de equipo</span><select class="txt" data-load-tool="type" data-id="'+esc(tool.id)+'"><option value="bar"'+(tool.type==='bar'?' selected':'')+'>Barra con discos en ambos lados</option><option value="independent"'+(tool.type==='independent'?' selected':'')+'>Máquina de brazos independientes</option></select></label>'+
         '<label class="field"><span class="lab">'+(tool.type==='bar'?'Peso total de la barra sin discos':'Resistencia base por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" data-load-tool="baseWeight" data-id="'+esc(tool.id)+'" inputmode="decimal" value="'+esc(weightInput(tool.baseWeight))+'"></label></div>'+
-        '<label class="field"><span class="lab">Discos disponibles para cada lado'+(tool.type==='independent'?' / brazo':'')+' ('+weightUnitLabel()+' por disco)</span><input class="txt" data-load-tool="plates" data-id="'+esc(tool.id)+'" value="'+esc(tool.plates.map(function(weight){return weightInput(weight);}).join('; '))+'" placeholder="20; 10; 5; 2,5"></label>'+
+        '<label class="field"><span class="lab">Lista de discos para este equipo</span><select class="txt" data-load-tool="plateProfile" data-id="'+esc(tool.id)+'">'+profileOptions+'</select></label>'+
+        (currentProfile?'<p class="small muted">Usa el perfil «'+esc(currentProfile.name)+'»: '+esc(currentProfile.plates.map(weightText).join('; '))+' por lado o brazo.</p>':
+          '<label class="field"><span class="lab">Discos disponibles por lado'+(tool.type==='independent'?' / brazo':'')+' ('+weightUnitLabel()+' por disco)</span><input class="txt" data-load-tool="plates" data-id="'+esc(tool.id)+'" value="'+esc(tool.plates.map(weightInput).join('; '))+'" placeholder="20; 10; 5; 2,5"></label>')+
         '<p class="small muted">'+(tool.type==='bar'?'El peso objetivo incluye la barra.':'El objetivo se interpreta por brazo; la calculadora también mostrará el total de los dos brazos.')+'</p>'+
         ((typeof tool.baseWeight!=='number'||!Number.isFinite(tool.baseWeight)||!tool.plates.length)?'<p class="small warn-text">Para habilitar el cálculo, indica el peso base y al menos un disco disponible por lado. No se asumirá un peso estándar.</p>':'')+
-        '<div class="row">'+(isConfirm?'<button class="btn danger sm" data-act="load-tool-remove-ok" data-id="'+esc(tool.id)+'">Confirmar eliminar</button><button class="btn ghost sm" data-act="load-tool-remove-cancel">Cancelar</button>':'<button class="btn ghost sm" data-act="load-tool-copy" data-id="'+esc(tool.id)+'">Duplicar configuración</button><button class="btn ghost sm" data-act="load-tool-remove" data-id="'+esc(tool.id)+'">Eliminar equipo</button>')+'</div></article>';
+        '<div class="row">'+(isConfirm?'<button class="btn danger sm" data-act="load-tool-remove-ok" data-id="'+esc(tool.id)+'">Confirmar eliminar</button><button class="btn ghost sm" data-act="load-tool-remove-cancel">Cancelar</button>':'')+
+        (!isConfirm&&!currentProfile&&tool.plates.length&&profiles.length<20?'<button class="btn ghost sm" data-act="load-tool-share" data-id="'+esc(tool.id)+'">Guardar discos como perfil reutilizable</button>':'')+
+        (!isConfirm?'<button class="btn ghost sm" data-act="load-tool-copy" data-id="'+esc(tool.id)+'">Duplicar configuración</button><button class="btn ghost sm" data-act="load-tool-remove" data-id="'+esc(tool.id)+'">Eliminar equipo</button>':'')+'</div></article>';
     }).join(''):'<p class="small muted">Todavía no has configurado una barra o máquina cargable.</p>')+
     '<button class="btn ghost sm" data-act="load-tool-add"'+(tools.length>=10?' disabled':'')+'>Añadir equipo cargable</button></section>';
 }
@@ -3429,6 +3488,41 @@ function onClick(ev){
       var newTool={id:uid('tool_'),name:'Equipo cargable '+(loadingTools.length+1),type:'bar',baseWeight:null,plates:[]};
       S.profile.settings.loadingTools=loadingTools.concat([newTool]);
       Store.saveProfile();render();break;
+    case 'plate-profile-add':
+      var existingPlateProfiles=plateProfiles();
+      if(existingPlateProfiles.length>=20){toast('Puedes crear hasta 20 perfiles de discos');break;}
+      S.profile.settings.plateProfiles=(S.profile.settings.plateProfiles||[]).concat([{id:uid('plates_'),name:'Discos compartidos '+(existingPlateProfiles.length+1),plates:[]}]);
+      Store.saveProfile();render();break;
+    case 'plate-profile-remove':
+      if(plateProfiles().some(function(profile){return profile.id===t.dataset.id;})){S.confirm='plate-profile:'+t.dataset.id;render();}
+      break;
+    case 'plate-profile-remove-cancel':
+      S.confirm=null;render();break;
+    case 'plate-profile-remove-ok':
+      var removePlateProfileId=t.dataset.id, removePlateProfile=plateProfiles().filter(function(profile){return profile.id===removePlateProfileId;})[0];
+      if(S.confirm!=='plate-profile:'+removePlateProfileId||!removePlateProfile) break;
+      (S.profile.settings.loadingTools||[]).forEach(function(tool){
+        if(tool&&tool.plateProfileId===removePlateProfileId){
+          tool.plates=clone(removePlateProfile.plates);
+          delete tool.plateProfileId;
+        }
+      });
+      S.profile.settings.plateProfiles=(S.profile.settings.plateProfiles||[]).filter(function(profile){return !profile||profile.id!==removePlateProfileId;});
+      S.loadingCalc=null;S.confirm=null;Store.saveProfile();render();toast('Perfil eliminado; los discos vinculados se conservaron en cada equipo');break;
+    case 'load-tool-share':
+      var shareTool=(S.profile.settings.loadingTools||[]).filter(function(tool){return tool&&tool.id===t.dataset.id;})[0];
+      var shareProfiles=plateProfiles();
+      if(!shareTool||shareTool.plateProfileId||!Array.isArray(shareTool.plates)||!shareTool.plates.length){toast('Este equipo no tiene una lista de discos propia para compartir');break;}
+      if(shareProfiles.length>=20){toast('Puedes crear hasta 20 perfiles de discos');break;}
+      var profileBaseName=(shareTool.name+' · discos').slice(0,50), profileName=profileBaseName, profileSuffix=2;
+      while(shareProfiles.some(function(profile){return profile.name.toLocaleLowerCase()===profileName.toLocaleLowerCase();})){
+        var suffix=' ('+profileSuffix+')';
+        profileName=profileBaseName.slice(0,50-suffix.length)+suffix;profileSuffix++;
+      }
+      var sharedProfile={id:uid('plates_'),name:profileName,plates:clone(shareTool.plates)};
+      S.profile.settings.plateProfiles=(S.profile.settings.plateProfiles||[]).concat([sharedProfile]);
+      shareTool.plateProfileId=sharedProfile.id;
+      S.loadingCalc=null;Store.saveProfile();render();toast('Perfil creado y vinculado; puedes reutilizarlo en otros equipos');break;
     case 'load-tool-copy':
       var sourceTool=loadToolProfiles().filter(function(tool){return tool.id===t.dataset.id;})[0];
       var configuredTools=S.profile.settings.loadingTools||[];
@@ -3437,7 +3531,7 @@ function onClick(ev){
       var copiedTool=clone(sourceTool);
       copiedTool.id=uid('tool_');copiedTool.name=(sourceTool.name+' (copia)').slice(0,50);
       S.profile.settings.loadingTools=configuredTools.concat([copiedTool]);
-      Store.saveProfile();render();toast('Configuración duplicada; cada equipo conserva su inventario independiente');break;
+      Store.saveProfile();render();toast(copiedTool.plateProfileId?'Equipo duplicado; usa el mismo perfil de discos':'Equipo duplicado con su propia lista de discos');break;
     case 'load-tool-remove':
       if(loadToolProfiles().some(function(tool){return tool.id===t.dataset.id;})){S.confirm='load-tool:'+t.dataset.id;render();}
       break;
@@ -3950,6 +4044,20 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.plateProfile!==undefined){
+    var changedProfile=plateProfiles().filter(function(profile){return profile.id===t.dataset.id;})[0];
+    if(!changedProfile){render();return;}
+    if(t.dataset.plateProfile==='name'){
+      var profileName=t.value.trim(), duplicateProfile=plateProfiles().some(function(profile){return profile.id!==changedProfile.id&&profile.name.toLocaleLowerCase()===profileName.toLocaleLowerCase();});
+      if(!profileName||profileName.length>50||duplicateProfile){toast(duplicateProfile?'El nombre ya pertenece a otro perfil':'Escribe un nombre de hasta 50 caracteres');render();return;}
+      changedProfile.name=profileName;
+    }else if(t.dataset.plateProfile==='plates'){
+      var profilePlates=parsePlateWeights(t.value);
+      if(profilePlates===null){toast('Revisa los discos: usa hasta 30 pesos positivos separados por punto y coma');render();return;}
+      changedProfile.plates=profilePlates;
+    }else{render();return;}
+    S.loadingCalc=null;Store.saveProfile();render();return;
+  }
   if(t.dataset.loadingRow!==undefined){
     var rowCalc=S.loadingCalc, rowEntry=rowCalc&&Number.isInteger(rowCalc.entryIndex)?S.draft.entries[rowCalc.entryIndex]:null;
     var selectedRowIndex=Number(t.value), selectedRow=rowEntry&&rowEntry.rows[selectedRowIndex];
@@ -3970,19 +4078,27 @@ function onChange(ev){
     }else if(t.dataset.loadTool==='type'){
       if(!['bar','independent'].includes(t.value)){render();return;}
       tool.type=t.value;S.loadingCalc=null;
+    }else if(t.dataset.loadTool==='plateProfile'){
+      if(t.value&&!plateProfiles().some(function(profile){return profile.id===t.value;})){toast('Elige un perfil de discos válido');render();return;}
+      if(t.value) tool.plateProfileId=t.value;
+      else if(tool.plateProfileId){
+        var oldProfile=plateProfiles().filter(function(profile){return profile.id===tool.plateProfileId;})[0];
+        if(oldProfile) tool.plates=clone(oldProfile.plates);
+        delete tool.plateProfileId;
+      }
+      S.loadingCalc=null;
     }else if(t.dataset.loadTool==='baseWeight'){
       var baseWeight=toKg(t.value);
       if(baseWeight===null||baseWeight<0||baseWeight>1000){toast('El peso base debe estar entre 0 y 1000 '+weightUnitLabel());render();return;}
       tool.baseWeight=baseWeight;
     }else if(t.dataset.loadTool==='plates'){
-      var rawPlates=t.value.trim()?t.value.split(';'):[];
-      var parsedPlates=rawPlates.map(function(value){return toKg(value.trim());});
-      if(parsedPlates.length>30||parsedPlates.some(function(value){return value===null||value<=0||value>100;})){
+      var parsedPlates=parsePlateWeights(t.value);
+      if(parsedPlates===null){
         toast('Revisa los discos: usa hasta 30 pesos positivos separados por punto y coma');render();return;
       }
       tool.plates=parsedPlates;
     }else{render();return;}
-    Store.saveProfile();render();return;
+    S.loadingCalc=null;Store.saveProfile();render();return;
   }
   if(t.dataset.cfg==='loadToolId'){
     var selectedForExercise=exById(t.dataset.id), selectedToolExists=loadTools().some(function(tool){return tool.id===t.value;});
