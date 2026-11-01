@@ -872,6 +872,7 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(styles,/.set-input>span/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.set-fields\{gap:5px\}/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.library-card:not\(\.create-card\)\{flex-wrap:wrap/);
+  assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.workout-card-tools \.mini\{width:44px;height:44px\}/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?select\[data-it="warmupMode"\]/);
   assert.match(app,/class="card history-session-card"/);
   assert.match(app,/class="row history-actions"/);

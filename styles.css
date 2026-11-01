@@ -580,6 +580,7 @@ nav.tabs .in{min-height:66px}
   .library-card:not(.create-card) .library-open{flex-basis:100%}
   .library-card-actions{width:100%;justify-content:flex-end}
   .library-card-actions .mini,.it-tools .mini{width:44px;height:44px}
+  .workout-card-tools .mini{width:44px;height:44px}
   .field:has(select[data-it="warmupMode"]),.field:has(select[data-it="unilateral"]){grid-column:1/-1}
   .weekly-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .profile-exercise-card{align-items:flex-start;flex-direction:column;gap:7px}
