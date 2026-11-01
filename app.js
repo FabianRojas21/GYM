@@ -2330,7 +2330,7 @@ function homeDashboard(){
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
     '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>carga × reps · sin aprox.</span></div></div>' +
     workoutReminderHtml(latest) +
-    '<button class="btn home-start" data-act="start"><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
+    '<button class="btn home-start" data-act="start" data-home-start><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
     weeklyMuscleSummaryHtml(week);
   if(latest){
     var latestStats = sessionStats(latest);
@@ -3837,7 +3837,11 @@ function onClick(ev){
     case 'rest-stop': S.restEndsAt = null; S.restOwner=null; saveRestEnd(); render(); break;
     case 'discard': S.confirm = 'discard'; render(); break;
     case 'discard-ok': S.draft = blankDraft(); S.loadingCalc=null; saveDraft(); S.restEndsAt = null; S.restOwner=null; saveRestEnd(); S.confirm = null; render(); break;
-    case 'dismiss-saved': S.justSaved = null; render(); break;
+    case 'dismiss-saved':
+      S.justSaved = null; render();
+      var homeStart=$('[data-home-start]');
+      if(homeStart) homeStart.focus();
+      break;
     case 'toggle-ex': S.openEx = S.openEx === t.dataset.id ? null : t.dataset.id; S.confirm = null; render(); break;
     case 'progress-metric': if(['weight','estimated','volume'].includes(t.dataset.metric)){ S.progressMetric=t.dataset.metric; render(); } break;
     case 'archive': S.confirm = 'arch:' + t.dataset.id; render(); break;
