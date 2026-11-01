@@ -4,12 +4,28 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const {analyze, analyzeCore, effTxt} = require('./engine.js');
+const {analyze, analyzeCore, effTxt, calculatePlateLoad} = require('./engine.js');
+const {createCloudDataStore, mergeCloudSessions} = require('./store.js');
 const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType, csvSessionSignature, parseNumber} = require('./backup.js');
 
 const rirSettings = {mode:'rir', targetRir:2};
 const baseExercise = {sets:3, min:8, max:10, inc:2, efforts:[2,2,2]};
 const set = (reps, rir=2, weight=60, type='normal') => ({w:weight, r:reps, rir, type});
+
+test('calcula discos por lado para barra y carga independiente por brazo', () => {
+  const bar=calculatePlateLoad({type:'bar',baseWeight:20,plates:[20,10,5,2.5]},60);
+  assert.equal(bar.exact,true);
+  assert.equal(bar.lower.totalKg,60);
+  assert.deepEqual(bar.lower.plates,[20]);
+  const machine=calculatePlateLoad({type:'independent',baseWeight:0,plates:[10,1.3]},11.3);
+  assert.equal(machine.exact,true);
+  assert.equal(machine.lower.perArmKg,11.3);
+  assert.equal(machine.lower.totalKg,22.6);
+  assert.deepEqual(machine.lower.plates,[10,1.3]);
+  assert.equal(calculatePlateLoad({type:'bar',baseWeight:20,plates:[2.5]},61).exact,false);
+  assert.equal(calculatePlateLoad({type:'bar',baseWeight:20,plates:[20,20]},61).lower.totalKg,60);
+  assert.equal(calculatePlateLoad({type:'unknown',baseWeight:0,plates:[]},10),null);
+});
 
 test('sube cuando las series requeridas llegan al máximo con esfuerzo razonable', () => {
   const result = analyze(baseExercise, [set(10), set(10), set(10)], null, rirSettings);
@@ -94,8 +110,10 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.match(sw,/clients\.claim/);
   assert.match(sw,/SKIP_WAITING/);
   assert.match(index,/app\.js\?v=__BUILD_ID__/);
+  assert.match(index,/store\.js\?v=__BUILD_ID__/);
   assert.match(index,/serviceWorker\.register\('\.\/sw\.js\?v=__BUILD_ID__'\)/);
   assert.match(sw,/app\.js\?v=__BUILD_ID__/);
+  assert.match(sw,/store\.js\?v=__BUILD_ID__/);
   assert.match(workflow,/BUILD_ID: \$\{\{ github\.sha \}\}[\s\S]*sed -i .*index\.html sw\.js/);
   assert.match(workflow,/Verify deployed asset versions[\s\S]*grep -q '__BUILD_ID__' index\.html sw\.js/);
   assert.match(workflow,/grep -Fq "app\.js\?v=\$\{BUILD_ID\}" index\.html/);
@@ -563,16 +581,12 @@ test('no confirma la importación CSV antes de persistir y gestiona fallos de mi
   assert.match(source,/parseNumber/);
   assert.match(source,/No se pudo borrar el entreno:/);
   assert.match(source,/throw error;\s*\}\);\s*\},\s*replaceAll:/);
-  assert.match(source,/var migratedKey='sobrecarga:migrated:'\+userId/);
-  assert.match(source,/if\(!alreadyMigrated && localData/);
-  assert.match(source,/var migrateSessions=!remoteProfile\.exists && remoteSessions\.empty/);
-  assert.match(source,/localStorage\.setItem\(migratedKey,'1'\)/);
+  assert.match(source,/SobrecargaStore\.createCloudDataStore/);
+  assert.match(source,/cloudDataStore\.migrateLocalDataOnce\(localData\)/);
+  assert.match(source,/cloudDataStore\.uploadPendingLocalSessions\(currentLocalData,remoteSessions\)/);
 });
 
 test('la migración local no resucita sesiones borradas al volver a abrir la cuenta', async () => {
-  const source=fs.readFileSync('./app.js','utf8');
-  const helper=source.match(/function migrateLocalDataOnce\([\s\S]*?\n\}/);
-  assert.ok(helper);
   const values=new Map();
   const remote={profile:null,sessions:Object.create(null)};
   const localStorage={
@@ -587,74 +601,108 @@ test('la migración local no resucita sesiones borradas al volver a abrir la cue
     get:()=>Promise.resolve({empty:Object.keys(remote.sessions).length===0}),
     doc:id=>({set:value=>{remote.sessions[id]=JSON.parse(JSON.stringify(value));return Promise.resolve();}})
   };
-  const context={localStorage,console,clone:value=>JSON.parse(JSON.stringify(value)),stampSession:value=>value};
-  vm.runInNewContext(helper[0]+';globalThis.migrateLocalDataOnceForTest=migrateLocalDataOnce;',context);
+  const cloudStore=createCloudDataStore({userId:'user-1',ref,col,storage:localStorage,clone:value=>JSON.parse(JSON.stringify(value)),stampSession:value=>value});
   const staleLocalData={
     profile:{settings:{mode:'rir'}},
     sessions:['A','B','C'].map(id=>({id}))
   };
-  await context.migrateLocalDataOnceForTest('user-1',ref,col,staleLocalData);
+  await cloudStore.migrateLocalDataOnce(staleLocalData);
   assert.deepEqual(Object.keys(remote.sessions).sort(),['A','B','C']);
   assert.equal(values.get('sobrecarga:migrated:user-1'),'1');
   delete remote.sessions.B;
-  await context.migrateLocalDataOnceForTest('user-1',ref,col,staleLocalData);
+  await cloudStore.migrateLocalDataOnce(staleLocalData);
   assert.deepEqual(Object.keys(remote.sessions).sort(),['A','C']);
   values.delete('sobrecarga:migrated:user-1');
-  await context.migrateLocalDataOnceForTest('user-1',ref,col,staleLocalData);
+  await cloudStore.migrateLocalDataOnce(staleLocalData);
   assert.deepEqual(Object.keys(remote.sessions).sort(),['A','C']);
 });
 
 test('sube sesiones locales posteriores a la última sincronización sin resucitar las anteriores borradas', async () => {
-  const source=fs.readFileSync('./app.js','utf8');
-  const helper=source.match(/function uploadPendingLocalSessions\([\s\S]*?\n\}/);
-  assert.ok(helper);
   const values=new Map([['sobrecarga:last-cloud-sync:user-1','200']]);
-  const uploaded={};
+  const remote={A:{id:'A'}};
   const localStorage={
     getItem:key=>values.has(key)?values.get(key):null,
     setItem:(key,value)=>values.set(key,value)
   };
-  const col={doc:id=>({set:value=>{uploaded[id]=JSON.parse(JSON.stringify(value));return Promise.resolve();}})};
-  const context={
-    localStorage,console,Date,
-    clone:value=>JSON.parse(JSON.stringify(value)),
-    stampSession:value=>Object.assign({},value,{updatedAt:Math.max(Number(value.updatedAt)||0,Number(value.ts)||0,300)})
-  };
-  vm.runInNewContext(helper[0]+';globalThis.uploadPendingLocalSessionsForTest=uploadPendingLocalSessions;',context);
-  const result=await context.uploadPendingLocalSessionsForTest('user-1',col,{
+  const col={doc:id=>({set:value=>{remote[id]=JSON.parse(JSON.stringify(value));return Promise.resolve();}})};
+  const cloudStore=createCloudDataStore({userId:'user-1',col,storage:localStorage,clone:value=>JSON.parse(JSON.stringify(value)),stampSession:value=>value});
+  const localData={
     sessions:[
       {id:'A',updatedAt:100},
       {id:'B',updatedAt:150},
       {id:'C',updatedAt:250}
     ]
-  },[{id:'A'}]);
+  };
+  const result=await cloudStore.uploadPendingLocalSessions(localData,[remote.A]);
   assert.equal(result.count,1);
-  assert.deepEqual(Object.keys(uploaded),['C']);
+  assert.deepEqual(Object.keys(remote).sort(),['A','C']);
+  assert.deepEqual(mergeCloudSessions(Object.values(remote),result.sessions.map(session=>Object.assign({},session,{updatedAt:300}))).map(session=>session.id).sort(),['A','C']);
   assert.equal(values.get('sobrecarga:last-cloud-sync:user-1')!=='200',true);
-  assert.match(source,/uploadPendingLocalSessions\(user\.uid,Store\.col,localData,remoteSessions\)/);
+  delete remote.B;
+  const afterDelete=await cloudStore.uploadPendingLocalSessions(localData,Object.values(remote));
+  assert.equal(afterDelete.count,0);
+  assert.equal(Object.prototype.hasOwnProperty.call(remote,'B'),false);
 });
 
 test('la primera cuenta puede subir entrenos locales ausentes aunque la migración ya se haya marcado', async () => {
-  const source=fs.readFileSync('./app.js','utf8');
-  const helper=source.match(/function uploadPendingLocalSessions\([\s\S]*?\n\}/);
-  assert.ok(helper);
   const uploaded=[];
   const col={doc:id=>({set:()=>{uploaded.push(id);return Promise.resolve();}})};
-  const context={
-    localStorage:{getItem:()=>null,setItem:()=>{}},
-    console,Date,clone:value=>JSON.parse(JSON.stringify(value)),
-    stampSession:value=>Object.assign({},value,{updatedAt:Number(value.updatedAt)||1})
-  };
-  vm.runInNewContext(helper[0]+';globalThis.uploadPendingLocalSessionsForTest=uploadPendingLocalSessions;',context);
-  const result=await context.uploadPendingLocalSessionsForTest('user-2',col,{
+  const cloudStore=createCloudDataStore({userId:'user-2',col,storage:{getItem:()=>null,setItem:()=>{}},stampSession:value=>Object.assign({},value,{updatedAt:Number(value.updatedAt)||1})});
+  const result=await cloudStore.uploadPendingLocalSessions({
     sessions:[{id:'P1',updatedAt:10},{id:'P2',updatedAt:20}]
   },[{id:'cloud-A'}]);
   assert.equal(result.count,2);
   assert.deepEqual(uploaded,['P1','P2']);
 });
 
+test('guarda el entreno localmente antes de un fallo offline y no avanza el marcador de sync', async () => {
+  const values=new Map([['sobrecarga:last-cloud-sync:user-offline','100']]);
+  const remote={};
+  let online=false;
+  const localStorage={
+    getItem:key=>values.has(key)?values.get(key):null,
+    setItem:(key,value)=>values.set(key,value)
+  };
+  const cloudStore=createCloudDataStore({
+    userId:'user-offline',storage:localStorage,writeTimeoutMs:50,logger:{warn(){}},
+    col:{doc:id=>({set:value=>{
+      if(!online) return Promise.reject(new Error('offline'));
+      remote[id]=JSON.parse(JSON.stringify(value));return Promise.resolve();
+    }})}
+  });
+  const result=await cloudStore.saveSession({id:'C',updatedAt:200},{settings:{}},[]);
+  assert.equal(result.synced,false);
+  assert.equal(result.sessions.length,1);
+  assert.equal(JSON.parse(values.get('sobrecarga:data:v1')).sessions[0].id,'C');
+  assert.equal(values.get('sobrecarga:last-cloud-sync:user-offline'),'100');
+  online=true;
+  const pending=await cloudStore.uploadPendingLocalSessions(JSON.parse(values.get('sobrecarga:data:v1')),[]);
+  assert.equal(pending.count,1);
+  assert.equal(remote.C.id,'C');
+  assert.equal(values.get('sobrecarga:last-cloud-sync:user-offline')!=='100',true);
+});
+
+test('la migración fallida no se marca como completada y puede reintentarse', async () => {
+  const values=new Map();
+  const localStorage={getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value)};
+  let shouldFail=true;
+  const col={
+    get:()=>Promise.resolve({empty:true}),
+    doc:()=>({set:()=>shouldFail?Promise.reject(new Error('offline')):Promise.resolve()})
+  };
+  const ref={get:()=>Promise.resolve({exists:false}),set:()=>Promise.resolve()};
+  const cloudStore=createCloudDataStore({userId:'retry',ref,col,storage:localStorage});
+  const data={profile:{settings:{}},sessions:[{id:'P1'}]};
+  await assert.rejects(cloudStore.migrateLocalDataOnce(data),/offline/);
+  assert.equal(values.has('sobrecarga:migrated:retry'),false);
+  shouldFail=false;
+  await cloudStore.migrateLocalDataOnce(data);
+  assert.equal(values.get('sobrecarga:migrated:retry'),'1');
+});
+
 test('restaurar un respaldo combina datos y conserva los actuales ante IDs duplicados', () => {
   const source=fs.readFileSync('./app.js','utf8');
+  const cloudStoreSource=fs.readFileSync('./store.js','utf8');
   const helper=source.match(/function mergeBackupData\([\s\S]*?\n\}/);
   assert.ok(helper);
   const context={clone:value=>JSON.parse(JSON.stringify(value))};
@@ -703,15 +751,32 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!=='cloud'\)\{\s*return Promise\.reject/);
   assert.match(source,/gotProfile && gotSessions && gotDraft/);
   assert.match(source,/No se pudo comprobar el entreno en curso de la cuenta/);
-  assert.match(source,/ref\.get\(\{source:'server'\}\)/);
-  assert.match(source,/col\.get\(\{source:'server'\}\)/);
+  assert.match(cloudStoreSource,/ref\.get\(\{source:'server'\}\)/);
+  assert.match(cloudStoreSource,/col\.get\(\{source:'server'\}\)/);
   assert.match(source,/Store\.ref\.onSnapshot\(\{includeMetadataChanges:true\}/);
   assert.match(source,/Store\.col\.onSnapshot\(\{includeMetadataChanges:true\}/);
   assert.match(source,/if\(!snap\.metadata \|\| snap\.metadata\.fromCache\) return;/);
   assert.match(source,/doc\('draft'\)\.get\(\{source:'server'\}\)/);
+  assert.match(source,/readLocalDataSnapshot\(\)\|\|localData/);
+  assert.match(source,/SobrecargaStore\.mergeCloudSessions/);
   assert.match(source,/S\.kind==='cloud' && S\.ready && !S\.syncUnavailable/);
   assert.match(source,/Cargando y verificando los datos de la cuenta/);
   assert.doesNotMatch(source.match(/function restoreBackup\(\)[\s\S]*?\n\}/)[0],/blankDraft\(\)/);
+});
+
+test('la interfaz configura equipo cargable y diferencia peso por brazo del total', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  assert.match(source,/function loadToolSettingsHtml\(\)/);
+  assert.match(source,/Barras y máquinas cargables/);
+  assert.match(source,/data-load-tool="plates"/);
+  assert.match(source,/baseWeight:null,plates:\[\]/);
+  assert.match(source,/typeof tool\.baseWeight==='number'&&Number\.isFinite\(tool\.baseWeight\)&&tool\.plates\.length>0/);
+  assert.match(source,/No se asumirá un peso estándar/);
+  assert.match(source,/function loadingCalculatorHtml\(ex\)/);
+  assert.match(source,/Peso objetivo por brazo/);
+  assert.match(source,/ambos brazos: '\+weightText\(option\.totalKg\)\+' total/);
+  assert.match(source,/calculatePlateLoad\(selectedTool,targetKg\)/);
+  assert.match(source,/saveProfile:function\(\)\{[\s\S]*?Store\.saveLocal\(\);[\s\S]*?profDirty = true/);
 });
 
 test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros', () => {

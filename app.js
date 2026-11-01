@@ -129,13 +129,14 @@ var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
 var RTOK = RTK + ':owner';
 var WORKOUT_SIMPLE_KEY='sobrecarga:workout-simple:v1';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any'}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', loadingTools:[]}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
   p = clone(p);
   d.settings = Object.assign(d.settings, p.settings || {});
   if(!['kg','lb'].includes(d.settings.weightUnit)) d.settings.weightUnit='kg';
+  if(!Array.isArray(d.settings.loadingTools)) d.settings.loadingTools=[];
   d.settings.reminderEnabled=d.settings.reminderEnabled===true;
   if(![2,3,5,7].includes(Number(d.settings.reminderIntervalDays))) d.settings.reminderIntervalDays=3;
   if(!['any','sameRoutine'].includes(d.settings.previousExerciseScope)) d.settings.previousExerciseScope='any';
@@ -263,7 +264,7 @@ var S = {
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
   librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(), substitutionFilters:{},
-  restEndsAt:loadRestEnd(), restOwner:loadRestOwner(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:'', pendingSubstitution:null, simpleWorkoutMode:false
+  restEndsAt:loadRestEnd(), restOwner:loadRestOwner(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:'', pendingSubstitution:null, simpleWorkoutMode:false, loadingCalc:null
 };
 S.collapsedEntries=new Set(S.draft.collapsedEntryIds || []);
 try { S.simpleWorkoutMode=localStorage.getItem(WORKOUT_SIMPLE_KEY)==='1'; } catch(e){}
@@ -437,73 +438,23 @@ function withTimeout(promise, timeoutMs, message){
     });
   });
 }
-function migrateLocalDataOnce(userId, ref, col, localData){
-  var migratedKey='sobrecarga:migrated:'+userId, alreadyMigrated=false;
-  try { alreadyMigrated=localStorage.getItem(migratedKey)==='1'; }
-  catch(error){ console.warn('No se pudo comprobar el estado de migración local',error); }
-  var migration=Promise.resolve();
-  if(!alreadyMigrated && localData && (localData.profile || (localData.sessions && localData.sessions.length))){
-    migration=Promise.all([
-      ref.get({source:'server'}),
-      col.get({source:'server'})
-    ]).then(function(remoteData){
-      var remoteProfile=remoteData[0], remoteSessions=remoteData[1];
-      var migrateSessions=!remoteProfile.exists && remoteSessions.empty;
-      var writes=[];
-      if(!remoteProfile.exists && localData.profile) writes.push(ref.set(clone(localData.profile)));
-      return Promise.all(writes).then(function(){
-        if(!migrateSessions) return;
-        return (localData.sessions || []).reduce(function(queue,session){
-          return queue.then(function(){ return col.doc(session.id).set(clone(stampSession(session))); });
-        }, Promise.resolve());
-      });
-    });
-  }
-  return migration.then(function(){
-    if(!alreadyMigrated){
-      try { localStorage.setItem(migratedKey,'1'); }
-      catch(error){ console.warn('No se pudo guardar el estado de migración local',error); }
-    }
-  });
-}
-function uploadPendingLocalSessions(userId, col, localData, remoteSessions){
-  var key='sobrecarga:last-cloud-sync:'+userId, lastSync=0;
-  try { lastSync=Number(localStorage.getItem(key))||0; }
-  catch(error){ console.warn('No se pudo leer la última sincronización guardada',error); }
-  var remoteIds={};
-  (remoteSessions||[]).forEach(function(session){ if(session&&session.id) remoteIds[session.id]=true; });
-  var pendingById={};
-  ((localData&&localData.sessions)||[]).forEach(function(session){
-    if(!session||!session.id||remoteIds[session.id]) return;
-    var changedAt=Number(session.updatedAt)||Number(session.ts)||Number(session.finishedAt)||0;
-    if(changedAt<=lastSync) return;
-    var previous=pendingById[session.id];
-    if(!previous || changedAt>(Number(previous.updatedAt)||Number(previous.ts)||Number(previous.finishedAt)||0)){
-      pendingById[session.id]=session;
-    }
-  });
-  var pending=Object.keys(pendingById).map(function(id){ return pendingById[id]; });
-  return pending.reduce(function(queue,session){
-    return queue.then(function(){ return col.doc(session.id).set(clone(stampSession(session))); });
-  },Promise.resolve()).then(function(){
-    try { localStorage.setItem(key,String(Date.now())); }
-    catch(error){ console.warn('No se pudo guardar la fecha de sincronización',error); }
-    return {count:pending.length,sessions:pending};
-  });
-}
 var Store = {
-  ref:null, col:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null, cloudGeneration:0,
+  ref:null, col:null, cloudDataStore:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null, cloudGeneration:0,
   detachCloudListeners:function(){
     cloudUnsubs.forEach(function(unsubscribe){ unsubscribe(); });
     cloudUnsubs=[];
   },
   readLocalData:function(){
+    var data=Store.readLocalDataSnapshot();
+    if(data && isObject(data)){
+      S.profile=normProfile(data.profile);
+      S.sessions=Array.isArray(data.sessions) ? data.sessions : [];
+    }
+    return data;
+  },
+  readLocalDataSnapshot:function(){
     try {
       var data=JSON.parse(localStorage.getItem(LK));
-      if(data && isObject(data)){
-        S.profile=normProfile(data.profile);
-        S.sessions=Array.isArray(data.sessions) ? data.sessions : [];
-      }
       return data;
     } catch(error){
       console.warn('No se pudieron leer los datos locales',error);
@@ -585,10 +536,14 @@ var Store = {
     var root=Store.firebaseDb.collection('users').doc(user.uid);
     Store.ref=root.collection('app').doc('state');
     Store.col=root.collection('sessions');
+    Store.cloudDataStore=SobrecargaStore.createCloudDataStore({
+      userId:user.uid,ref:Store.ref,col:Store.col,storage:localStorage,clone:clone,stampSession:stampSession,localKey:LK
+    });
     cloudLoadingTimer=setTimeout(function(){
       Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudo conectar con la cuenta. Los cambios se guardan en este navegador; al recuperar conexión, usa «Sincronizar ahora».');
     },12000);
-    var migration=migrateLocalDataOnce(user.uid,Store.ref,Store.col,localData);
+    var cloudDataStore=Store.cloudDataStore;
+    var migration=cloudDataStore.migrateLocalDataOnce(localData);
     migration.then(function(){
       if(generation!==Store.cloudGeneration) return;
       var gotProfile=false, gotSessions=false, gotDraft=false, sessionsReconciled=false, sessionsReconciliation=null;
@@ -612,33 +567,42 @@ var Store = {
         if(generation!==Store.cloudGeneration) return;
         if(!snap.metadata || snap.metadata.fromCache) return;
         var remoteSessions=snap.docs.map(function(d){ return clone(d.data()); });
+        if(sessionsReconciliation) return;
+        var currentLocalData=Store.readLocalDataSnapshot()||localData;
         if(sessionsReconciled){
-          S.sessions=remoteSessions;
-          gotSessions=true; done();
-          if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+          sessionsReconciliation=cloudDataStore.uploadPendingLocalSessions(currentLocalData,remoteSessions).then(function(result){
+            if(generation!==Store.cloudGeneration) return;
+            S.sessions=SobrecargaStore.mergeCloudSessions(remoteSessions,result.sessions);
+            sessionsReconciliation=null;
+            gotSessions=true; done();
+            if(result.count) toast('Se subieron '+result.count+' entreno'+(result.count===1?' guardado':'s guardados')+' en este dispositivo');
+            if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+          }).catch(function(error){
+            if(generation!==Store.cloudGeneration) return;
+            console.warn('No se pudieron subir entrenos locales pendientes',error);
+            Store.fallbackToLocal(generation,clone(S.profile),currentLocalData.sessions||localSessions,'No se pudieron subir los entrenos guardados en este dispositivo. Se conservaron localmente; vuelve a intentar sincronizar.');
+          });
           return;
         }
-        if(sessionsReconciliation) return;
-        sessionsReconciliation=uploadPendingLocalSessions(user.uid,Store.col,localData,remoteSessions).then(function(result){
+        sessionsReconciliation=cloudDataStore.uploadPendingLocalSessions(currentLocalData,remoteSessions).then(function(result){
           if(generation!==Store.cloudGeneration) return;
-          var mergedById={};
-          remoteSessions.forEach(function(session){ if(session&&session.id) mergedById[session.id]=session; });
-          result.sessions.forEach(function(session){ if(!mergedById[session.id]) mergedById[session.id]=clone(stampSession(session)); });
-          S.sessions=Object.keys(mergedById).map(function(id){ return mergedById[id]; });
+          S.sessions=SobrecargaStore.mergeCloudSessions(remoteSessions,result.sessions);
           sessionsReconciled=true;
+          sessionsReconciliation=null;
           gotSessions=true; done();
           if(result.count) toast('Se subieron '+result.count+' entreno'+(result.count===1?' guardado':'s guardados')+' en este dispositivo');
           if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
         }).catch(function(error){
           if(generation!==Store.cloudGeneration) return;
           console.warn('No se pudieron subir entrenos locales pendientes',error);
-          Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudieron subir los entrenos guardados en este dispositivo. Se conservaron localmente; vuelve a intentar sincronizar.');
+          Store.fallbackToLocal(generation,clone(S.profile),currentLocalData.sessions||localSessions,'No se pudieron subir los entrenos guardados en este dispositivo. Se conservaron localmente; vuelve a intentar sincronizar.');
         });
       }, function(error){
         if(generation!==Store.cloudGeneration) return;
         console.warn('No se pudieron descargar los entrenos de Firebase',error);
         clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null;
-        Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudieron descargar los entrenos. Se seguirá guardando en este navegador; usa «Sincronizar ahora» cuando vuelva la conexión.');
+        var fallbackData=Store.readLocalDataSnapshot()||localData;
+        Store.fallbackToLocal(generation,clone(S.profile),fallbackData.sessions||localSessions,'No se pudieron descargar los entrenos. Se seguirá guardando en este navegador; usa «Sincronizar ahora» cuando vuelva la conexión.');
       }));
       root.collection('app').doc('draft').get({source:'server'}).then(function(snap){
         if(generation!==Store.cloudGeneration) return;
@@ -689,6 +653,7 @@ var Store = {
     S.kind = 'local';
     S.cloudUser=null;
     Store.firebaseUser=null;
+    Store.cloudDataStore=null;
     S.syncUnavailable=false;
     Store.readLocalData();
     S.ready = true; createAutoBackup(); render();
@@ -749,12 +714,14 @@ var Store = {
   },
   saveProfile:function(){
     if(!['db','cloud'].includes(S.kind)){ Store.saveLocal(); return; }
+    Store.saveLocal();
     profDirty = true; clearTimeout(profTimer); profTimer = setTimeout(function(){ Store.flush().catch(function(){}); }, 350);
   },
   saveProfileNow:function(){
     if(!['db','cloud'].includes(S.kind)){
       return Store.saveLocal() ? Promise.resolve() : Promise.reject(new Error('No se pudo guardar el perfil en este navegador'));
     }
+    Store.saveLocal();
     profDirty=true; clearTimeout(profTimer);
     return Store.flush();
   },
@@ -787,6 +754,16 @@ var Store = {
         toast('No se pudo guardar el entreno en este navegador');
         return Promise.reject(e);
       }
+    }
+    if(S.kind==='cloud' && Store.cloudDataStore){
+      return Store.cloudDataStore.saveSession(s,S.profile,S.sessions).then(function(result){
+        if(!result.synced) toast('Entreno guardado en este dispositivo; sincronización pendiente');
+        return s;
+      }).catch(function(error){
+        console.error('No se pudo guardar localmente el entreno pendiente',error);
+        toast('No se pudo guardar el entreno en este dispositivo');
+        throw error;
+      });
     }
     return Store.col.doc(s.id).set(clone(s)).then(function(){ return s; }).catch(function(error){
       toast('No se pudo guardar el entreno');
@@ -970,6 +947,10 @@ function validBackup(data){
   };
   if(profile.settings && profile.settings.mode && !['rir','rpe'].includes(profile.settings.mode)) return false;
   if(profile.settings && profile.settings.targetRir !== undefined && !validNumber(profile.settings.targetRir)) return false;
+  if(profile.settings && profile.settings.loadingTools !== undefined && (!Array.isArray(profile.settings.loadingTools) || profile.settings.loadingTools.length>10 ||
+    !profile.settings.loadingTools.every(function(tool){return isObject(tool)&&typeof tool.id==='string'&&typeof tool.name==='string'&&tool.name.trim().length>0&&tool.name.length<=50&&
+      ['bar','independent'].includes(tool.type)&&(tool.baseWeight===null||(validNumber(tool.baseWeight)&&tool.baseWeight>=0&&tool.baseWeight<=1000))&&Array.isArray(tool.plates)&&tool.plates.length<=30&&
+      tool.plates.every(function(weight){return validNumber(weight)&&weight>0&&weight<=100;});}))) return false;
   var validWarmupConfig = function(item){
     return (item.warmupMode === undefined || ['auto','manual'].includes(item.warmupMode)) &&
       (item.warmupStep === undefined || (validNumber(item.warmupStep) && item.warmupStep > 0)) &&
@@ -2534,6 +2515,61 @@ function chartSvg(pts, unit){
   g += '<text class="cv" x="' + X(pts.length-1).toFixed(1) + '" y="' + (Y(lp.y) - 10).toFixed(1) + '" text-anchor="end">' + fmt1(lp.y) + ' ' + unit + '</text>';
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Evolución del ejercicio por entreno">' + g + '</svg>';
 }
+function loadTools(){
+  return loadToolProfiles().filter(function(tool){
+    return typeof tool.baseWeight==='number'&&Number.isFinite(tool.baseWeight)&&tool.plates.length>0;
+  });
+}
+function loadToolProfiles(){
+  var tools=S.profile.settings.loadingTools;
+  return Array.isArray(tools)?tools.filter(function(tool){
+    return tool&&typeof tool.id==='string'&&typeof tool.name==='string'&&tool.name.trim()&&
+      ['bar','independent'].includes(tool.type)&&(tool.baseWeight===null||(typeof tool.baseWeight==='number'&&Number.isFinite(tool.baseWeight)&&tool.baseWeight>=0&&tool.baseWeight<=1000))&&
+      Array.isArray(tool.plates)&&tool.plates.length<=30&&
+      tool.plates.every(function(weight){return Number.isFinite(Number(weight))&&Number(weight)>0&&Number(weight)<=100;});
+  }):[];
+}
+function loadToolSettingsHtml(){
+  var tools=loadToolProfiles();
+  return '<section class="card"><p class="sec-title">Barras y máquinas cargables</p><p class="small muted">Configura cada barra o estación con su peso base y los discos disponibles por lado. Escribe un valor por cada disco y sepáralos con punto y coma; repite el valor si tienes varios iguales. Los pesos se guardan en kg y se muestran en la unidad elegida.</p>' +
+    (tools.length?'<div class="load-tool-list">'+tools.map(function(tool,index){
+      var isConfirm=S.confirm==='load-tool:'+tool.id;
+      return '<article class="load-tool-card"><h3>'+esc(tool.name||('Equipo '+(index+1)))+'</h3>'+
+        '<label class="field"><span class="lab">Nombre</span><input class="txt" data-load-tool="name" data-id="'+esc(tool.id)+'" value="'+esc(tool.name)+'" maxlength="50"></label>'+
+        '<div class="fields"><label class="field"><span class="lab">Tipo de equipo</span><select class="txt" data-load-tool="type" data-id="'+esc(tool.id)+'"><option value="bar"'+(tool.type==='bar'?' selected':'')+'>Barra con discos en ambos lados</option><option value="independent"'+(tool.type==='independent'?' selected':'')+'>Máquina de brazos independientes</option></select></label>'+
+        '<label class="field"><span class="lab">'+(tool.type==='bar'?'Peso total de la barra sin discos':'Resistencia base por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" data-load-tool="baseWeight" data-id="'+esc(tool.id)+'" inputmode="decimal" value="'+esc(weightInput(tool.baseWeight))+'"></label></div>'+
+        '<label class="field"><span class="lab">Discos disponibles para cada lado'+(tool.type==='independent'?' / brazo':'')+' ('+weightUnitLabel()+' por disco)</span><input class="txt" data-load-tool="plates" data-id="'+esc(tool.id)+'" value="'+esc(tool.plates.map(function(weight){return weightInput(weight);}).join('; '))+'" placeholder="20; 10; 5; 2,5"></label>'+
+        '<p class="small muted">'+(tool.type==='bar'?'El peso objetivo incluye la barra.':'El objetivo se interpreta por brazo; la calculadora también mostrará el total de los dos brazos.')+'</p>'+
+        ((typeof tool.baseWeight!=='number'||!Number.isFinite(tool.baseWeight)||!tool.plates.length)?'<p class="small warn-text">Para habilitar el cálculo, indica el peso base y al menos un disco disponible por lado. No se asumirá un peso estándar.</p>':'')+
+        '<div class="row">'+(isConfirm?'<button class="btn danger sm" data-act="load-tool-remove-ok" data-id="'+esc(tool.id)+'">Confirmar eliminar</button><button class="btn ghost sm" data-act="load-tool-remove-cancel">Cancelar</button>':'<button class="btn ghost sm" data-act="load-tool-remove" data-id="'+esc(tool.id)+'">Eliminar equipo</button>')+'</div></article>';
+    }).join(''):'<p class="small muted">Todavía no has configurado una barra o máquina cargable.</p>')+
+    '<button class="btn ghost sm" data-act="load-tool-add"'+(tools.length>=10?' disabled':'')+'>Añadir equipo cargable</button></section>';
+}
+function loadingCalculatorHtml(ex){
+  var tools=loadTools();
+  if(!tools.length) return '<section class="load-calculator"><h3>Calculadora de discos</h3><p class="small muted">Configura el peso base y los discos de una barra o máquina en Ajustes → Barras y máquinas cargables. La app no supondrá pesos de fábrica.</p><button class="btn ghost sm" data-act="tab" data-tab="ajustes">Configurar equipo</button></section>';
+  var selected=tools.filter(function(tool){return tool.id===ex.loadToolId;})[0]||tools[0];
+  var current=S.loadingCalc&&S.loadingCalc.exId===ex.id&&S.loadingCalc.toolId===selected.id?S.loadingCalc:null;
+  var options=tools.map(function(tool){return '<option value="'+esc(tool.id)+'"'+(tool.id===selected.id?' selected':'')+'>'+esc(tool.name)+'</option>';}).join('');
+  var inputId='loading-target-'+esc(ex.id);
+  var result='';
+  if(current&&current.result){
+    var optionHtml=function(label,option){
+      if(!option) return '';
+      var plates=option.plates.length?option.plates.map(function(weight){return weightText(weight);}).join(' + '):'sin discos adicionales';
+      return '<div class="load-result-option"><strong>'+label+'</strong>'+(selected.type==='bar'
+        ? '<span>Total: '+weightText(option.totalKg)+' · barra: '+weightText(selected.baseWeight)+' · discos por lado: '+plates+'</span>'
+        : '<span>Por brazo: '+weightText(option.perArmKg)+' · discos en cada brazo: '+plates+' · ambos brazos: '+weightText(option.totalKg)+' total</span>')+'</div>';
+    };
+    result='<div class="load-result" aria-live="polite">'+(current.result.exact
+      ? '<p class="small"><strong>Combinación exacta</strong></p>'+optionHtml('Objetivo',current.result.lower)
+      : '<p class="small"><strong>No hay una combinación exacta con los discos configurados.</strong></p>'+optionHtml('Más cercano por debajo',current.result.lower)+optionHtml('Más cercano por encima',current.result.upper))+'</div>';
+  }
+  return '<section class="load-calculator"><h3>Calculadora de discos</h3><p class="small muted">Calcula una combinación orientativa; verifica los discos y la carga real del equipo antes de usarla.</p>'+
+    '<label class="field"><span class="lab">Barra o máquina</span><select class="txt" data-cfg="loadToolId" data-id="'+esc(ex.id)+'">'+options+'</select></label>'+
+    '<label class="field"><span class="lab">'+(selected.type==='bar'?'Peso total objetivo':'Peso objetivo por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" inputmode="decimal" data-loading-target value="'+(current?esc(fmt(fromKg(current.targetKg))):'')+'" id="'+inputId+'"></label>'+
+    '<button class="btn ghost sm" data-act="calculate-loading" data-id="'+esc(ex.id)+'">Calcular discos</button>'+result+'</section>';
+}
 function exDetail(ex){
   var hist = entriesFor(ex.id);
   var records = personalRecords(ex);
@@ -2581,6 +2617,7 @@ function exDetail(ex){
         return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-cfg="warmupPercent" data-id="' + esc(ex.id) + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
       }).join('') + '</div></div>' : '') + '<div class="fields">' +
       '<div class="field"><label class="lab" for="cfg-unilateral">Ejecución</label><select id="cfg-unilateral" class="txt" data-cfg="unilateral" data-id="' + esc(ex.id) + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div></div>' +
+    loadingCalculatorHtml(ex) +
     (S.confirm === 'arch:' + ex.id
       ? '<button class="btn danger sm" data-act="archive-ok" data-id="' + esc(ex.id) + '">Confirmar: archivar</button>'
       : '<button class="btn ghost sm" data-act="archive" data-id="' + esc(ex.id) + '">Archivar ejercicio</button>') + '</div>';
@@ -2842,6 +2879,7 @@ function viewSet(){
   var hasDemo = S.sessions.some(function(s){ return s.demo; });
   var out = '<div class="head-row"><h2>Ajustes</h2></div>';
   out += '<section class="card"><p class="sec-title">Unidades de peso</p><label class="field"><span class="lab">Mostrar e ingresar pesos en</span><select class="txt" data-setting="weightUnit"><option value="kg"' + (st.weightUnit==='kg'?' selected':'') + '>Kilogramos (kg)</option><option value="lb"' + (st.weightUnit==='lb'?' selected':'') + '>Libras (lb)</option></select></label><p class="small muted">Cambiar esta opción solo convierte lo que ves y escribes. Los datos se conservan en kg para mantener la sincronización, el historial y la progresión consistentes.</p></section>';
+  out += loadToolSettingsHtml();
   out += '<section class="card"><p class="sec-title">Escala de esfuerzo</p><div class="seg" role="group" aria-label="Escala de esfuerzo">' +
     '<button data-act="set-mode" data-mode="rir" aria-pressed="' + (st.mode === 'rir') + '">RIR</button>' +
     '<button data-act="set-mode" data-mode="rpe" aria-pressed="' + (st.mode === 'rpe') + '">RPE</button></div>' +
@@ -3184,7 +3222,7 @@ function finish(updateRoutine){
   if(rt){ session.routineId = rt.id; session.routineName = rt.name; }
   Store.saveSession(session).then(function(){
     S.finishSaving = false;
-    S.sessions.push(session);
+    S.sessions=S.sessions.filter(function(item){return item.id!==session.id;}).concat([session]);
     S.justSaved = {session:session, next:saved};
     S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
     render(); window.scrollTo(0, 0);
@@ -3225,6 +3263,35 @@ function onClick(ev){
         toast(error && error.message ? error.message : 'No se pudo completar la sincronización; tus datos locales se conservaron');
       });
       break;
+    case 'load-tool-add':
+      var loadingTools=S.profile.settings.loadingTools||[];
+      if(loadingTools.length>=10){toast('Puedes configurar hasta 10 equipos');break;}
+      var newTool={id:uid('tool_'),name:'Equipo cargable '+(loadingTools.length+1),type:'bar',baseWeight:null,plates:[]};
+      S.profile.settings.loadingTools=loadingTools.concat([newTool]);
+      Store.saveProfile();render();break;
+    case 'load-tool-remove':
+      if(loadToolProfiles().some(function(tool){return tool.id===t.dataset.id;})){S.confirm='load-tool:'+t.dataset.id;render();}
+      break;
+    case 'load-tool-remove-cancel':
+      S.confirm=null;render();break;
+    case 'load-tool-remove-ok':
+      var removeToolId=t.dataset.id;
+      if(S.confirm!=='load-tool:'+removeToolId) break;
+      S.profile.settings.loadingTools=(S.profile.settings.loadingTools||[]).filter(function(tool){return !tool||tool.id!==removeToolId;});
+      Object.keys(S.profile.exercises).forEach(function(id){if(S.profile.exercises[id].loadToolId===removeToolId) delete S.profile.exercises[id].loadToolId;});
+      S.loadingCalc=null;S.confirm=null;Store.saveProfile();render();toast('Equipo eliminado; los entrenos no se modificaron');break;
+    case 'calculate-loading':
+      var calcExercise=exById(t.dataset.id), calcContainer=t.closest('.load-calculator');
+      if(!calcExercise||!calcContainer) break;
+      var calcTarget=num(calcContainer.querySelector('[data-loading-target]').value);
+      if(calcTarget===null||calcTarget<0||calcTarget>1000){toast('Introduce un peso objetivo válido');break;}
+      var availableTools=loadTools(), selectedTool=availableTools.filter(function(tool){return tool.id===calcExercise.loadToolId;})[0]||availableTools[0];
+      if(!selectedTool){toast('Configura primero una barra o máquina');break;}
+      var targetKg=toKg(calcTarget), calculation=SobrecargaEngine.calculatePlateLoad(selectedTool,targetKg);
+      if(!calculation){toast('Revisa el peso base y los discos configurados');break;}
+      calcExercise.loadToolId=selectedTool.id;
+      S.loadingCalc={exId:calcExercise.id,toolId:selectedTool.id,targetKg:targetKg,result:calculation};
+      Store.saveProfile();render();break;
     case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
     case 'reminder-dismiss':
@@ -3664,6 +3731,35 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.loadTool!==undefined){
+    var tool=S.profile.settings.loadingTools&&S.profile.settings.loadingTools.filter(function(item){return item.id===t.dataset.id;})[0];
+    if(!tool){render();return;}
+    if(t.dataset.loadTool==='name'){
+      var toolName=t.value.trim();
+      if(!toolName||toolName.length>50){toast('Escribe un nombre de hasta 50 caracteres');render();return;}
+      tool.name=toolName;
+    }else if(t.dataset.loadTool==='type'){
+      if(!['bar','independent'].includes(t.value)){render();return;}
+      tool.type=t.value;S.loadingCalc=null;
+    }else if(t.dataset.loadTool==='baseWeight'){
+      var baseWeight=toKg(t.value);
+      if(baseWeight===null||baseWeight<0||baseWeight>1000){toast('El peso base debe estar entre 0 y 1000 '+weightUnitLabel());render();return;}
+      tool.baseWeight=baseWeight;
+    }else if(t.dataset.loadTool==='plates'){
+      var rawPlates=t.value.trim()?t.value.split(';'):[];
+      var parsedPlates=rawPlates.map(function(value){return toKg(value.trim());});
+      if(parsedPlates.length>30||parsedPlates.some(function(value){return value===null||value<=0||value>100;})){
+        toast('Revisa los discos: usa hasta 30 pesos positivos separados por punto y coma');render();return;
+      }
+      tool.plates=parsedPlates;
+    }else{render();return;}
+    Store.saveProfile();render();return;
+  }
+  if(t.dataset.cfg==='loadToolId'){
+    var selectedForExercise=exById(t.dataset.id), selectedToolExists=loadTools().some(function(tool){return tool.id===t.value;});
+    if(!selectedForExercise||!selectedToolExists){render();return;}
+    selectedForExercise.loadToolId=t.value;S.loadingCalc=null;Store.saveProfile();render();return;
+  }
   if(t.dataset.workoutSubstitution!==undefined){
     var substitutionEntry=S.draft.entries[+t.dataset.ei], selectedExercise=t.value;
     if(!substitutionEntry) return;

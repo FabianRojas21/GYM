@@ -51,6 +51,70 @@
         : total;
     },0);
   }
+  function calculatePlateLoad(profile, targetKg){
+    if(!profile || !['bar','independent'].includes(profile.type)) return null;
+    var target=Number(targetKg), base=profile.baseWeight===undefined?0:Number(profile.baseWeight);
+    if(!Number.isFinite(target)||target<0||target>1000||!Number.isFinite(base)||base<0||base>1000) return null;
+    if(profile.plates!==undefined&&(!Array.isArray(profile.plates)||profile.plates.length>30)) return null;
+    var rawPlates=profile.plates||[];
+    if(!rawPlates.every(function(value){return Number.isFinite(Number(value))&&Number(value)>0&&Number(value)<=100;})) return null;
+    var plates=rawPlates.map(function(value){
+      var weight=Number(value);
+      return Math.round(weight*1000);
+    });
+    var arms=profile.type==='independent'?2:1;
+    var desired=Math.round((profile.type==='bar'?(target-base)/2:target-base)*1000);
+    var totalAvailable=plates.reduce(function(sum,weight){return sum+weight;},0);
+    var maxPlate=Math.max.apply(null,[0].concat(plates));
+    var ceiling=Math.min(Math.max(0,desired)+maxPlate,totalAvailable);
+    var reached=new Uint8Array(ceiling+1), previousSum=new Int32Array(ceiling+1), previousPlate=new Int8Array(ceiling+1);
+    previousSum.fill(-1);previousPlate.fill(-1);reached[0]=1;
+    plates.forEach(function(plate,index){
+      for(var amount=ceiling;amount>=plate;amount--){
+        if(!reached[amount]&&reached[amount-plate]){
+          reached[amount]=1;previousSum[amount]=amount-plate;previousPlate[amount]=index;
+        }
+      }
+    });
+    var lower=null, upper=null;
+    for(var lowerSearch=Math.min(desired,ceiling);lowerSearch>=0;lowerSearch--){
+      if(reached[lowerSearch]){lower=lowerSearch;break;}
+    }
+    for(var upperSearch=Math.max(0,desired);upperSearch<=ceiling;upperSearch++){
+      if(reached[upperSearch]){upper=upperSearch;break;}
+    }
+    var makeOption=function(amount){
+      if(amount===undefined) return null;
+      var diskWeight=amount/1000;
+      var actualPerUnit=base+diskWeight;
+      var total=profile.type==='bar'?base+2*diskWeight:actualPerUnit*2;
+      var selectedPlates=[], cursor=amount;
+      while(cursor>0){
+        var index=previousPlate[cursor];
+        if(index<0) return null;
+        selectedPlates.push(plates[index]/1000);
+        cursor=previousSum[cursor];
+      }
+      selectedPlates.sort(function(a,b){return b-a;});
+      return {
+        plates:selectedPlates,
+        addedPerSideKg:diskWeight,
+        perArmKg:actualPerUnit,
+        totalKg:total,
+        exact:Math.abs((profile.type==='bar'?total:actualPerUnit)-target)<0.0005
+      };
+    };
+    var lowerOption=makeOption(lower===null?undefined:lower), upperOption=makeOption(upper===null?undefined:upper);
+    return {
+      type:profile.type,
+      targetKg:target,
+      baseWeightKg:base,
+      arms:arms,
+      lower:lowerOption,
+      upper:upperOption,
+      exact:!!(lowerOption&&lowerOption.exact)
+    };
+  }
   function isUnilateralEntry(entry){
     return !!(entry && entry.unilateral) ||
       !!(entry && Array.isArray(entry.sets) && entry.sets.some(function(set){
@@ -315,7 +379,7 @@
   return {
     analyze:analyze, analyzeCore:analyzeCore, effortTarget:effortTarget, effTxt:effTxt, targetText:targetText,
     countsForProgress:countsForProgress, isEffectiveSet:isEffectiveSet, countEffectiveSets:countEffectiveSets,
-    entryVolume:entryVolume, isUnilateralEntry:isUnilateralEntry, groupFactors:groupFactors,
+    entryVolume:entryVolume, calculatePlateLoad:calculatePlateLoad, isUnilateralEntry:isUnilateralEntry, groupFactors:groupFactors,
     inferSecondaryMuscles:inferSecondaryMuscles, muscleAssignments:muscleAssignments,
     curatedMuscleProfile:curatedMuscleProfile,
     muscleGroupId:muscleGroupId, effectiveBodyweight:effectiveBodyweight,

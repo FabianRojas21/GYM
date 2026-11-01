@@ -330,6 +330,13 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .secondary-muscle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;max-height:280px;overflow:auto;padding:2px}
 .secondary-muscle-option{display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px;color:var(--text);font-size:13px;line-height:1.25}
 .secondary-muscle-option:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.load-tool-list{display:grid;gap:10px;margin-bottom:10px}
+.load-tool-card,.load-calculator{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
+.load-tool-card h3,.load-calculator h3{font:600 18px/1.1 var(--font-display);letter-spacing:.02em;text-transform:uppercase}
+.load-tool-card .field,.load-calculator .field{margin:0}
+.load-result{display:grid;gap:8px;padding-top:8px;border-top:1px solid var(--line)}
+.load-result-option{display:flex;flex-direction:column;gap:4px;padding:9px 10px;border-radius:7px;background:var(--surface)}
+.load-result-option span{font-size:13px;line-height:1.4;color:var(--muted)}
 .weekly-muscle-row small{display:block;margin-top:3px;color:var(--muted);font-size:12px}
 .muscle-volume-detail{margin-top:6px;color:var(--muted);font-size:12px}.muscle-volume-detail summary{cursor:pointer}.muscle-volume-detail div{display:flex;justify-content:space-between;gap:8px;padding-top:5px}.muscle-volume-detail strong{font-size:12px}
 .warn-text{margin:6px 0 0;color:var(--warn);font-size:13px}

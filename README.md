@@ -9,6 +9,7 @@ App de gimnasio para PC y móvil.
 - `app.js`: interfaz, almacenamiento y flujo de la aplicación.
 - `engine.js`: motor independiente de progresión.
 - `backup.js`: migración y serialización de respaldos.
+- `store.js`: operaciones de persistencia y reconciliación de datos de Firebase.
 - `sw.js` y los iconos PNG: instalación offline como PWA.
 - `engine.test.js`: pruebas ejecutables con `node --test`.
 
@@ -34,7 +35,11 @@ lista. Cuando vuelva la conexión, usa **Sincronizar ahora** en Ajustes; espera
 el aviso de confirmación antes de cerrar o recargar la app. La sincronización
 manual usa long-polling y deja de esperar cada escritura tras 15 segundos sin
 respuesta; muestra qué parte no respondió y conserva los datos locales para que
-puedas corregir la conexión y volver a intentarlo.
+puedas corregir la conexión y volver a intentarlo. Los entrenos nuevos se
+escriben primero en el almacenamiento local; si la escritura remota falla, la
+app avisa que quedaron guardados en este dispositivo. Al reconectar, compara
+los IDs locales con los de la nube y sube los pendientes, sin restaurar
+entrenos antiguos que ya se habían sincronizado y luego borrado.
 
 En **Ajustes → Recordatorio de entrenamiento** puedes activar un aviso dentro
 de la app después de 2, 3, 5 o 7 días sin registrar un entreno. Está apagado
@@ -110,6 +115,18 @@ compatibilidad con entrenamientos, respaldos, rutinas y sincronización; cambiar
 la unidad solo modifica la presentación y la conversión de las nuevas entradas.
 El CSV exportado conserva la columna `peso_kg`; al importar, se aceptan también
 las columnas explícitas `peso_lb` y `weight_lb`, que se convierten a kg.
+
+En **Ajustes → Barras y máquinas cargables** puedes crear hasta diez equipos
+para la calculadora de discos. Configura el tipo, peso base y cada disco
+disponible por lado, en la unidad elegida; repite un valor si hay más discos
+iguales por lado. Para una barra, el objetivo es el peso total e incluye la
+barra sin discos. Para una máquina de brazos independientes, el objetivo es
+por brazo y la app también muestra el total de ambos; no divide el peso entre
+los brazos. No se suponen pesos estándar: para habilitar el cálculo debes
+indicar el peso base y al menos un disco por lado o brazo. El cálculo usa los
+discos configurados, se guarda en kg y solo es una referencia: confirma la
+carga real de la barra o máquina. No modifica las series ni el peso guardado
+en los entrenos.
 
 En **Ajustes → Valores anteriores al entrenar** puedes definir el alcance de
 búsqueda: la última vez que hiciste el ejercicio en cualquier rutina
