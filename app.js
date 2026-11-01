@@ -37,7 +37,7 @@ function weightText(value){
   return weightInput(value)+' '+currentWeightUnit();
 }
 function weightUnitLabel(){ return currentWeightUnit(); }
-function loadVolume(value){ return currentWeightUnit()==='lb' ? Number(value)/KG_PER_LB : Number(value); }
+function volumeInCurrentUnit(value){ return currentWeightUnit()==='lb' ? Number(value)/KG_PER_LB : Number(value); }
 var validWeight = function(v){ var n=num(v); return n !== null && n >= 0 && n <= MAX_WEIGHT_KG; };
 var validReps = function(v){ var n=num(v); return n !== null && n > 0 && n <= MAX_REPS; };
 var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
@@ -198,10 +198,25 @@ function muscleOptions(selected){
     return '<option value="' + id + '"' + (muscleId({muscle:selected}) === id ? ' selected' : '') + '>' + MUSCLES[id] + '</option>';
   }).join('');
 }
+function curatedMuscleProfile(ex){
+  var profile=SobrecargaEngine.curatedMuscleProfile(ex&&ex.name);
+  return profile&&profile.muscle===muscleId(ex||{})?profile:null;
+}
 function normalizedSecondaryMuscles(ex){
   var explicit=(ex.secondaryMuscles||[]).map(function(id){ return LEGACY_MUSCLE_IDS[id] || id; }).filter(function(id){ return MUSCLES[id] && id!==muscleId(ex); });
   if(explicit.length || Array.isArray(ex.secondaryMuscles)) return explicit.filter(function(id,index){ return explicit.indexOf(id)===index; });
+  var profile=curatedMuscleProfile(ex);
+  if(profile) return profile.secondaryMuscles.filter(function(id){ return MUSCLES[id] && id!==muscleId(ex); });
   return SobrecargaEngine.inferSecondaryMuscles(muscleId(ex),ex.name).filter(function(id,index,all){ return MUSCLES[id] && id!==muscleId(ex) && all.indexOf(id)===index; });
+}
+function muscleAssignmentSource(ex){
+  if(ex.muscleMapping==='manual') return 'manual';
+  if(Array.isArray(ex.secondaryMuscles)) return ex.muscleMapping==='catalog'?'catalog':'manual';
+  return curatedMuscleProfile(ex)?'catalog':'suggested';
+}
+function muscleAssignmentSourceLabel(ex){
+  var source=muscleAssignmentSource(ex);
+  return source==='catalog'?'Sugerencia curada del catálogo':source==='suggested'?'Sugerencia automática por nombre y músculo principal':'Configuración personal';
 }
 function muscleAssignments(ex){
   var primary = muscleId(ex);
@@ -1828,7 +1843,7 @@ function savedHtml(){
       '<div><strong>' + session.entries.length + '</strong><span>Ejercicios</span></div>' +
       '<div><strong>' + stats.effectiveSets + '</strong><span>Series efectivas</span></div>' +
       '<div><strong>' + stats.reps + '</strong><span>Reps sin aproximaciones</span></div>' +
-      '<div><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '</strong><span>Volumen sin aprox.</span></div></div>' +
+      '<div><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>Carga × reps · sin aproximaciones</span></div></div>' +
     '<div class="list"><p class="sec-title">Lo que hiciste</p>' + exercises + '</div>' +
     '<div class="list"><p class="sec-title">Objetivo para la próxima sesión</p>' +
       (items || '<p class="small muted">Registra otro entreno para obtener sugerencias.</p>') + '</div></section>';
@@ -1915,7 +1930,7 @@ function recoveryHtml(){
     '<details class="volume-help"><summary>Cómo interpretar estos datos</summary><p>La carga suma series efectivas recientes: las secundarias cuentan al 50 %, el esfuerzo registrado ajusta ligeramente el aporte y las sesiones más antiguas pesan menos. Como referencia visual, menos de 1,5 series equivalentes es carga baja, de 1,5 a menos de 4 es moderada y 4 o más es alta. «Sin carga reciente» o «Sin datos suficientes» no significan que el músculo esté recuperado. La autoevaluación es opcional y no cambia tus recomendaciones de peso.</p></details></section>';
 }
 function weeklyMuscleSummaryHtml(week){
-  var counts = {}, directCounts = {}, indirectCounts = {}, groupCounts = {}, groupDirect = {}, groupIndirect = {};
+  var counts = {}, groupCounts = {}, groupDirect = {}, groupIndirect = {};
   week.forEach(function(session){
     session.entries.forEach(function(entry){
       var count = entryEffectiveSets(entry);
@@ -1923,8 +1938,6 @@ function weeklyMuscleSummaryHtml(week){
       var exercise = exById(entry.exId);
       muscleAssignments(exercise || {}).forEach(function(assignment){
         counts[assignment.id] = (counts[assignment.id] || 0) + count * assignment.factor;
-        if(assignment.factor === 1) directCounts[assignment.id] = (directCounts[assignment.id] || 0) + count;
-        else indirectCounts[assignment.id] = (indirectCounts[assignment.id] || 0) + count;
       });
       var perGroup=SobrecargaEngine.groupFactors(muscleAssignments(exercise||{}));
       Object.keys(perGroup).forEach(function(group){
@@ -1948,8 +1961,8 @@ function weeklyMuscleSummaryHtml(week){
         var subgroups=details.length>1 ? '<details class="muscle-volume-detail"><summary>Ver subdivisiones</summary>'+details.map(function(id){ return '<div><span>'+esc(MUSCLES[id])+'</span><strong>'+fmt1(counts[id])+' estimadas</strong></div>'; }).join('')+'</details>' : '';
         var directLabel=groupDirect[group]||0;
         var indirectLabel=groupIndirect[group]||0;
-        var secondary=indirectLabel ? ' · '+fmt1(indirectLabel)+' indirectas × 0,5 = '+fmt1(indirectLabel*0.5) : '';
-        return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLE_GROUPS[group] || group) + '</span><small>' + fmt1(directLabel) + ' directas' + secondary + (details.length===1 ? ' · '+esc(MUSCLES[details[0]]) : '') + '</small>' + subgroups + '</div><strong>' + fmt1(groupCounts[group]) + ' estimadas</strong></div>';
+        var secondary=' · '+fmt1(indirectLabel)+' series secundarias → '+fmt1(indirectLabel*0.5)+' estimadas';
+        return '<div class="weekly-muscle-row"><div><span>' + esc(MUSCLE_GROUPS[group] || group) + '</span><small>' + fmt1(directLabel) + ' series directas' + secondary + (details.length===1 ? ' · '+esc(MUSCLES[details[0]]) : '') + '</small>' + subgroups + '</div><strong>' + fmt1(groupCounts[group]) + ' equivalentes</strong></div>';
       }).join('') + '</div>'
     : '<p class="home-weekly-note">Aún no hay series efectivas registradas esta semana.</p>';
   var now=new Date(), today=iso(now);
@@ -1981,7 +1994,7 @@ function weeklyMuscleSummaryHtml(week){
     var effort=average===null?'':' · esfuerzo registrado '+(average<=1?'alto':average<=2?'moderado':'bajo');
     return '<div class="weekly-muscle-row"><span>'+esc(MUSCLE_GROUPS[group] || group)+'</span><strong>'+esc(trend+effort)+'</strong></div>';
   }).join('');
-  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><details class="volume-help"><summary>Cómo se calcula el volumen y el esfuerzo</summary><p>Las series directas cuentan completas; las indirectas se estiman al 50 % y el total suma ambas contribuciones. El esfuerzo se resume a partir del RIR/RPE guardado; no equivale por sí solo a medir la fatiga o recuperación muscular.</p></details></div>' +
+  return '<section class="weekly-muscles"><div><h3>Series efectivas por músculo</h3><p class="home-weekly-note">Las series equivalentes estiman el estímulo muscular; no son el volumen de carga (peso × repeticiones).</p><details class="volume-help"><summary>Cómo se calcula el volumen y el esfuerzo</summary><p>Las series directas cuentan completas; cada serie secundaria se estima como 0,5. El total equivalente suma ambas contribuciones. Las porciones de un mismo grupo no se duplican. El esfuerzo se resume a partir del RIR/RPE guardado; no equivale por sí solo a medir la fatiga o recuperación muscular.</p></details></div>' +
     content + (trends?'<div class="weekly-muscle-list"><p class="small muted">Tendencia frente al promedio semanal anterior</p>'+trends+'</div>':'') + (counts.unassigned ? '<p class="home-weekly-note">Asigna un grupo muscular desde Biblioteca → Ejercicios para organizar «Sin asignar».</p>' : '') + '</section>';
 }
 function suggestHtml(){
@@ -2203,7 +2216,7 @@ function saveSessionEdit(){
     render();
   });
 }
-function volumeText(volume){ return new Intl.NumberFormat('es-CL', {maximumFractionDigits:0}).format(Math.round(loadVolume(volume))); }
+function volumeText(volume){ return new Intl.NumberFormat('es-CL', {maximumFractionDigits:0}).format(Math.round(volumeInCurrentUnit(volume))); }
 function homeDashboard(){
   var start = new Date(), mondayOffset = (start.getDay() + 6) % 7;
   start.setDate(start.getDate() - mondayOffset); start.setHours(0, 0, 0, 0);
@@ -2221,7 +2234,7 @@ function homeDashboard(){
     '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
-    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '</strong><span>volumen · sin aprox.</span></div></div>' +
+    '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>carga × reps · sin aprox.</span></div></div>' +
     workoutReminderHtml(latest) +
     '<button class="btn home-start" data-act="start"><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
     weeklyMuscleSummaryHtml(week);
@@ -2234,7 +2247,7 @@ function homeDashboard(){
     }).join('');
     out += '<section class="latest-workout"><div class="latest-head"><div><span class="home-eyebrow">Tu actividad reciente</span><h3>' + esc(latest.routineName || (latest.demo ? 'Entreno de ejemplo' : 'Entrenamiento')) + '</h3><span class="latest-date">' + esc(dFmt(latest.date, {weekday:'long', day:'numeric', month:'long'})) + '</span></div>' +
       '<button class="text-button" data-act="tab" data-tab="historial">Ver historial</button></div>' +
-      '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' ' + weightUnitLabel() + '</strong> volumen sin aprox.</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
+      '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' ' + weightUnitLabel() + '·reps</strong> carga × reps · sin aprox.</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
       (exercises ? '<div class="home-exercises">' + exercises + (latest.entries.length > 6 ? '<span class="more-exercises">+' + (latest.entries.length - 6) + ' más</span>' : '') + '</div>' : '') +
       '</section>';
   } else {
@@ -2493,11 +2506,11 @@ function exDetail(ex){
     var sets=effectiveSetsFor(ex,h.sets,h.date).filter(function(s){ return setType(s)==='normal' && Number(s.w)>0 && Number(s.r)>0; });
     var y=null;
     if(S.progressMetric==='weight') y=sets.length?fromKg(Math.max.apply(null,sets.map(function(s){ return Number(s.w); }))):null;
-    if(S.progressMetric==='volume') y=sets.length?loadVolume(sets.reduce(function(total,s){ return total+Number(s.w)*Number(s.r); },0)):null;
+    if(S.progressMetric==='volume') y=sets.length?volumeInCurrentUnit(sets.reduce(function(total,s){ return total+Number(s.w)*Number(s.r); },0)):null;
     if(S.progressMetric==='estimated'){ var estimated=estimatedEx1rm(ex,sets); y=estimated===null?null:fromKg(estimated); }
     return y!==null ? {label:dFmt(h.date),y:y} : null;
   }).filter(Boolean);
-  var metricLabels={weight:'Peso máximo',estimated:'1RM estimado',volume:'Volumen'};
+  var metricLabels={weight:'Peso máximo',estimated:'1RM estimado',volume:'Carga × reps'};
   var chartControls='<div class="seg" role="group" aria-label="Métrica de progreso">'+
     ['weight','estimated','volume'].map(function(metric){ return '<button data-act="progress-metric" data-metric="'+metric+'" aria-pressed="'+(S.progressMetric===metric)+'">'+esc(metricLabels[metric])+'</button>'; }).join('')+'</div>';
   var rows = hist.slice(-5).reverse().map(function(h){
@@ -2514,7 +2527,7 @@ function exDetail(ex){
       f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
       '</div><div class="fields"><div class="field"><label class="lab" for="cfg-equipment">Equipo</label><select id="cfg-equipment" class="txt" data-cfg="equipment" data-id="' + esc(ex.id) + '">' + Object.keys(EQUIPMENT_TYPES).map(function(id){return '<option value="' + id + '"' + (exerciseEquipment(ex)===id?' selected':'') + '>' + esc(EQUIPMENT_TYPES[id]) + '</option>';}).join('') + '</select></div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div></div>' +
-      '<fieldset class="field"><legend class="lab">Músculos secundarios estimados</legend><p class="small muted">Aportan aproximadamente 0,5 serie efectiva. Puedes desmarcarlos si no participan en este ejercicio.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
+      '<fieldset class="field"><legend class="lab">Músculos secundarios</legend><p class="small muted">Fuente: ' + esc(muscleAssignmentSourceLabel(ex)) + '. Cada serie efectiva secundaria aporta 0,5 serie equivalente estimada (no se suma a carga × reps). Revisa la sugerencia y edítala según tu técnica.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
         var selected = normalizedSecondaryMuscles(ex).indexOf(id) >= 0;
         return '<label class="secondary-muscle-option"><input type="checkbox" data-cfg="secondary-muscle" data-id="' + esc(ex.id) + '" value="' + esc(id) + '"' + (selected ? ' checked' : '') + '> <span>' + esc(MUSCLES[id]) + '</span></label>';
       }).join('') + '</div></fieldset>' +
@@ -2603,7 +2616,7 @@ function historySummaryHtml(matches){
     var previous=historyAggregate(historySessionsInWindow(window.previousStart,window.previousEnd,S.historyQuery.trim().toLocaleLowerCase('es')));
     trendHtml='<p class="small muted">Comparación con los '+S.historyRange+' días anteriores · entrenos: '+esc(historyTrend(current.sessions,previous.sessions))+' · series efectivas: '+esc(historyTrend(current.effectiveSets,previous.effectiveSets))+' · volumen: '+esc(historyTrend(current.volume,previous.volume))+'</p>';
   }
-  return '<section class="card history-summary"><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' '+weightUnitLabel()+'·reps</strong><span>volumen</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
+  return '<section class="card history-summary"><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' '+weightUnitLabel()+'·reps</strong><span>carga × reps</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
 }
 function routineItemsFromSession(session,exerciseMap){
   return session.entries.reduce(function(items,entry){
@@ -2736,7 +2749,7 @@ function profileSummary(){
   return '<section class="card"><p class="sec-title">Resumen personal</p><div class="weekly-stats">'+
     '<div class="weekly-stat"><span>Entrenos</span><strong>'+S.sessions.length+'</strong><small>'+recent.length+' últimos 7 días</small></div>'+
     '<div class="weekly-stat"><span>Ejercicios usados</span><strong>'+Object.keys(uniqueExercises).length+'</strong><small>'+effectiveSets+' series efectivas totales</small></div>'+
-    '<div class="weekly-stat"><span>Volumen total</span><strong>'+volumeText(totalVolume)+' '+weightUnitLabel()+'</strong><small>'+humanDuration(totalDuration)+' acumulados</small></div>'+
+    '<div class="weekly-stat"><span>Carga × reps</span><strong>'+volumeText(totalVolume)+' '+weightUnitLabel()+'·reps</strong><small>'+humanDuration(totalDuration)+' acumulados</small></div>'+
     '<div class="weekly-stat"><span>Peso corporal</span><strong>'+ (latestWeight?weightText(latestWeight.values.weight):'—')+'</strong><small>'+ (latestWeight?esc(dFmt(latestWeight.date)):'Sin medir')+'</small></div></div></section>'+weeklyMuscleSummaryHtml(week)+recoveryHtml()+goalsHtml();
 }
 function profileExercises(){
@@ -2981,7 +2994,9 @@ function ensureExercise(target){
     else {
       var l = LIB.filter(function(x){ return x.name === name; })[0];
       id = uid('e_');
-      S.profile.exercises[id] = {id:id, name:l.name, sets:l.sets, min:l.min, max:l.max, inc:l.inc};
+      var profile=SobrecargaEngine.curatedMuscleProfile(l.name);
+      S.profile.exercises[id] = Object.assign({id:id, name:l.name, sets:l.sets, min:l.min, max:l.max, inc:l.inc},
+        profile ? Object.assign({},profile,{muscleMapping:'catalog'}) : {});
     }
     Store.saveProfile();
   }
@@ -3890,6 +3905,7 @@ function onChange(ev){
   if(key === 'secondary-muscle' || t.dataset.cfg === 'secondary-muscle'){
     var container=t.closest('.secondary-muscle-grid');
     ex.secondaryMuscles=container ? Array.from(container.querySelectorAll('input[data-cfg="secondary-muscle"]:checked')).map(function(input){ return input.value; }).filter(function(id){ return id !== muscleId(ex) && MUSCLES[id]; }) : [];
+    ex.muscleMapping='manual';
     Store.saveProfile(); render(); return;
   }
   if(key === 'loadMode'){
@@ -3917,7 +3933,13 @@ function onChange(ev){
   if(key === 'muscle'){
     if(!Object.prototype.hasOwnProperty.call(MUSCLES, t.value)){ render(); return; }
     ex.muscle = t.value;
-    if(Array.isArray(ex.secondaryMuscles)) ex.secondaryMuscles = ex.secondaryMuscles.filter(function(id){ return id !== t.value; });
+    if(ex.muscleMapping==='catalog'){
+      delete ex.secondaryMuscles;
+      delete ex.muscleMapping;
+    }else if(Array.isArray(ex.secondaryMuscles)){
+      ex.secondaryMuscles = ex.secondaryMuscles.filter(function(id){ return id !== t.value; });
+      ex.muscleMapping='manual';
+    }
     Store.saveProfile(); render(); return;
   }
   var cfgWeight=['inc','loadStep','warmupStep'].includes(key);

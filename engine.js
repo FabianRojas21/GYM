@@ -57,15 +57,38 @@
         return set.pair!==undefined || set.side==='right' || set.side==='left';
       }));
   }
+  function normalizeExerciseName(value){
+    return String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  }
+  var CURATED_MUSCLE_PROFILES={
+    'press banca':{muscle:'chestMid',equipment:'barbell',secondaryMuscles:['tricepsLateral','tricepsMedial','shoulderAnterior']},
+    'sentadilla':{muscle:'quads',equipment:'barbell',secondaryMuscles:['glutesMax','adductors']},
+    'peso muerto':{muscle:'glutesMax',equipment:'barbell',secondaryMuscles:['hamstrings','lowerBack']},
+    'press militar':{muscle:'shoulderAnterior',equipment:'barbell',secondaryMuscles:['tricepsLateral','tricepsMedial']},
+    'remo con barra':{muscle:'upperBack',equipment:'barbell',secondaryMuscles:['bicepsShort','brachialis']},
+    'dominadas lastradas':{muscle:'lats',equipment:'bodyweight',secondaryMuscles:['bicepsShort','brachialis']},
+    'press inclinado con mancuernas':{muscle:'chestUpper',equipment:'dumbbell',secondaryMuscles:['tricepsLateral','tricepsMedial','shoulderAnterior']},
+    'peso muerto rumano':{muscle:'hamstrings',equipment:'barbell',secondaryMuscles:['glutesMax','lowerBack']},
+    'prensa de piernas':{muscle:'quads',equipment:'machine',secondaryMuscles:['glutesMax','adductors']},
+    'hip thrust':{muscle:'glutesMax',equipment:'barbell',secondaryMuscles:[]},
+    'jalon al pecho':{muscle:'lats',equipment:'cable',secondaryMuscles:['bicepsShort','brachialis']},
+    'curl de biceps':{muscle:'bicepsShort',equipment:'dumbbell',secondaryMuscles:[]},
+    'extension de triceps en polea':{muscle:'tricepsLong',equipment:'cable',secondaryMuscles:[]},
+    'elevaciones laterales':{muscle:'shoulderLateral',equipment:'dumbbell',secondaryMuscles:[]}
+  };
+  function curatedMuscleProfile(exerciseName){
+    var profile=CURATED_MUSCLE_PROFILES[normalizeExerciseName(exerciseName)];
+    return profile ? {muscle:profile.muscle,equipment:profile.equipment,secondaryMuscles:profile.secondaryMuscles.slice()} : null;
+  }
   function inferSecondaryMuscles(primary, exerciseName){
-    var name=String(exerciseName||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ');
+    var name=normalizeExerciseName(exerciseName);
     var matches=function(words){
       return words.some(function(word){
-        var normalized=word.toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim().replace(/\s+/g,' ');
+        var normalized=normalizeExerciseName(word);
         return (' '+name.replace(/\s+/g,' ').trim()+' ').includes(' '+normalized+' ');
       });
     };
-    var isolation=['extension','extensiones','curl','elevacion','elevaciones','apertura','aperturas','pajaro','laterales','lateral','maquina femoral'];
+    var isolation=['extension','extensiones','extension de cuadriceps','curl','elevacion','elevaciones','apertura','aperturas','pajaro','laterales','lateral','maquina femoral','leg curl','leg extension','fly','flies','cable crossover'];
     if(isolation.some(function(word){ return matches([word]); }) &&
       !matches(['sentadilla','squat','press','remo','jalon','dominada','peso muerto','deadlift','romanian deadlift','rdl','hip thrust','prensa','leg press','zancada','zancadas','estocada','estocadas','lunge','lunges','push up','push ups','pushup','pushups'])) return [];
     if(primary.indexOf('chest')===0){
@@ -74,20 +97,20 @@
         : [];
     }
     if(['lats','upperBack','traps','lowerBack'].indexOf(primary)>=0){
-      if(matches(['remo','jalon','dominada','pull up','pull ups','pullup','pullups','row','rows'])) return ['bicepsShort','brachialis'];
+      if(matches(['remo','jalon','dominada','pull up','pull ups','pullup','pullups','lat pulldown','pulldown','row','rows'])) return ['bicepsShort','brachialis'];
       if(matches(['peso muerto','deadlift','romanian deadlift','rdl','hiperextension','hiperextensiones','hyperextension','hyperextensions'])){
         return primary==='lowerBack' ? ['glutesMax'] : ['glutesMax','lowerBack'];
       }
       return [];
     }
     if(primary.indexOf('shoulder')===0){
-      return matches(['press','militar']) ? ['tricepsLateral','tricepsMedial'] : [];
+      return matches(['press','militar','shoulder press','overhead press']) ? ['tricepsLateral','tricepsMedial'] : [];
     }
     if(primary.indexOf('biceps')===0 || primary==='brachialis') return [];
     if(primary.indexOf('triceps')===0) return [];
     if(primary==='quads' && matches(['sentadilla','squat','prensa','leg press','zancada','zancadas','estocada','estocadas','lunge','lunges'])) return ['glutesMax','adductors'];
     if(primary==='hamstrings' && matches(['peso muerto','deadlift','romanian deadlift','rdl'])) return ['glutesMax','lowerBack'];
-    if(primary==='glutesMax' && matches(['peso muerto','deadlift','romanian deadlift','rdl','sentadilla','squat','hip thrust','zancada','zancadas','estocada','estocadas','lunge','lunges'])) return ['hamstrings'];
+    if(primary==='glutesMax' && matches(['peso muerto','deadlift','romanian deadlift','rdl','sentadilla','squat','zancada','zancadas','estocada','estocadas','lunge','lunges'])) return ['hamstrings'];
     return [];
   }
   function muscleAssignments(primary, secondaryMuscles){
@@ -294,6 +317,7 @@
     countsForProgress:countsForProgress, isEffectiveSet:isEffectiveSet, countEffectiveSets:countEffectiveSets,
     entryVolume:entryVolume, isUnilateralEntry:isUnilateralEntry, groupFactors:groupFactors,
     inferSecondaryMuscles:inferSecondaryMuscles, muscleAssignments:muscleAssignments,
+    curatedMuscleProfile:curatedMuscleProfile,
     muscleGroupId:muscleGroupId, effectiveBodyweight:effectiveBodyweight,
     comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend
   };

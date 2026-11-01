@@ -400,6 +400,22 @@ test('los accesorios aislados no heredan secundarios de su grupo', () => {
   assert.deepEqual(inferSecondaryMuscles('lats','Pullover'),[]);
 });
 
+test('el catálogo ofrece asignaciones conocidas y aisladas sin inferencias inventadas', () => {
+  const {curatedMuscleProfile,inferSecondaryMuscles}=require('./engine.js');
+  assert.deepEqual(curatedMuscleProfile('Press banca'),{
+    muscle:'chestMid',equipment:'barbell',secondaryMuscles:['tricepsLateral','tricepsMedial','shoulderAnterior']
+  });
+  assert.deepEqual(curatedMuscleProfile('JALÓN AL PECHO'),{
+    muscle:'lats',equipment:'cable',secondaryMuscles:['bicepsShort','brachialis']
+  });
+  const profile=curatedMuscleProfile('Hip thrust');
+  profile.secondaryMuscles.push('hamstrings');
+  assert.deepEqual(curatedMuscleProfile('Hip thrust').secondaryMuscles,[]);
+  assert.equal(curatedMuscleProfile('Press cualquiera'),null);
+  assert.deepEqual(inferSecondaryMuscles('lats','Movimiento de espalda'),[]);
+  assert.deepEqual(inferSecondaryMuscles('lats','Lat pulldown'),['bicepsShort','brachialis']);
+});
+
 test('agrupa subdivisiones y calcula series directas e indirectas', () => {
   const {muscleGroupId,muscleAssignments,groupFactors}=require('./engine.js');
   assert.equal(muscleGroupId('chestUpper'),'chest');
@@ -762,17 +778,18 @@ test('los gráficos limitan marcas y filtran valores no finitos', () => {
 
 test('el selector de unidad convierte valores de entrada a kg sin reescribir datos', () => {
   const source=fs.readFileSync('./app.js','utf8');
-  const helpers=source.match(/var KG_PER_LB = [\s\S]*?function loadVolume\(value\)\{[^\n]*\}/);
+  const helpers=source.match(/var KG_PER_LB = [\s\S]*?function volumeInCurrentUnit\(value\)\{[^\n]*\}/);
   assert.ok(helpers);
   const context={
     S:{profile:{settings:{weightUnit:'lb'}}},
     num:value=>value===''?null:Number(String(value).replace(',','.')),
     fmt:value=>(Math.round(value*100)/100).toString().replace('.',',')
   };
-  vm.runInNewContext(helpers[0]+';globalThis.toKgForTest=toKg;globalThis.fromKgForTest=fromKg;globalThis.weightTextForTest=weightText;',context);
+  vm.runInNewContext(helpers[0]+';globalThis.toKgForTest=toKg;globalThis.fromKgForTest=fromKg;globalThis.weightTextForTest=weightText;globalThis.volumeInCurrentUnitForTest=volumeInCurrentUnit;',context);
   assert.equal(context.toKgForTest('135,58'),61.4981);
   assert.equal(context.fromKgForTest(60),132.27735731092652);
   assert.equal(context.weightTextForTest(60),'132,28 lb');
+  assert.ok(Math.abs(context.volumeInCurrentUnitForTest(100)-220.462262185)<1e-9);
   assert.match(source,/data-setting="weightUnit"/);
   assert.match(source,/peso_lb\|\|r\.weight_lb/);
 });

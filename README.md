@@ -69,14 +69,20 @@ asignarla a un programa. Las rutinas que ya existían permanecen disponibles y
 pueden seguir sin programa. Desde el detalle de una rutina puedes duplicarla,
 editar la copia y guardarla como una nueva versión.
 
-En **Hoy**, el resumen semanal también muestra las series efectivas por grupo
-muscular. Asigna un músculo principal a cada ejercicio desde **Biblioteca →
-Ejercicios**; los registros anteriores quedan como «Sin asignar» hasta que lo
-clasifiques. Una serie de trabajo cuenta como efectiva si se hizo a 4 RIR o
-menos, o si no se registró el RIR; las aproximaciones no cuentan. En ejercicios
-unilaterales se cuenta una ronda cuando están completos ambos lados. Los
-secundarios aportan 0,5 serie estimada y las porciones de un mismo grupo no se
-duplican en el total.
+En **Hoy**, el resumen semanal también muestra las series efectivas equivalentes
+por grupo muscular. Asigna un músculo principal a cada ejercicio desde
+**Biblioteca → Ejercicios**; los registros anteriores quedan como «Sin asignar»
+hasta que lo clasifiques. Los ejercicios sugeridos tienen asignaciones iniciales
+curadas; en ejercicios propios la app solo sugiere músculos secundarios cuando
+reconoce el nombre y el músculo principal. Revisa y edita estas asignaciones en
+cualquier momento; una configuración manual se conserva. Si no hay una
+coincidencia clara, no se inventan músculos secundarios. Una serie de trabajo
+cuenta como efectiva si se hizo a 4 RIR o menos, o si no se registró el RIR; las
+aproximaciones no cuentan. En ejercicios unilaterales se cuenta una ronda cuando
+están completos ambos lados. Las series directas cuentan completas y las
+secundarias aportan 0,5 serie equivalente estimada; las porciones de un mismo
+grupo no se duplican. Esta estimación no es el volumen de carga: carga × reps se
+muestra por separado.
 
 En **Yo → Resumen** puedes consultar la carga reciente por músculo y registrar
 opcionalmente cómo lo sientes hoy: recuperado, algo cansado o muy fatigado. La
@@ -175,9 +181,9 @@ objetivo. En el historial cada ronda muestra ambos lados juntos.
 El temporizador comienza al añadir el primer ejercicio o al iniciar una rutina.
 Sigue corriendo si recargas la página y se guarda la duración al terminar el
 entreno. El resumen muestra duración, ejercicios, series efectivas, repeticiones
-registradas, volumen (kg × reps, sin aproximaciones), el detalle de cada
-ejercicio y las sugerencias para la próxima sesión. El volumen sí incluye las
-series normales, back-off, drop set y rest-pause.
+registradas, carga acumulada (kg·reps o lb·reps, sin aproximaciones), el detalle
+de cada ejercicio y las sugerencias para la próxima sesión. La carga × reps sí
+incluye las series normales, back-off, drop set y rest-pause.
 
 ## Descansos, récords y respaldos
 
@@ -265,11 +271,17 @@ registrado en cada serie se interpreta como carga extra. La carga efectiva usa
 la medición corporal más cercana anterior a ese entreno; un valor de `0 kg`
 representa peso corporal sin carga añadida.
 
-Los músculos secundarios se estiman automáticamente según el músculo principal
-permitiendo usar la app sin configuraciones adicionales. La participación
-ponderada es de 0,5 series frente a 1 serie completa del músculo principal.
-El volumen efectivo sigue usando peso corporal más carga añadida y no cuenta
-aproximaciones como volumen progresivo.
+Los ejercicios del catálogo tienen asignaciones iniciales de músculo y equipo
+revisables. Para otros ejercicios, la app infiere músculos secundarios solo
+cuando el nombre y el músculo principal coinciden con un patrón reconocido; de
+lo contrario no añade secundarios automáticamente. Puedes modificar la
+asignación desde **Biblioteca → Ejercicios** y los cambios manuales se
+conservan. Cada serie efectiva directa cuenta como 1 serie equivalente y cada
+secundaria sugerida o elegida aporta 0,5; si dos porciones del mismo grupo
+participan, no se duplica su aporte. Es una estimación orientativa, no una
+medición fisiológica. La carga acumulada de peso × repeticiones se calcula aparte
+y no usa estas equivalencias. El volumen efectivo sigue usando peso corporal
+más carga añadida y no cuenta aproximaciones como volumen progresivo.
 
 ## Instalación y publicación móvil
 
