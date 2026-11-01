@@ -564,7 +564,11 @@ nav.tabs .in{min-height:66px}
 .loading-card-short{max-width:75%}
 @keyframes loading-spin{to{transform:rotate(360deg)}}
 @keyframes loading-pulse{50%{opacity:.45}}
-@media (prefers-reduced-motion: reduce){.toast,.btn,.in,.tab{transition:none}.loading-mark{animation-duration:1.6s}}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  .toast,.btn,.in,.tab,.progress>span{transition:none}
+  .loading-mark,.loading-card span{animation:none}
+}
 @media (max-width:520px){
   body{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));padding-bottom:calc(124px + env(safe-area-inset-bottom,0px))}
   .wrap{gap:14px}.top{margin-left:0;margin-right:0;padding-top:8px}

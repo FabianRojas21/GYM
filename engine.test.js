@@ -161,6 +161,7 @@ test('la sección Yo incluye resumen, ejercicios y medidas corporales', () => {
 test('fatiga, anomalías y accesibilidad están integradas en la interfaz', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const index=fs.readFileSync('./index.html','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/function recoveryHtml\(\)/);
   assert.match(app,/no mide la recuperación fisiológica/i);
   assert.match(app,/esfuerzo registrado/);
@@ -171,6 +172,7 @@ test('fatiga, anomalías y accesibilidad están integradas en la interfaz', () =
   assert.match(index,/<nav class="tabs" aria-label="Secciones de la aplicación"><div class="in">/);
   assert.doesNotMatch(index,/role="tablist"|role="tab"/);
   assert.match(app,/if\(selected\) b\.setAttribute\('aria-current', 'page'\)/);
+  assert.match(styles,/prefers-reduced-motion: reduce\)\{[\s\S]*?scroll-behavior:auto[\s\S]*?\.loading-mark,\.loading-card span\{animation:none\}/);
 });
 
 test('la recuperación separa carga objetiva reciente y autoevaluación opcional', () => {
