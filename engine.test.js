@@ -165,8 +165,12 @@ test('fatiga, anomalías y accesibilidad están integradas en la interfaz', () =
   assert.match(app,/no mide la recuperación fisiológica/i);
   assert.match(app,/esfuerzo registrado/);
   assert.match(app,/peso más de 50 % sobre tu récord/);
-  assert.match(app,/aria-selected/);
+  assert.match(app,/class="seg profile-nav" role="group"/);
+  assert.match(app,/aria-pressed="\x27\+\(S\.profileSection===item\[0\]\)\+\x27"/);
   assert.match(index,/aria-controls="view"/);
+  assert.match(index,/<nav class="tabs" aria-label="Secciones de la aplicación"><div class="in">/);
+  assert.doesNotMatch(index,/role="tablist"|role="tab"/);
+  assert.match(app,/if\(selected\) b\.setAttribute\('aria-current', 'page'\)/);
 });
 
 test('la recuperación separa carga objetiva reciente y autoevaluación opcional', () => {

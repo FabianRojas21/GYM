@@ -2998,8 +2998,8 @@ function updateGoalFormFields(){
   if(currentField) currentField.hidden=!custom;
 }
 function profileNav(){
-  return '<div class="seg profile-nav" role="tablist" aria-label="Secciones de tu perfil">'+
-    [['resumen','Resumen'],['ejercicios','Ejercicios'],['medidas','Medidas']].map(function(item){return '<button role="tab" aria-selected="'+(S.profileSection===item[0])+'" data-act="profile-section" data-section="'+item[0]+'">'+item[1]+'</button>';}).join('')+'</div>';
+  return '<div class="seg profile-nav" role="group" aria-label="Secciones de tu perfil">'+
+    [['resumen','Resumen'],['ejercicios','Ejercicios'],['medidas','Medidas']].map(function(item){return '<button aria-pressed="'+(S.profileSection===item[0])+'" data-act="profile-section" data-section="'+item[0]+'">'+item[1]+'</button>';}).join('')+'</div>';
 }
 function profileSummary(){
   var totalVolume=0, totalDuration=0;
@@ -3239,7 +3239,6 @@ function render(){
   }
   document.querySelectorAll('.tab').forEach(function(b){
     var selected=b.dataset.tab === S.tab;
-    b.setAttribute('aria-selected', selected ? 'true' : 'false');
     if(selected) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   $('#today').textContent = dFmt(iso(new Date()), {weekday:'long', day:'numeric', month:'short'});
