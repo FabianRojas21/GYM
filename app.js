@@ -466,6 +466,31 @@ function migrateLocalDataOnce(userId, ref, col, localData){
     }
   });
 }
+function uploadPendingLocalSessions(userId, col, localData, remoteSessions){
+  var key='sobrecarga:last-cloud-sync:'+userId, lastSync=0;
+  try { lastSync=Number(localStorage.getItem(key))||0; }
+  catch(error){ console.warn('No se pudo leer la última sincronización guardada',error); }
+  var remoteIds={};
+  (remoteSessions||[]).forEach(function(session){ if(session&&session.id) remoteIds[session.id]=true; });
+  var pendingById={};
+  ((localData&&localData.sessions)||[]).forEach(function(session){
+    if(!session||!session.id||remoteIds[session.id]) return;
+    var changedAt=Number(session.updatedAt)||Number(session.ts)||Number(session.finishedAt)||0;
+    if(changedAt<=lastSync) return;
+    var previous=pendingById[session.id];
+    if(!previous || changedAt>(Number(previous.updatedAt)||Number(previous.ts)||Number(previous.finishedAt)||0)){
+      pendingById[session.id]=session;
+    }
+  });
+  var pending=Object.keys(pendingById).map(function(id){ return pendingById[id]; });
+  return pending.reduce(function(queue,session){
+    return queue.then(function(){ return col.doc(session.id).set(clone(stampSession(session))); });
+  },Promise.resolve()).then(function(){
+    try { localStorage.setItem(key,String(Date.now())); }
+    catch(error){ console.warn('No se pudo guardar la fecha de sincronización',error); }
+    return {count:pending.length,sessions:pending};
+  });
+}
 var Store = {
   ref:null, col:null, firebaseAuth:null, firebaseDb:null, firebaseUser:null, cloudGeneration:0,
   detachCloudListeners:function(){
@@ -566,8 +591,8 @@ var Store = {
     var migration=migrateLocalDataOnce(user.uid,Store.ref,Store.col,localData);
     migration.then(function(){
       if(generation!==Store.cloudGeneration) return;
-      var gotProfile=false, gotSessions=false, gotDraft=false;
-      var done=function(){ if(gotProfile && gotSessions && gotDraft){ S.ready=true; createAutoBackup(); render(); } };
+      var gotProfile=false, gotSessions=false, gotDraft=false, sessionsReconciled=false, sessionsReconciliation=null;
+      var done=function(){ if(gotProfile && gotSessions && gotDraft){ S.ready=true; Store.saveLocal(); createAutoBackup(); render(); } };
       cloudUnsubs.push(Store.ref.onSnapshot({includeMetadataChanges:true},function(snap){
         if(generation!==Store.cloudGeneration) return;
         if(!snap.metadata || snap.metadata.fromCache) return;
@@ -586,9 +611,29 @@ var Store = {
       cloudUnsubs.push(Store.col.onSnapshot({includeMetadataChanges:true},function(snap){
         if(generation!==Store.cloudGeneration) return;
         if(!snap.metadata || snap.metadata.fromCache) return;
-        S.sessions=snap.docs.map(function(d){ return clone(d.data()); });
-        gotSessions=true; done();
-        if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+        var remoteSessions=snap.docs.map(function(d){ return clone(d.data()); });
+        if(sessionsReconciled){
+          S.sessions=remoteSessions;
+          gotSessions=true; done();
+          if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+          return;
+        }
+        if(sessionsReconciliation) return;
+        sessionsReconciliation=uploadPendingLocalSessions(user.uid,Store.col,localData,remoteSessions).then(function(result){
+          if(generation!==Store.cloudGeneration) return;
+          var mergedById={};
+          remoteSessions.forEach(function(session){ if(session&&session.id) mergedById[session.id]=session; });
+          result.sessions.forEach(function(session){ if(!mergedById[session.id]) mergedById[session.id]=clone(stampSession(session)); });
+          S.sessions=Object.keys(mergedById).map(function(id){ return mergedById[id]; });
+          sessionsReconciled=true;
+          gotSessions=true; done();
+          if(result.count) toast('Se subieron '+result.count+' entreno'+(result.count===1?' guardado':'s guardados')+' en este dispositivo');
+          if(gotProfile && gotSessions && gotDraft){ clearTimeout(cloudLoadingTimer); cloudLoadingTimer=null; }
+        }).catch(function(error){
+          if(generation!==Store.cloudGeneration) return;
+          console.warn('No se pudieron subir entrenos locales pendientes',error);
+          Store.fallbackToLocal(generation,localProfile,localSessions,'No se pudieron subir los entrenos guardados en este dispositivo. Se conservaron localmente; vuelve a intentar sincronizar.');
+        });
       }, function(error){
         if(generation!==Store.cloudGeneration) return;
         console.warn('No se pudieron descargar los entrenos de Firebase',error);

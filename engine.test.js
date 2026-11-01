@@ -604,6 +604,55 @@ test('la migración local no resucita sesiones borradas al volver a abrir la cue
   assert.deepEqual(Object.keys(remote.sessions).sort(),['A','C']);
 });
 
+test('sube sesiones locales posteriores a la última sincronización sin resucitar las anteriores borradas', async () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function uploadPendingLocalSessions\([\s\S]*?\n\}/);
+  assert.ok(helper);
+  const values=new Map([['sobrecarga:last-cloud-sync:user-1','200']]);
+  const uploaded={};
+  const localStorage={
+    getItem:key=>values.has(key)?values.get(key):null,
+    setItem:(key,value)=>values.set(key,value)
+  };
+  const col={doc:id=>({set:value=>{uploaded[id]=JSON.parse(JSON.stringify(value));return Promise.resolve();}})};
+  const context={
+    localStorage,console,Date,
+    clone:value=>JSON.parse(JSON.stringify(value)),
+    stampSession:value=>Object.assign({},value,{updatedAt:Math.max(Number(value.updatedAt)||0,Number(value.ts)||0,300)})
+  };
+  vm.runInNewContext(helper[0]+';globalThis.uploadPendingLocalSessionsForTest=uploadPendingLocalSessions;',context);
+  const result=await context.uploadPendingLocalSessionsForTest('user-1',col,{
+    sessions:[
+      {id:'A',updatedAt:100},
+      {id:'B',updatedAt:150},
+      {id:'C',updatedAt:250}
+    ]
+  },[{id:'A'}]);
+  assert.equal(result.count,1);
+  assert.deepEqual(Object.keys(uploaded),['C']);
+  assert.equal(values.get('sobrecarga:last-cloud-sync:user-1')!=='200',true);
+  assert.match(source,/uploadPendingLocalSessions\(user\.uid,Store\.col,localData,remoteSessions\)/);
+});
+
+test('la primera cuenta puede subir entrenos locales ausentes aunque la migración ya se haya marcado', async () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function uploadPendingLocalSessions\([\s\S]*?\n\}/);
+  assert.ok(helper);
+  const uploaded=[];
+  const col={doc:id=>({set:()=>{uploaded.push(id);return Promise.resolve();}})};
+  const context={
+    localStorage:{getItem:()=>null,setItem:()=>{}},
+    console,Date,clone:value=>JSON.parse(JSON.stringify(value)),
+    stampSession:value=>Object.assign({},value,{updatedAt:Number(value.updatedAt)||1})
+  };
+  vm.runInNewContext(helper[0]+';globalThis.uploadPendingLocalSessionsForTest=uploadPendingLocalSessions;',context);
+  const result=await context.uploadPendingLocalSessionsForTest('user-2',col,{
+    sessions:[{id:'P1',updatedAt:10},{id:'P2',updatedAt:20}]
+  },[{id:'cloud-A'}]);
+  assert.equal(result.count,2);
+  assert.deepEqual(uploaded,['P1','P2']);
+});
+
 test('restaurar un respaldo combina datos y conserva los actuales ante IDs duplicados', () => {
   const source=fs.readFileSync('./app.js','utf8');
   const helper=source.match(/function mergeBackupData\([\s\S]*?\n\}/);
