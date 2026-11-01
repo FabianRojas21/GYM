@@ -853,6 +853,10 @@ test('el entrenamiento muestra un resumen y abre la calculadora contextual en un
   assert.match(app,/confirmedSides\.right\.w=String\(confirmedPending\.weightKg\)/);
   assert.match(styles,/\.plate-visual\{/);
   assert.match(app,/function workoutCalculatorSheetHtml\(\)/);
+  assert.match(app,/data-workout-summary-heading/);
+  assert.match(app,/summaryHeading\.focus\(\{preventScroll:true\}\)/);
+  assert.match(app,/function focusSetControl\(ei,ri\)/);
+  assert.match(app,/focusSetControl\(ei,ri\)/);
   assert.match(app,/role="dialog" aria-modal="true"/);
   assert.match(app,/data-act="close-loading-calculator"/);
   assert.match(app,/if\(ev\.key==='Escape'&&S\.loadingCalc&&S\.loadingCalc\.open\)/);

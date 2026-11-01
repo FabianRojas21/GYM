@@ -1924,7 +1924,7 @@ function savedHtml(){
     var p = planFor(ex); if(p.status === 'nuevo') return '';
     return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</div></div>' + chip(p.status) + '</div>';
   }).join('');
-  return '<section class="card workout-summary"><div class="card-head"><div><h3>Resumen del entreno</h3><p class="small muted">' + esc(dFmt(session.date, {weekday:'long', day:'numeric', month:'long'})) + '</p></div><button class="icon" data-act="dismiss-saved" aria-label="Cerrar resumen">×</button></div>' +
+  return '<section class="card workout-summary"><div class="card-head"><div><h3 tabindex="-1" data-workout-summary-heading>Resumen del entreno</h3><p class="small muted">' + esc(dFmt(session.date, {weekday:'long', day:'numeric', month:'long'})) + '</p></div><button class="icon" data-act="dismiss-saved" aria-label="Cerrar resumen">×</button></div>' +
     '<div class="summary-stats"><div><strong>' + formatDuration(session.durationMs || 0) + '</strong><span>Duración</span></div>' +
       '<div><strong>' + session.entries.length + '</strong><span>Ejercicios</span></div>' +
       '<div><strong>' + stats.effectiveSets + '</strong><span>Series efectivas</span></div>' +
@@ -3246,6 +3246,10 @@ function render(){
   $('#today').textContent = dFmt(iso(new Date()), {weekday:'long', day:'numeric', month:'short'});
   window.scrollTo(0, y);
 }
+function focusSetControl(ei,ri){
+  var control=$('.set-finish[data-ei="'+ei+'"][data-ri="'+ri+'"]');
+  if(control) control.focus();
+}
 function refreshLive(ei){
   var el = $('#live-' + ei); if(el) el.innerHTML = liveHtml(ei);
   refreshWorkoutOverview();
@@ -3425,6 +3429,8 @@ function finish(updateRoutine){
     S.justSaved = {session:session, next:saved};
     S.draft = blankDraft(); S.loadingCalc=null; saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
     render(); window.scrollTo(0, 0);
+    var summaryHeading=$('[data-workout-summary-heading]');
+    if(summaryHeading) summaryHeading.focus({preventScroll:true});
   }).catch(function(){
     S.finishSaving = false;
     render();
@@ -3763,6 +3769,7 @@ function onClick(ev){
       }
       saveDraft();
       render();
+      focusSetControl(ei,ri);
       break;
     case 'undo-finish-set':
       var undoEntry=S.draft.entries[ei], undoRow=undoEntry&&undoEntry.rows[ri];
@@ -3772,7 +3779,7 @@ function onClick(ev){
       delete undoRow.restCompletedAt;
       delete undoRow.restMs;
       delete undoRow.restToken;
-      saveDraft(); render(); break;
+      saveDraft(); render(); focusSetControl(ei,ri); break;
     case 'repeat-set':
       var repeatEntry=S.draft.entries[ei], repeatExercise=repeatEntry&&effEx(repeatEntry);
       if(!repeatEntry||!repeatExercise) break;
