@@ -117,7 +117,13 @@ El CSV exportado conserva la columna `peso_kg`; al importar, se aceptan también
 las columnas explícitas `peso_lb` y `weight_lb`, que se convierten a kg.
 
 En **Ajustes → Barras y máquinas cargables** puedes crear hasta diez equipos
-para la calculadora de discos. Configura el tipo, peso base y cada disco
+para la calculadora de discos. Durante el entrenamiento, cada ejercicio tiene
+un acceso directo que abre la calculadora en un panel inferior sin salir de la
+sesión; toma como objetivo el peso escrito para la siguiente serie o, si aún no
+lo hay, el recomendado para el ejercicio. El panel muestra el reparto de
+discos y permanece abierto al calcular. La vista del entreno también resume
+duración, volumen y avance de series, con un tema oscuro de alto contraste.
+Configura el tipo, peso base y cada disco
 disponible por lado, en la unidad elegida; repite un valor si hay más discos
 iguales por lado. Para una barra, el objetivo es el peso total e incluye la
 barra sin discos. Para una máquina de brazos independientes, el objetivo es

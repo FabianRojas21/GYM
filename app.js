@@ -1627,6 +1627,37 @@ function completedWorkSets(en, ex){
     return setType(row) === 'normal' && row.restTriggered;
   }).length);
 }
+function workoutTotals(){
+  var volume=0, planned=0;
+  S.draft.entries.forEach(function(entry){
+    var ex=effEx(entry);
+    planned+=Math.max(1,Number(ex.sets)||1);
+    rowsToSets(entry.rows,!!ex.unilateral).forEach(function(set){
+      if(setType(set)!=='warmup'&&validWeight(set.w)&&validReps(set.r)) volume+=Number(set.w)*Number(set.r);
+    });
+  });
+  return {volume:volume,planned:planned,done:workingDone()};
+}
+function workoutOverviewHtml(){
+  var totals=workoutTotals(), progress=totals.planned?Math.min(100,totals.done/totals.planned*100):0;
+  var progressMax=Math.max(totals.planned,totals.done,1);
+  return '<section class="workout-overview" aria-label="Resumen del entrenamiento">'+
+    '<div class="workout-overview-stats">'+
+      '<div><span>Duración</span><strong class="num" id="workout-clock">'+formatDuration(Date.now()-(S.draft.startedAt||Date.now()))+'</strong></div>'+
+      '<div><span>Volumen</span><strong class="num" id="workout-volume">'+volumeText(totals.volume)+' '+weightUnitLabel()+'</strong></div>'+
+      '<div><span>Series</span><strong class="num"><span id="done-count">'+totals.done+'</span><span class="workout-stat-divider"> / </span><span id="planned-count">'+totals.planned+'</span></strong></div>'+
+    '</div><div class="workout-overview-progress"><div class="progress" role="progressbar" aria-label="Series completadas" aria-valuemin="0" aria-valuemax="'+progressMax+'" aria-valuenow="'+totals.done+'"><span id="workout-progress-bar" style="width:'+progress.toFixed(1)+'%"></span></div><span id="workout-progress-label">'+totals.done+' de '+totals.planned+' series</span></div></section>';
+}
+function calculatorTargetForEntry(entry){
+  var ex=effEx(entry), row=entry.rows.find(function(item){return setType(item)==='normal'&&!item.restTriggered;})||entry.rows[0];
+  if(row){
+    var values=ex.unilateral?[ensureRowMode(row,true).right.w,ensureRowMode(row,true).left.w]:[row.w];
+    var entered=values.map(num).filter(function(value){return value!==null&&value>=0;})[0];
+    if(entered!==undefined) return entered;
+  }
+  var plan=planFor(ex);
+  return plan&&Number.isFinite(plan.nextW)?plan.nextW:null;
+}
 function entryHtml(en, ei){
   if(!exById(en.exId)) return '';
   var ex = effEx(en);
@@ -1698,6 +1729,7 @@ function entryHtml(en, ei){
     '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
     substitutionHtml +
     (collapsed ? '' : '<div class="workout-card-body">' + goalHtml(ex) +
+    '<button class="workout-calculator-trigger" data-act="open-loading-calculator" data-ei="' + ei + '"><span aria-hidden="true">＋</span><span><strong>Calculadora de discos</strong><small>Ver qué discos cargar para este peso</small></span><span aria-hidden="true">›</span></button>' +
     '<div class="sets">' + rows + '</div>' +
     '<details class="workout-help"><summary>Ayuda con las series</summary><p class="hint">' + (ex.unilateral
       ? 'Cada ronda registra ambos lados. Cuenta como una serie cuando completaste derecho e izquierdo; la progresión espera que ambos lados cumplan el objetivo. '
@@ -2303,13 +2335,12 @@ function viewHoy(){
   if(!S.draft.entries.length) return out + homeDashboard();
   var done = workingDone();
   var rt = S.draft.routineId && S.profile.routines[S.draft.routineId];
-  out += '<div class="head-row workout-heading"><h2>Hoy</h2><div class="workout-heading-actions"><button class="btn ghost sm" data-act="workout-simple-toggle" aria-pressed="' + S.simpleWorkoutMode + '">' + (S.simpleWorkoutMode?'Vista completa':'Modo simple') + '</button><div class="workout-meta">' +
-    (S.draft.startedAt ? '<span class="workout-clock-label">Tiempo <strong class="num" id="workout-clock">' + formatDuration(Date.now() - S.draft.startedAt) + '</strong></span>' : '') +
-    '<span class="num muted" id="done-count">' + done + ' serie' + (done === 1 ? '' : 's') + ' efectiva' + (done === 1 ? '' : 's') + '</span></div></div></div>';
+  out += '<div class="workout-screen"><div class="head-row workout-heading"><div><span class="workout-eyebrow">Sesión en curso</span><h2>' + esc(rt?rt.name:'Entrenamiento') + '</h2></div><div class="workout-heading-actions"><button class="btn ghost sm" data-act="workout-simple-toggle" aria-pressed="' + S.simpleWorkoutMode + '">' + (S.simpleWorkoutMode?'Vista completa':'Modo simple') + '</button></div></div>';
+  out += workoutOverviewHtml();
   out += '<p class="draft-save-status" id="draft-save-status" data-state="' + esc(S.draftSaveState) + '">' +
     (S.draftSaveState==='synced'?'Guardado y sincronizado':S.draftSaveState==='localOnly'?'Guardado local · sincronización pendiente':S.draftSaveState==='saving'?'Guardando…':S.draftSaveState==='error'?'No se pudo guardar':'Guardado en este dispositivo') + '</p>';
   if(S.draft.entries.length) out += restTimerHtml();
-  if(rt) out += '<p class="muted">Rutina: <strong>' + esc(rt.name) + '</strong></p>';
+  if(rt) out += '<p class="workout-routine-label">Rutina activa <strong>' + esc(rt.name) + '</strong></p>';
   if(!S.draft.entries.length && !S.picker) out += routineQuick();
   out += S.draft.entries.map(entryHtml).join('');
   if(S.picker) out += pickerHtml('day');
@@ -2326,7 +2357,7 @@ function viewHoy(){
           : '<button class="btn ghost" data-act="discard">Descartar</button>') + '</div></div>';
     }
   }
-  return out;
+  return out + workoutCalculatorSheetHtml() + '</div>';
 }
 
 /* ---------- rutinas ---------- */
@@ -2547,7 +2578,7 @@ function loadToolSettingsHtml(){
 }
 function loadingCalculatorHtml(ex){
   var tools=loadTools();
-  if(!tools.length) return '<section class="load-calculator"><h3>Calculadora de discos</h3><p class="small muted">Configura el peso base y los discos de una barra o máquina en Ajustes → Barras y máquinas cargables. La app no supondrá pesos de fábrica.</p><button class="btn ghost sm" data-act="tab" data-tab="ajustes">Configurar equipo</button></section>';
+  if(!tools.length) return '<section class="load-calculator"><h3 id="loading-calculator-title">Calculadora de discos</h3><p class="small muted">Configura el peso base y los discos de una barra o máquina en Ajustes → Barras y máquinas cargables. La app no supondrá pesos de fábrica.</p><button class="btn ghost sm" data-act="tab" data-tab="ajustes">Configurar equipo</button></section>';
   var selected=tools.filter(function(tool){return tool.id===ex.loadToolId;})[0]||tools[0];
   var current=S.loadingCalc&&S.loadingCalc.exId===ex.id&&S.loadingCalc.toolId===selected.id?S.loadingCalc:null;
   var options=tools.map(function(tool){return '<option value="'+esc(tool.id)+'"'+(tool.id===selected.id?' selected':'')+'>'+esc(tool.name)+'</option>';}).join('');
@@ -2565,10 +2596,20 @@ function loadingCalculatorHtml(ex){
       ? '<p class="small"><strong>Combinación exacta</strong></p>'+optionHtml('Objetivo',current.result.lower)
       : '<p class="small"><strong>No hay una combinación exacta con los discos configurados.</strong></p>'+optionHtml('Más cercano por debajo',current.result.lower)+optionHtml('Más cercano por encima',current.result.upper))+'</div>';
   }
-  return '<section class="load-calculator"><h3>Calculadora de discos</h3><p class="small muted">Calcula una combinación orientativa; verifica los discos y la carga real del equipo antes de usarla.</p>'+
+  return '<section class="load-calculator"><h3 id="loading-calculator-title">Calculadora de discos</h3><p class="small muted">Calcula una combinación orientativa; verifica los discos y la carga real del equipo antes de usarla.</p>'+
     '<label class="field"><span class="lab">Barra o máquina</span><select class="txt" data-cfg="loadToolId" data-id="'+esc(ex.id)+'">'+options+'</select></label>'+
-    '<label class="field"><span class="lab">'+(selected.type==='bar'?'Peso total objetivo':'Peso objetivo por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" inputmode="decimal" data-loading-target value="'+(current?esc(fmt(fromKg(current.targetKg))):'')+'" id="'+inputId+'"></label>'+
+    '<label class="field"><span class="lab">'+(selected.type==='bar'?'Peso total objetivo':'Peso objetivo por brazo')+' ('+weightUnitLabel()+')</span><input class="txt" inputmode="decimal" data-loading-target value="'+(current&&current.targetKg!==null?esc(fmt(fromKg(current.targetKg))):'')+'" id="'+inputId+'"></label>'+
     '<button class="btn ghost sm" data-act="calculate-loading" data-id="'+esc(ex.id)+'">Calcular discos</button>'+result+'</section>';
+}
+function workoutCalculatorSheetHtml(){
+  var calc=S.loadingCalc;
+  if(!calc||!calc.open||!calc.exId) return '';
+  var ex=exById(calc.exId);
+  if(!ex) return '';
+  return '<div class="loading-sheet-layer"><button class="loading-sheet-backdrop" data-act="close-loading-calculator" aria-label="Cerrar calculadora"></button>'+
+    '<section class="loading-sheet" role="dialog" aria-modal="true" aria-labelledby="loading-calculator-title"><div class="loading-sheet-grip" aria-hidden="true"></div>'+
+    '<button class="loading-sheet-close" data-act="close-loading-calculator" aria-label="Cerrar calculadora">×</button>'+
+    '<p class="loading-sheet-exercise">'+esc(ex.name)+'</p>'+loadingCalculatorHtml(ex)+'</section></div>';
 }
 function exDetail(ex){
   var hist = entriesFor(ex.id);
@@ -3041,6 +3082,7 @@ function deleteSession(id){
 function render(){
   var y = window.scrollY;
   var views = {hoy:viewHoy, rutinas:viewRut, ejercicios:viewRut, historial:viewHist, yo:viewProfile, ajustes:viewSet};
+  document.body.classList.toggle('is-workout-active',S.ready&&S.tab==='hoy'&&S.draft.entries.length>0);
   try {
     syncCollapsedEntries();
     $('#view').innerHTML = S.ready ? (views[S.tab] || viewHoy)() : loadingView();
@@ -3061,10 +3103,22 @@ function render(){
 }
 function refreshLive(ei){
   var el = $('#live-' + ei); if(el) el.innerHTML = liveHtml(ei);
-  var done = workingDone();
-  var c = $('#done-count'); if(c) c.textContent = done + ' serie' + (done === 1 ? '' : 's') + ' efectiva' + (done === 1 ? '' : 's');
-  var f = $('#finish'); if(f) f.disabled = !done;
+  refreshWorkoutOverview();
+  var f = $('#finish'); if(f) f.disabled = !workingDone();
   refreshDraftSaveStatus();
+}
+function refreshWorkoutOverview(){
+  var overview=$('.workout-overview');
+  if(!overview) return;
+  var totals=workoutTotals(), progress=totals.planned?Math.min(100,totals.done/totals.planned*100):0;
+  var done=$('#done-count'), planned=$('#planned-count'), volume=$('#workout-volume');
+  var bar=$('#workout-progress-bar'), label=$('#workout-progress-label'), track=overview.querySelector('[role="progressbar"]');
+  if(done) done.textContent=String(totals.done);
+  if(planned) planned.textContent=String(totals.planned);
+  if(volume) volume.textContent=volumeText(totals.volume)+' '+weightUnitLabel();
+  if(bar) bar.style.width=progress.toFixed(1)+'%';
+  if(label) label.textContent=totals.done+' de '+totals.planned+' series';
+  if(track){track.setAttribute('aria-valuemax',String(Math.max(totals.planned,totals.done,1)));track.setAttribute('aria-valuenow',String(totals.done));}
 }
 
 /* ---------- acciones ---------- */
@@ -3224,7 +3278,7 @@ function finish(updateRoutine){
     S.finishSaving = false;
     S.sessions=S.sessions.filter(function(item){return item.id!==session.id;}).concat([session]);
     S.justSaved = {session:session, next:saved};
-    S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
+    S.draft = blankDraft(); S.loadingCalc=null; saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
     render(); window.scrollTo(0, 0);
   }).catch(function(){
     S.finishSaving = false;
@@ -3237,6 +3291,26 @@ function onClick(ev){
   var act = t.dataset.act, ei = t.dataset.ei !== undefined ? +t.dataset.ei : null, ri = t.dataset.ri !== undefined ? +t.dataset.ri : null;
   var st = S.profile.settings;
   switch(act){
+    case 'open-loading-calculator':
+      var calculatorEntry=S.draft.entries[ei];
+      if(!calculatorEntry) break;
+      var calculatorEx=effEx(calculatorEntry), calculatorTools=loadTools();
+      var calculatorTool=calculatorTools.filter(function(tool){return tool.id===calculatorEx.loadToolId;})[0]||calculatorTools[0];
+      S.loadingCalc={exId:calculatorEntry.exId,entryIndex:ei,toolId:calculatorTool?calculatorTool.id:null,targetKg:calculatorTargetForEntry(calculatorEntry),result:null,open:true};
+      render();
+      var calculatorClose=$('.loading-sheet-close');
+      if(calculatorClose) calculatorClose.focus();
+      break;
+    case 'close-loading-calculator':
+      if(t.classList.contains('loading-sheet-backdrop')&&ev.target!==t) break;
+      var closedCalc=S.loadingCalc;
+      if(closedCalc) closedCalc.open=false;
+      render();
+      if(closedCalc&&Number.isInteger(closedCalc.entryIndex)){
+        var calculatorTrigger=$('.workout-calculator-trigger[data-ei="'+closedCalc.entryIndex+'"]');
+        if(calculatorTrigger) calculatorTrigger.focus();
+      }
+      break;
     case 'cloud-signin':
       Store.signIn().catch(function(error){ toast('No se pudo iniciar sesión' + (error && error.message ? ': ' + error.message : '')); });
       break;
@@ -3290,9 +3364,9 @@ function onClick(ev){
       var targetKg=toKg(calcTarget), calculation=SobrecargaEngine.calculatePlateLoad(selectedTool,targetKg);
       if(!calculation){toast('Revisa el peso base y los discos configurados');break;}
       calcExercise.loadToolId=selectedTool.id;
-      S.loadingCalc={exId:calcExercise.id,toolId:selectedTool.id,targetKg:targetKg,result:calculation};
+      S.loadingCalc={exId:calcExercise.id,entryIndex:S.loadingCalc&&S.loadingCalc.exId===calcExercise.id?S.loadingCalc.entryIndex:null,toolId:selectedTool.id,targetKg:targetKg,result:calculation,open:!!(S.loadingCalc&&S.loadingCalc.open)};
       Store.saveProfile();render();break;
-    case 'tab': S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
+    case 'tab': if(t.dataset.tab!=='hoy'&&S.loadingCalc) S.loadingCalc.open=false; S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
     case 'reminder-dismiss':
       try { localStorage.setItem(REMINDER_DISMISSED_KEY,String(t.dataset.session)+':'+iso(new Date())); }
@@ -3361,6 +3435,7 @@ function onClick(ev){
       if(!resetEntryExercise(pendingEntry,pendingSubstitution.exerciseId)){
         S.pendingSubstitution=null; toast('No se encontró el ejercicio alternativo'); render(); break;
       }
+      if(S.loadingCalc&&S.loadingCalc.entryIndex===S.draft.entries.indexOf(pendingEntry)) S.loadingCalc=null;
       S.pendingSubstitution=null; saveDraft(); render();
       toast(pendingSubstitution.exerciseId===(pendingEntry.baseExId||pendingEntry.exId)?'Ejercicio original restaurado':'Sustituto aplicado solo a este entreno');
       break;
@@ -3406,6 +3481,7 @@ function onClick(ev){
     case 'rm-ex':
       var removedEntry = S.draft.entries[ei], entryIndex = ei, draftAtRemoval = S.draft;
       if(!removedEntry) break;
+      if(S.loadingCalc&&S.loadingCalc.entryIndex===ei) S.loadingCalc=null;
       var removedEntryRestState=restStateForRows(removedEntry.rows);
       var removedEntryCollapsed=S.collapsedEntries.has(removedEntry.uiId);
       removedEntry.rows.forEach(cancelRestForRow);
@@ -3515,7 +3591,7 @@ function onClick(ev){
       saveRestEnd(); updateRestTimer(); render(); break;
     case 'rest-stop': S.restEndsAt = null; S.restOwner=null; saveRestEnd(); render(); break;
     case 'discard': S.confirm = 'discard'; render(); break;
-    case 'discard-ok': S.draft = blankDraft(); saveDraft(); S.restEndsAt = null; S.restOwner=null; saveRestEnd(); S.confirm = null; render(); break;
+    case 'discard-ok': S.draft = blankDraft(); S.loadingCalc=null; saveDraft(); S.restEndsAt = null; S.restOwner=null; saveRestEnd(); S.confirm = null; render(); break;
     case 'dismiss-saved': S.justSaved = null; render(); break;
     case 'toggle-ex': S.openEx = S.openEx === t.dataset.id ? null : t.dataset.id; S.confirm = null; render(); break;
     case 'progress-metric': if(['weight','estimated','volume'].includes(t.dataset.metric)){ S.progressMetric=t.dataset.metric; render(); } break;
@@ -3758,7 +3834,11 @@ function onChange(ev){
   if(t.dataset.cfg==='loadToolId'){
     var selectedForExercise=exById(t.dataset.id), selectedToolExists=loadTools().some(function(tool){return tool.id===t.value;});
     if(!selectedForExercise||!selectedToolExists){render();return;}
-    selectedForExercise.loadToolId=t.value;S.loadingCalc=null;Store.saveProfile();render();return;
+    selectedForExercise.loadToolId=t.value;
+    if(S.loadingCalc&&S.loadingCalc.exId===selectedForExercise.id){
+      S.loadingCalc.toolId=t.value;S.loadingCalc.result=null;
+    }else S.loadingCalc=null;
+    Store.saveProfile();render();return;
   }
   if(t.dataset.workoutSubstitution!==undefined){
     var substitutionEntry=S.draft.entries[+t.dataset.ei], selectedExercise=t.value;
@@ -4099,6 +4179,31 @@ function onChange(ev){
   Store.saveProfile(); render();
 }
 function onWorkoutKeydown(ev){
+  if(ev.key==='Escape'&&S.loadingCalc&&S.loadingCalc.open){
+    var closedCalc=S.loadingCalc;
+    S.loadingCalc.open=false;
+    render();
+    if(Number.isInteger(closedCalc.entryIndex)){
+      var trigger=$('.workout-calculator-trigger[data-ei="'+closedCalc.entryIndex+'"]');
+      if(trigger) trigger.focus();
+    }
+    return;
+  }
+  if(ev.key==='Tab'&&S.loadingCalc&&S.loadingCalc.open){
+    var sheet=$('.loading-sheet');
+    if(sheet){
+      var focusable=Array.from(sheet.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])'));
+      if(focusable.length){
+        var first=focusable[0], last=focusable[focusable.length-1];
+        if(ev.shiftKey&&(document.activeElement===first||!sheet.contains(document.activeElement))){
+          ev.preventDefault();last.focus();
+        }else if(!ev.shiftKey&&document.activeElement===last){
+          ev.preventDefault();first.focus();
+        }
+      }
+    }
+    return;
+  }
   if(ev.key!=='Enter' || !ev.target.matches('input[data-f]')) return;
   var view=$('#view');
   if(!view || !ev.target.closest('section.card[data-ei]')) return;

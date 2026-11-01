@@ -779,6 +779,23 @@ test('la interfaz configura equipo cargable y diferencia peso por brazo del tota
   assert.match(source,/saveProfile:function\(\)\{[\s\S]*?Store\.saveLocal\(\);[\s\S]*?profDirty = true/);
 });
 
+test('el entrenamiento muestra un resumen y abre la calculadora contextual en una hoja inferior', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
+  assert.match(app,/function workoutTotals\(\)/);
+  assert.match(app,/function workoutOverviewHtml\(\)/);
+  assert.match(app,/id="workout-volume"/);
+  assert.match(app,/data-act="open-loading-calculator"/);
+  assert.match(app,/calculatorTargetForEntry\(calculatorEntry\)/);
+  assert.match(app,/function workoutCalculatorSheetHtml\(\)/);
+  assert.match(app,/role="dialog" aria-modal="true"/);
+  assert.match(app,/data-act="close-loading-calculator"/);
+  assert.match(app,/if\(ev\.key==='Escape'&&S\.loadingCalc&&S\.loadingCalc\.open\)/);
+  assert.match(app,/document\.body\.classList\.toggle\('is-workout-active'/);
+  assert.match(styles,/body\.is-workout-active\{/);
+  assert.match(styles,/\.loading-sheet\{position:relative/);
+});
+
 test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');

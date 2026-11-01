@@ -44,6 +44,20 @@
   --stop:#FF7B71;
   color-scheme:dark;
 }
+body.is-workout-active{
+  --bg:#07080B;
+  --surface:#14151A;
+  --surface-2:#1C1D23;
+  --ink:#F2F2F4;
+  --muted:#9C9DA6;
+  --line:#303139;
+  --accent:#2588E8;
+  --on-accent:#FFFFFF;
+  --go:#4FC58D;
+  --warn:#E6AF46;
+  --stop:#F16E73;
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
 body{
   background:var(--bg);color:var(--ink);
@@ -142,6 +156,42 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .workout-card-simple .set:not(.head) .in{min-height:50px;font-size:18px}
 .workout-card-simple .set-finish{min-height:46px;font-size:16px}
 .workout-card-simple .workout-card-name{font-size:26px}
+.workout-screen{display:flex;flex-direction:column;gap:12px;margin:0 -16px;padding:12px 16px 24px;min-height:calc(100dvh - 112px);background:var(--bg)}
+.workout-eyebrow{display:block;margin-bottom:4px;color:var(--accent);font:600 12px/1 var(--font-body);letter-spacing:.11em;text-transform:uppercase}
+.workout-heading{align-items:center}
+.workout-heading h2{font-size:30px}
+.workout-overview{display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.workout-overview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.workout-overview-stats>div{display:flex;flex-direction:column;gap:5px;min-width:0;text-align:center}
+.workout-overview-stats>div+div{border-left:1px solid var(--line)}
+.workout-overview-stats span{color:var(--muted);font-size:13px}
+.workout-overview-stats strong{font:600 20px/1.05 var(--font-display);font-variant-numeric:tabular-nums}
+.workout-overview-progress{display:flex;align-items:center;gap:10px}
+.workout-overview-progress .progress{height:6px;flex:1}
+.workout-overview-progress>span{flex:0 0 auto;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.workout-stat-divider{color:var(--muted)}
+.workout-routine-label{color:var(--muted);font-size:13px}
+.workout-routine-label strong{color:var(--ink)}
+.workout-screen .workout-card{border-radius:14px}
+.workout-calculator-trigger{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--accent);text-align:left}
+.workout-calculator-trigger>span:first-child{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--accent) 15%,transparent);font-size:22px}
+.workout-calculator-trigger>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:2px;min-width:0}
+.workout-calculator-trigger strong{font-size:14px}
+.workout-calculator-trigger small{color:var(--muted);font-size:12px}
+.workout-calculator-trigger>span:last-child{font-size:23px}
+.workout-screen .draft-save-status{align-self:flex-start;margin:0}
+.loading-sheet-layer{position:fixed;inset:0;z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.loading-sheet-backdrop{position:absolute;inset:0;width:100%;height:100%;border:0;background:rgba(0,0,0,.68)}
+.loading-sheet{position:relative;width:min(100%,680px);max-height:min(86dvh,780px);overflow:auto;padding:20px 20px max(24px,env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-bottom:0;border-radius:24px 24px 0 0;background:#17171D;color:#F2F2F4;box-shadow:0 -12px 40px rgba(0,0,0,.35);overscroll-behavior:contain}
+.loading-sheet-grip{width:42px;height:5px;margin:0 auto 16px;border-radius:999px;background:#565760}
+.loading-sheet-close{position:absolute;top:14px;right:14px;width:42px;height:42px;border:0;border-radius:50%;background:#272830;color:#E8E8EC;font-size:26px;line-height:1}
+.loading-sheet-exercise{margin:0 52px 14px 0;color:#A9A9B2;font-size:13px}
+.loading-sheet .load-calculator{padding:0;border:0;background:transparent}
+.loading-sheet .load-calculator h3{text-align:center;font-size:22px;text-transform:none}
+.loading-sheet .txt{background:#101116;color:#F2F2F4}
+.loading-sheet .load-result-option{background:#24252C}
+.loading-sheet .load-result-option span{color:#C1C1C8}
+.loading-sheet .btn.ghost{color:#F2F2F4;border-color:#494A53}
 .workout-clock-label{font:500 14px/1.2 var(--font-display);color:var(--muted)}
 .workout-clock-label strong{color:var(--accent);font-size:20px}
 .rest-timer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:6px}
@@ -518,6 +568,15 @@ nav.tabs .in{min-height:66px}
   .history-tools{grid-template-columns:1fr}
   .workout-finish{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
   .rest-timer{top:58px}
+  .workout-screen{margin:0 -12px;padding:12px 12px 22px}
+  .workout-overview{padding:12px 8px}
+  .workout-overview-stats strong{font-size:18px}
+  .workout-overview-stats span{font-size:12px}
+  .workout-overview-progress>span{font-size:11px}
+  .workout-heading{align-items:flex-start}
+  .workout-heading-actions{align-items:flex-start}
+  .workout-heading .btn{min-height:40px;padding:0 10px;font-size:13px}
+  .loading-sheet{padding-right:14px;padding-left:14px}
 }
 @media (min-width:900px){body{padding-top:22px}.wrap{max-width:900px}.home-dashboard{padding:24px}.card{padding:18px}nav.tabs .in{max-width:900px}}
 @media (max-width:520px){
