@@ -2438,7 +2438,7 @@ function viewRut(){
         : '<section class="library-empty"><span>▤</span><h3>Este programa todavía no tiene rutinas</h3><p>Añade una rutina nueva y asígnala a este programa.</p><button class="btn" data-act="rut-new">Crear rutina</button></section>';
       if(S.confirm === 'delp:' + activeProgram.id) out += '<section class="card"><p>¿Borrar el programa? Las rutinas se conservarán sin asignación.</p><div class="row"><button class="btn danger sm" data-act="program-del-ok" data-id="' + esc(activeProgram.id) + '">Confirmar: borrar programa</button><button class="btn ghost sm" data-act="program-cancel-delete">Cancelar</button></div></section>';
     } else {
-      out += '<div class="library-sort"><span>↕ Recientes</span><span class="muted">▦</span></div>';
+      out += '<div class="library-sort"><span>A-Z · Orden alfabético</span><span class="muted">' + programs.length + ' programa' + (programs.length === 1 ? '' : 's') + '</span></div>';
       out += '<div class="library-list"><button class="library-card create-card" data-act="program-new"><span class="library-cover">＋</span><span><strong>Crear programa</strong><small>Organiza tus rutinas en un programa</small></span></button>' +
         (programs.length ? programs.map(function(program){
           var count = rs.filter(function(r){ return r.programId === program.id; }).length;
@@ -2451,7 +2451,7 @@ function viewRut(){
       }
     }
   } else if(S.librarySection === 'rutinas'){
-    out += '<div class="library-sort"><span>↕ Recientes</span><span class="muted">' + rs.length + ' rutinas</span></div>';
+    out += '<div class="library-sort"><span>A-Z · Orden alfabético</span><span class="muted">' + rs.length + ' rutinas</span></div>';
     out += rs.length
       ? '<div class="library-list"><button class="library-card create-card" data-act="rut-new"><span class="library-cover">＋</span><span><strong>Crear rutina</strong><small>Diseña una sesión de entrenamiento</small></span></button>' + rs.map(libraryRoutineCard).join('') + '</div>'
       : '<section class="library-empty"><span>▤</span><h3>Aún no tienes rutinas</h3><p>Crea una rutina desde cero o abre un programa para añadirla ahí.</p><button class="btn" data-act="rut-new">Crear rutina</button></section>';
@@ -2462,7 +2462,7 @@ function viewRut(){
 }
 function libraryRoutineCard(routine){
   var count = routine.items.length, replacing = S.confirm === 'start:' + routine.id, summary=routineSummary(routine);
-  return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="' + esc(routine.id) + '"><span class="library-cover routine-cover">' + esc(routine.name.trim().charAt(0).toUpperCase() || 'R') + '</span><span><strong>' + esc(routine.name) + '</strong><small>' + count + ' ejercicio' + (count === 1 ? '' : 's') + ' · '+summary.workingSets+' series</small><small class="routine-card-meta">'+esc(routineMuscleLabel(summary))+' · '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</small></span></button>' +
+  return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="' + esc(routine.id) + '"><span class="library-cover routine-cover">' + esc(routine.name.trim().charAt(0).toUpperCase() || 'R') + '</span><span><strong>' + esc(routine.name) + '</strong><small class="routine-card-volume">' + count + ' ejercicio' + (count === 1 ? '' : 's') + ' · '+summary.workingSets+' series</small><small class="routine-card-meta">'+esc(routineMuscleLabel(summary))+' · '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</small></span></button>' +
     '<div class="library-card-actions"><button class="btn sm" data-act="rut-start" data-id="' + esc(routine.id) + '">' + (replacing ? 'Reemplazar' : 'Entrenar') + '</button><button class="mini" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar ' + esc(routine.name) + '">✎</button><button class="mini" data-act="rut-duplicate" data-id="' + esc(routine.id) + '" aria-label="Duplicar ' + esc(routine.name) + '">⧉</button>' +
     (S.confirm === 'delr:' + routine.id
       ? '<button class="mini danger" data-act="rut-del-ok" data-id="' + esc(routine.id) + '" aria-label="Confirmar borrar rutina">✓</button>'

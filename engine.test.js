@@ -840,6 +840,9 @@ test('la biblioteca resume rutinas y muestra la última actividad de sus ejercic
   const readme=fs.readFileSync('./README.md','utf8');
   assert.match(app,/function routineSummary\(routine\)/);
   assert.match(app,/summary\.workingSets\+' series<\/small>/);
+  assert.match(app,/A-Z · Orden alfabético/);
+  assert.match(app,/class="routine-card-volume"/);
+  assert.match(fs.readFileSync('./styles.css','utf8'),/\.routine-card-volume\{[^}]*border-radius:999px/);
   assert.match(app,/function routineExerciseHistory\(exId\)/);
   assert.match(app,/Último registro: '\+dFmt\(latest\.date\)/);
   assert.match(readme,/Las tarjetas de \*\*Rutinas\*\* resumen sus series planificadas/);
