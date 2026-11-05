@@ -581,13 +581,16 @@ nav.tabs .in{min-height:66px}
   .library-card:not(.create-card) .library-open{flex-basis:100%}
   .library-card-actions{width:100%;justify-content:flex-end}
   .library-card-actions .mini,.it-tools .mini{width:44px;height:44px}
+  .library-card-actions .btn{min-height:44px}
   .workout-card-tools .mini{width:44px;height:44px}
   .field:has(select[data-it="warmupMode"]),.field:has(select[data-it="unilateral"]){grid-column:1/-1}
   .weekly-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .profile-exercise-card{align-items:flex-start;flex-direction:column;gap:7px}
   .profile-exercise-card span:last-child{text-align:left;white-space:normal}
   .history-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .history-actions .btn{min-width:0;min-height:46px;padding:8px;line-height:1.15;white-space:normal}
+  .history-session-card{gap:14px}
+  .history-session-head h3{font-size:22px}
+  .history-actions .btn{min-width:0;min-height:48px;padding:8px;line-height:1.2;white-space:normal}
   .settings-data-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
   .settings-data-actions .btn{font-size:14px}
   .summary-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.summary-stats>div{padding:8px}
@@ -612,16 +615,20 @@ nav.tabs .in{min-height:66px}
   .history-summary .summary-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .session-set-edit>strong{grid-column:1/-1;padding:4px 0 0}
   .session-set-type{grid-column:1/-1}
-  .set{grid-template-columns:22px minmax(0,1fr) 38px;gap:7px;padding:8px}
-  .set-fields{gap:5px}
-  .set-input>span,.set-type-label>span{font-size:10px}
-  .set .in{height:46px;font-size:20px}
+  .set{grid-template-columns:20px minmax(0,1fr) 40px;gap:7px;padding:9px}
+  .set>.icon{width:40px;height:44px}
+  .set-fields{gap:7px}
+  .set-input{gap:5px}
+  .set-input>span,.set-type-label>span{font-size:11px}
+  .set .in{height:50px;font-size:21px}
   .set-type-label,.set-reference,.set-finish,.set-comparison{grid-column:2/4}
-  .set-type{height:42px}
-  .set-unilateral{grid-template-columns:22px minmax(0,1fr) 38px}
-  .set-unilateral .side-inputs{grid-template-columns:28px repeat(3,minmax(0,1fr));gap:4px}
-  .set-unilateral .side-inputs .set-input>span{font-size:9px}
-  .set-unilateral .in{font-size:18px}
+  .set-type{height:46px}
+  .set-finish,.set-finish-done{min-height:48px}
+  .set-unilateral{grid-template-columns:20px minmax(0,1fr) 40px}
+  .set-unilateral .side-inputs{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .set-unilateral .side-label{grid-column:1/-1;padding:2px 2px 0;font-size:13px}
+  .set-unilateral .side-inputs .set-input>span{font-size:11px}
+  .set-unilateral .in{font-size:20px}
 }
 #pwa-update{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:1100}#pwa-update-button{border:0;border-radius:999px;padding:12px 18px;background:var(--ink);color:var(--surface);font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}
 @media (max-width:380px){
