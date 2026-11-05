@@ -903,6 +903,19 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
   assert.deepEqual(routines.map(routine=>routine.id),['a','b','c','other']);
 });
 
+test('las recomendaciones muestran el motivo y el resultado solo al desplegar el detalle', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const goal=app.match(/function goalHtml\(ex\)\{[\s\S]*?\n\}/);
+  const live=app.match(/function liveHtml\(ei\)\{[\s\S]*?\n\}/);
+  assert.ok(goal&&live);
+  assert.match(goal[0],/<details class="goal-more"><summary>Ver motivo<\/summary>/);
+  assert.match(goal[0],/Último entreno/);
+  assert.match(goal[0],/p\.detail/);
+  assert.match(live[0],/<details class="goal-more"><summary>Ver motivo<\/summary>/);
+  assert.match(live[0],/Resultado de hoy:/);
+  assert.match(live[0],/a\.detail/);
+});
+
 test('el entrenamiento muestra un resumen y abre la calculadora contextual en una hoja inferior', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');

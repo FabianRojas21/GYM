@@ -25,8 +25,11 @@ con accesos a tus rutinas y a los ejercicios que puedes retomar. La semana del
 resumen va del lunes al día actual e ignora sesiones fechadas en el futuro.
 La tarjeta del último entreno conserva un resumen breve de ejercicios, series y
 repeticiones; al desplegarla muestra peso, reps, RIR/RPE y el objetivo de
-progresión por ejercicio. En **Biblioteca → Programas**, puedes definir la
-secuencia con las flechas y activar un programa; **Hoy** sugiere la primera
+progresión por ejercicio. La recomendación se mantiene breve; **Ver motivo**
+despliega el último resultado y la razón del objetivo. Durante el entrenamiento,
+el mismo detalle muestra las series registradas hoy y cómo influyen en la
+siguiente sugerencia. En **Biblioteca → Programas**, puedes definir la secuencia
+con las flechas y activar un programa; **Hoy** sugiere la primera
 rutina o la que sigue al último entreno registrado dentro de ese programa.
 También puedes elegir una rutina individual como activa desde su detalle; al
 hacerlo, se desactiva el programa anterior. Los entrenos nuevos conservan el

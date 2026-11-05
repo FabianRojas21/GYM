@@ -1462,11 +1462,14 @@ function liveHtml(ei){
   var en = S.draft.entries[ei], ex = effEx(en);
   var sets = rowsToSets(en.rows, ex.unilateral);
   var hist = entriesFor(ex.id), last = hist[hist.length-1];
-  var a = analyze(ex, effectiveSetsFor(ex, sets, S.draft.date || iso(new Date())), last ? effectiveSetsFor(ex, last.sets, last.date) : null, S.profile.settings);
+  var datedSets = effectiveSetsFor(ex, sets, S.draft.date || iso(new Date()));
+  var a = analyze(ex, datedSets, last ? effectiveSetsFor(ex, last.sets, last.date) : null, S.profile.settings);
   if(!a) return '<p class="muted small">' + (ex.unilateral
     ? 'Completa peso y repeticiones en ambos lados para ver tu progreso.'
     : 'Anota tus series y verás cuánto te falta para subir de peso.') + '</p>';
-  return '<div class="goal-row">' + chip(a.status) + '<strong>Así vas: ' + esc(a.headline) + '</strong></div>' + barHtml(a, ex) + '<p class="small">' + esc(a.detail) + '</p>';
+  var resultSets = datedSets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && validReps(set.r); });
+  return '<div class="goal-row">' + chip(a.status) + '<strong>Así vas: ' + esc(a.headline) + '</strong></div>' + barHtml(a, ex) +
+    '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Resultado de hoy: ' + esc(setsText(resultSets)) + '</p><p class="small">' + esc(a.detail) + '</p></details>';
 }
 function previousWorkSet(exId, workIndex, unilateral){
   var previous=previousExerciseEntry(exId,S.profile.settings.previousExerciseScope,S.draft.routineId);
@@ -1642,7 +1645,7 @@ function goalHtml(ex){
   }
   return '<div class="goal"><div class="goal-row">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</span></div>' +
     barHtml(p, ex) +
-    '<details class="goal-more"><summary>Ver recomendación y último resultado</summary><p class="muted small">Última vez, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div>';
+    '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Último entreno, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div>';
 }
 function completedWorkSets(en, ex){
   var target = Math.max(1, Number(ex.sets) || 1);
