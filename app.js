@@ -129,7 +129,7 @@ var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
 var RTOK = RTK + ':owner';
 var WORKOUT_SIMPLE_KEY='sobrecarga:workout-simple:v1';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, goals:{}, measurements:[], recoveryRatings:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, activeProgramId:null, activeRoutineId:null, goals:{}, measurements:[], recoveryRatings:{}}; }
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
@@ -146,6 +146,10 @@ function normProfile(p){
   d.exercises = p.exercises || {};
   d.routines = p.routines || {};
   d.programs = p.programs || {};
+  d.activeProgramId = typeof p.activeProgramId === 'string' && Object.prototype.hasOwnProperty.call(d.programs,p.activeProgramId)
+    ? p.activeProgramId : null;
+  d.activeRoutineId = !d.activeProgramId && typeof p.activeRoutineId === 'string' &&
+    Object.prototype.hasOwnProperty.call(d.routines,p.activeRoutineId) ? p.activeRoutineId : null;
   d.goals = p.goals || {};
   d.measurements = Array.isArray(p.measurements) ? p.measurements.filter(function(m){ return isObject(m) && typeof m.id === 'string'; }).map(function(m){ return {id:m.id, date:typeof m.date === 'string' ? m.date : iso(new Date()), values:isObject(m.values) ? clone(m.values) : {}, notes:typeof m.notes === 'string' ? m.notes : ''}; }) : [];
   d.recoveryRatings = {};
@@ -247,7 +251,7 @@ function effectiveWeight(ex, set, date){
 function effectiveSetsFor(ex, sets, date){
   return sets.map(function(set){ var copy=clone(set); copy.w=effectiveWeight(ex,set,date); return copy; });
 }
-function blankDraft(){ return {date:null, startedAt:null, routineId:null, entries:[], collapsedEntryIds:[]}; }
+function blankDraft(){ return {date:null, startedAt:null, routineId:null, programId:null, entries:[], collapsedEntryIds:[]}; }
 function normalizeDraft(value){
   var draft=Object.assign(blankDraft(), value);
   draft.entries.forEach(function(entry){ if(!entry.uiId) entry.uiId=uid('entry_'); });
@@ -1966,20 +1970,31 @@ function programRoutineOrderConfigured(program,routines){
   var memberIds=routines.filter(function(routine){return routine.programId===program.id;}).map(function(routine){return routine.id;});
   return memberIds.length>0&&memberIds.every(function(id){return program.routineOrder.indexOf(id)>=0;});
 }
-function nextProgramRoutine(session){
-  var current=session&&session.routineId&&S.profile.routines[session.routineId];
-  var program=current&&current.programId&&S.profile.programs[current.programId];
-  var routines=routineList();
-  if(!current||!program||!programRoutineOrderConfigured(program,routines)) return null;
-  var sequence=orderedProgramRoutines(program,routines),index=sequence.findIndex(function(routine){return routine.id===current.id;});
-  if(index<0||!sequence.length) return null;
-  return {program:program,current:current,routine:sequence[(index+1)%sequence.length]};
+function programRecommendation(program,routines,sessions){
+  var sequence=orderedProgramRoutines(program,routines);
+  if(!sequence.length||!programRoutineOrderConfigured(program,routines)) return null;
+  var latest=sessions.filter(function(session){
+    return session.programId===program.id&&sequence.some(function(routine){return routine.id===session.routineId;});
+  }).sort(function(a,b){return a.date===b.date?(Number(b.ts)||0)-(Number(a.ts)||0):b.date.localeCompare(a.date);})[0];
+  var index=latest?sequence.findIndex(function(routine){return routine.id===latest.routineId;}):-1;
+  return {program:program,current:latest||null,routine:sequence[(index+1)%sequence.length]};
 }
-function nextProgramRoutineHtml(session){
-  var next=nextProgramRoutine(session);
-  if(!next) return '';
-  return '<div class="home-next-routine"><div><span class="home-eyebrow">Siguiente del programa · '+esc(next.program.name)+'</span><strong>'+esc(next.routine.name)+'</strong><small>Después de '+esc(next.current.name)+'</small></div>'+
+function nextProgramRoutine(){
+  var program=S.profile.activeProgramId&&S.profile.programs[S.profile.activeProgramId];
+  if(!program) return null;
+  return programRecommendation(program,routineList(),S.sessions);
+}
+function activeTrainingPlanHtml(){
+  var next=nextProgramRoutine(),activeRoutine=S.profile.activeRoutineId&&S.profile.routines[S.profile.activeRoutineId];
+  if(next) return '<div class="home-next-routine"><div><span class="home-eyebrow">Programa activo · '+esc(next.program.name)+'</span><strong>'+esc(next.routine.name)+'</strong><small>'+(next.current?'Siguiente después de '+esc(next.current.routineName||next.current.routineId):'Primera rutina del programa')+'</small></div>'+
     '<button class="btn sm" data-act="rut-start" data-id="'+esc(next.routine.id)+'">Empezar</button></div>';
+  if(S.profile.activeProgramId){
+    var activeProgram=S.profile.programs[S.profile.activeProgramId];
+    return '<div class="home-next-routine"><div><span class="home-eyebrow">Programa activo</span><strong>'+esc((activeProgram||{}).name||'Programa')+'</strong><small>Añade una rutina y define su secuencia en Biblioteca.</small></div><button class="btn ghost sm" data-act="program-open" data-id="'+esc(S.profile.activeProgramId)+'">Ver programa</button></div>';
+  }
+  if(activeRoutine) return '<div class="home-next-routine"><div><span class="home-eyebrow">Rutina activa</span><strong>'+esc(activeRoutine.name)+'</strong><small>Repite esta rutina cuando quieras; el progreso se calcula por ejercicio.</small></div>'+
+    '<button class="btn sm" data-act="rut-start" data-id="'+esc(activeRoutine.id)+'">Empezar</button></div>';
+  return '<div class="home-plan-empty"><span>No hay un plan activo</span><button class="text-button" data-act="library-open-section" data-section="programas">Elegir programa o rutina</button></div>';
 }
 function moveProgramRoutine(programId,routineId,direction){
   var program=S.profile.programs[programId],sequence=orderedProgramRoutines(program,routineList());
@@ -2394,7 +2409,7 @@ function homeDashboard(){
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
     '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>carga × reps · sin aprox.</span></div></div>' +
-    workoutReminderHtml(latest) +
+    workoutReminderHtml(latest) + activeTrainingPlanHtml() +
     '<button class="btn home-start" data-act="start" data-home-start><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
     weeklyMuscleSummaryHtml(week);
   if(latest){
@@ -2409,7 +2424,7 @@ function homeDashboard(){
       '<button class="text-button" data-act="tab" data-tab="historial">Ver historial</button></div>' +
       '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' ' + weightUnitLabel() + '·reps</strong> carga × reps · sin aprox.</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
       (exercises ? '<div class="home-exercises">' + exercises + (latest.entries.length > 3 ? '<span class="more-exercises">+' + (latest.entries.length - 3) + ' más</span>' : '') + '</div>' : '') +
-      recentSessionDetailsHtml(latest) + nextProgramRoutineHtml(latest) +
+      recentSessionDetailsHtml(latest) +
       '</section>';
   } else {
     out += '<section class="latest-workout empty-latest"><span class="home-eyebrow">Tu actividad reciente</span><h3>Tu primer entreno empieza aquí</h3><p>Cuando registres una sesión, aquí verás su duración, volumen y ejercicios.</p></section>';
@@ -2497,7 +2512,9 @@ function viewRut(){
       var programRoutines = orderedProgramRoutines(activeProgram,rs);
       var hasRoutineOrder=programRoutineOrderConfigured(activeProgram,rs);
       out += '<div class="library-sort"><span>Secuencia del programa</span><button class="text-button" data-act="program-edit" data-id="' + esc(activeProgram.id) + '">Editar programa</button></div>' +
-        '<p class="small muted program-sequence-hint">'+(hasRoutineOrder?'Usa las flechas para definir qué rutina sigue.':'Orden inicial alfabético. Confirma o ajusta la secuencia para sugerir el próximo día.')+'</p>';
+        '<p class="small muted program-sequence-hint">'+(hasRoutineOrder?'Usa las flechas para definir qué rutina sigue.':'Orden inicial alfabético. Confirma o ajusta la secuencia para sugerir el próximo día.')+'</p>' +
+        '<button class="btn '+(S.profile.activeProgramId===activeProgram.id?'ghost':'')+' sm program-activate" data-act="program-activate" data-id="'+esc(activeProgram.id)+'"'+(S.profile.activeProgramId===activeProgram.id?' disabled':'')+'>' +
+        (S.profile.activeProgramId===activeProgram.id?'Programa activo':hasRoutineOrder?'Usar como programa activo':'Confirmar orden y activar')+'</button>';
       out += programRoutines.length
         ? '<div class="library-list">' + programRoutines.map(function(routine,index){return libraryRoutineCard(routine,{programId:activeProgram.id,index:index,count:programRoutines.length});}).join('') +
           (!hasRoutineOrder?'<button class="btn ghost sm program-order-save" data-act="program-order-save" data-id="'+esc(activeProgram.id)+'">Usar este orden</button>':'') + '</div>'
@@ -2508,7 +2525,7 @@ function viewRut(){
       out += '<div class="library-list"><button class="library-card create-card" data-act="program-new"><span class="library-cover">＋</span><span><strong>Crear programa</strong><small>Organiza tus rutinas en un programa</small></span></button>' +
         (programs.length ? programs.map(function(program){
           var count = rs.filter(function(r){ return r.programId === program.id; }).length;
-          return '<div class="library-card"><button class="library-open" data-act="program-open" data-id="' + esc(program.id) + '"><span class="library-cover program-cover">' + esc(program.name.slice(0,1).toUpperCase()) + '</span><span><strong>' + esc(program.name) + '</strong><small>' + count + ' rutina' + (count === 1 ? '' : 's') + '</small></span></button>' +
+          return '<div class="library-card"><button class="library-open" data-act="program-open" data-id="' + esc(program.id) + '"><span class="library-cover program-cover">' + esc(program.name.slice(0,1).toUpperCase()) + '</span><span><strong>' + esc(program.name) + '</strong><small>' + (S.profile.activeProgramId===program.id?'Programa activo · ':'') + count + ' rutina' + (count === 1 ? '' : 's') + '</small></span></button>' +
             '<button class="mini" data-act="program-del" data-id="' + esc(program.id) + '" aria-label="Borrar programa ' + esc(program.name) + '">⋮</button></div>';
         }).join('') : '<section class="library-empty"><span>▤</span><h3>Aún no tienes programas</h3><p>Crea un programa para agrupar rutinas, por ejemplo: Torso/Pierna o Full Body.</p></section>') + '</div>';
       if(S.confirm && S.confirm.indexOf('delp:') === 0){
@@ -2570,6 +2587,7 @@ function programEditor(){
 }
 function routineLibraryDetail(routine){
   var program = routine.programId && S.profile.programs[routine.programId];
+  var active=S.profile.activeRoutineId===routine.id;
   var summary=routineSummary(routine);
   var exercises = routine.items.map(function(item){
     var warmups = Number(item.warmupSets) || 0;
@@ -2582,7 +2600,7 @@ function routineLibraryDetail(routine){
     '<div class="library-routine-summary"><span>' + routine.items.length + ' ejercicio' + (routine.items.length === 1 ? '' : 's') + '</span><span>'+summary.workingSets+' series de trabajo'+(summary.warmupSets?' · '+summary.warmupSets+' aproximaciones':'')+'</span><span>'+esc(routineMuscleLabel(summary))+'</span><span>Último entreno: '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</span>' +
     (program ? '<span>' + esc(program.name) + '</span>' : '') + '</div>' +
     '<div class="library-exercises">' + (exercises || '<p class="muted">Añade ejercicios a esta rutina desde Editar.</p>') + '</div>' +
-    '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn ghost" data-act="rut-duplicate" data-id="' + esc(routine.id) + '">Duplicar rutina</button><button class="btn ghost" data-act="rut-export" data-id="' + esc(routine.id) + '">Compartir rutina</button></div>';
+    '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn '+(active?'ghost':'')+'" data-act="routine-activate" data-id="'+esc(routine.id)+'"'+(active?' disabled':'')+'>'+(active?'Rutina activa':'Usar como rutina activa')+'</button><button class="btn ghost" data-act="rut-duplicate" data-id="' + esc(routine.id) + '">Duplicar rutina</button><button class="btn ghost" data-act="rut-export" data-id="' + esc(routine.id) + '">Compartir rutina</button></div>';
 }
 function routineItemsForEdit(routine){
   return clone(routine.items).map(function(item){
@@ -3426,7 +3444,9 @@ function startRoutine(id){
     entries.push({uiId:uid('entry_'), exId:it.exId, baseExId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
   });
   if(!entries.length){ toast(skipped ? 'La rutina solo tiene ejercicios archivados' : 'La rutina no tiene ejercicios'); return; }
-  S.draft = {date:iso(new Date()), startedAt:Date.now(), routineId:id, entries:entries, collapsedEntryIds:[]};
+  S.draft = {date:iso(new Date()), startedAt:Date.now(), routineId:id,
+    programId:r.programId && S.profile.programs[r.programId] ? r.programId : null,
+    entries:entries, collapsedEntryIds:[]};
   S.collapsedEntries.clear();
   saveDraft();
   S.restEndsAt = null; saveRestEnd();
@@ -3457,6 +3477,21 @@ function saveProgramRoutineOrder(programId){
   if(!program) return false;
   program.routineOrder=orderedProgramRoutines(program,routineList()).map(function(routine){return routine.id;});
   Store.saveProfile();return true;
+}
+function activateProgram(programId){
+  var program=S.profile.programs[programId],sequence=orderedProgramRoutines(program,routineList());
+  if(!program||!sequence.length){toast('Añade al menos una rutina antes de activar el programa');return false;}
+  program.routineOrder=sequence.map(function(routine){return routine.id;});
+  S.profile.activeProgramId=programId;S.profile.activeRoutineId=null;
+  Store.saveProfile();S.selectedProgram=programId;S.librarySection='programas';render();
+  toast('Programa activo: '+program.name);return true;
+}
+function activateRoutine(routineId){
+  var routine=S.profile.routines[routineId];
+  if(!routine){toast('No se encontró la rutina');return false;}
+  S.profile.activeRoutineId=routineId;S.profile.activeProgramId=null;
+  Store.saveProfile();S.selectedRoutine=routineId;S.librarySection='rutinas';render();
+  toast('Rutina activa: '+routine.name);return true;
 }
 function saveProgram(){
   var program = S.pedit, name = program && program.name.trim();
@@ -3540,6 +3575,7 @@ function finish(updateRoutine){
   };
   var rt = S.draft.routineId && S.profile.routines[S.draft.routineId];
   if(rt){ session.routineId = rt.id; session.routineName = rt.name; }
+  if(S.draft.programId && S.profile.programs[S.draft.programId]) session.programId=S.draft.programId;
   Store.saveSession(session).then(function(){
     S.finishSaving = false;
     S.sessions=S.sessions.filter(function(item){return item.id!==session.id;}).concat([session]);
@@ -3780,6 +3816,7 @@ function onClick(ev){
     case 'program-cancel': S.pedit = null; render(); break;
     case 'program-open': S.selectedProgram = t.dataset.id; S.librarySection = 'programas'; S.selectedRoutine = null; render(); break;
     case 'program-back': S.selectedProgram = null; render(); break;
+    case 'program-activate': activateProgram(t.dataset.id); break;
     case 'program-order-save':
       if(saveProgramRoutineOrder(t.dataset.id)){render();toast('Secuencia del programa guardada');}
       break;
@@ -3790,9 +3827,12 @@ function onClick(ev){
     case 'program-cancel-delete': S.confirm = null; render(); break;
     case 'program-del-ok':
       Object.keys(S.profile.routines).forEach(function(id){ if(S.profile.routines[id].programId === t.dataset.id) delete S.profile.routines[id].programId; });
-      delete S.profile.programs[t.dataset.id]; S.selectedProgram = null; S.confirm = null; Store.saveProfile(); render(); toast('Programa borrado; sus rutinas siguen en la biblioteca'); break;
+      delete S.profile.programs[t.dataset.id];
+      if(S.profile.activeProgramId===t.dataset.id) S.profile.activeProgramId=null;
+      S.selectedProgram = null; S.confirm = null; Store.saveProfile(); render(); toast('Programa borrado; sus rutinas siguen en la biblioteca'); break;
     case 'rut-detail': S.selectedRoutine = t.dataset.id; render(); break;
     case 'routine-back': S.selectedRoutine = null; render(); break;
+    case 'routine-activate': activateRoutine(t.dataset.id); break;
     case 'start': S.picker = true; render(); var q = $('#pk-q'); if(q){ q.focus(); q.scrollIntoView({block:'center'}); } break;
     case 'workout-simple-toggle':
       S.simpleWorkoutMode=!S.simpleWorkoutMode;
@@ -3842,6 +3882,7 @@ function onClick(ev){
       if(deletedRoutine&&deletedRoutine.programId&&S.profile.programs[deletedRoutine.programId]&&Array.isArray(S.profile.programs[deletedRoutine.programId].routineOrder)){
         S.profile.programs[deletedRoutine.programId].routineOrder=S.profile.programs[deletedRoutine.programId].routineOrder.filter(function(id){return id!==t.dataset.id;});
       }
+      if(S.profile.activeRoutineId===t.dataset.id) S.profile.activeRoutineId=null;
       delete S.profile.routines[t.dataset.id]; S.selectedRoutine = null; Store.saveProfile(); S.confirm = null; render(); toast('Rutina borrada'); break;
     case 'move-exercise':
       var moveFrom = ei, moveTo = ei + Number(t.dataset.direction);
@@ -4098,7 +4139,7 @@ function onClick(ev){
     case 'wipe-ok':
       var ids = S.sessions.map(function(s){ return s.id; });
       Store.deleteSessions(ids).then(function(){
-        S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.goals = {}; S.profile.recoveryRatings = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
+        S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.activeProgramId = null; S.profile.activeRoutineId = null; S.profile.goals = {}; S.profile.recoveryRatings = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
         S.restEndsAt = null; saveRestEnd();
         return Store.saveProfileNow();
       }).then(function(){

@@ -848,22 +848,29 @@ test('la biblioteca resume rutinas y muestra la última actividad de sus ejercic
   assert.match(readme,/Las tarjetas de \*\*Rutinas\*\* resumen sus series planificadas/);
 });
 
-test('Hoy mantiene el detalle de la última sesión y sugiere la siguiente rutina solo con orden definido', () => {
+test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activo', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/function recentSessionDetailsHtml\(session\)[\s\S]*?setsText\(entry\.sets,true\)[\s\S]*?Próximo objetivo/);
-  assert.match(app,/function nextProgramRoutineHtml\(session\)[\s\S]*?Siguiente del programa/);
-  assert.match(app,/recentSessionDetailsHtml\(latest\) \+ nextProgramRoutineHtml\(latest\)/);
+  assert.match(app,/function activeTrainingPlanHtml\(\)[\s\S]*?Programa activo/);
+  assert.match(app,/recentSessionDetailsHtml\(latest\)/);
   assert.match(app,/function programRoutineOrderConfigured\(program,routines\)[\s\S]*?program\.routineOrder\.indexOf\(id\)>=0/);
   assert.match(app,/data-act="program-order-save"/);
   assert.match(app,/data-act="program-routine-move"/);
+  assert.match(app,/data-act="program-activate"/);
+  assert.match(app,/data-act="routine-activate"/);
+  assert.match(app,/session\.programId=S\.draft\.programId/);
+  assert.match(app,/programId:r\.programId && S\.profile\.programs\[r\.programId\] \? r\.programId : null/);
+  assert.match(app,/activeProgramId/);
   assert.match(styles,/\.home-recent-details>summary\{[^}]*min-height:44px/);
   assert.match(styles,/\.home-next-routine\{/);
 
   const helper=app.match(/function orderedProgramRoutines\(program,routines\)\{[\s\S]*?\n\}/);
-  assert.ok(helper);
-  const context={Array,Object};
-  vm.runInNewContext(helper[0]+';globalThis.orderProgramRoutines=orderedProgramRoutines;',context);
+  const configured=app.match(/function programRoutineOrderConfigured\(program,routines\)\{[\s\S]*?\n\}/);
+  const recommendation=app.match(/function programRecommendation\(program,routines,sessions\)\{[\s\S]*?\n\}/);
+  assert.ok(helper&&configured&&recommendation);
+  const context={Array,Object,Number};
+  vm.runInNewContext(helper[0]+';'+configured[0]+';'+recommendation[0]+';globalThis.orderProgramRoutines=orderedProgramRoutines;globalThis.recommendProgramRoutine=programRecommendation;',context);
   const routines=[
     {id:'a',name:'Día A',programId:'p'},
     {id:'b',name:'Día B',programId:'p'},
@@ -871,7 +878,19 @@ test('Hoy mantiene el detalle de la última sesión y sugiere la siguiente rutin
     {id:'other',name:'Otra rutina',programId:'other'}
   ];
   const program={id:'p',routineOrder:['b','c','a']};
-  assert.deepEqual(Array.from(context.orderProgramRoutines(program,routines),routine=>routine.id),['b','c','a']);
+  const ordered=['b','c','a'];
+  assert.deepEqual(Array.from(context.orderProgramRoutines(program,routines),routine=>routine.id),ordered);
+  assert.equal(context.recommendProgramRoutine(program,routines,[]).routine.id,'b');
+  assert.equal(context.recommendProgramRoutine(program,routines,[
+    {id:'a1',date:'2026-01-01',ts:1,programId:'p',routineId:'b'},
+    {id:'other',date:'2026-01-05',ts:5,programId:'other',routineId:'other'},
+    {id:'legacy',date:'2026-01-06',ts:6,routineId:'c'},
+    {id:'p2',date:'2026-01-02',ts:2,programId:'p',routineId:'c'}
+  ]).routine.id,'a');
+  assert.equal(context.recommendProgramRoutine(program,routines,[
+    {id:'a1',date:'2026-01-01',ts:1,programId:'p',routineId:'b'}
+  ]).routine.id,'c');
+  assert.equal(context.recommendProgramRoutine({id:'p'},routines,[]),null);
   assert.deepEqual(routines.map(routine=>routine.id),['a','b','c','other']);
 });
 

@@ -445,6 +445,8 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .home-next-routine strong{font-size:15px;overflow-wrap:anywhere}
 .home-next-routine small{color:#A8AEB8;font-size:12px}
 .home-next-routine .btn{min-height:42px;flex:0 0 auto}
+.home-plan-empty{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px}
+.program-activate{margin:0 0 10px}
 .program-sequence-hint{margin-top:-4px}
 .program-order-save{align-self:flex-start}
 .program-routine-move{width:40px;height:40px}
