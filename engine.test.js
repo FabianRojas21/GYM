@@ -906,6 +906,9 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.set>\.icon\{width:40px;height:44px\}/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.set-finish,\.set-finish-done\{min-height:48px\}/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.set-unilateral \.side-label\{grid-column:1\/-1/);
+  assert.match(styles,/@media \(max-width:520px\)\{[\s\S]*?\.workout-screen \.set \.set-fields \.set-input \.in\{height:50px;font-size:21px\}/);
+  assert.match(styles,/@media \(max-width:380px\)\{[\s\S]*?\.set:not\(\.set-unilateral\) \.set-fields\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles,/@media \(max-width:380px\)\{[\s\S]*?\.set-unilateral \.side-inputs>\.set-input:first-of-type\{grid-column:1\/-1\}/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.history-actions \.btn\{min-width:0;min-height:48px/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.library-card-actions \.btn\{min-height:44px\}/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.library-card:not\(\.create-card\)\{flex-wrap:wrap/);

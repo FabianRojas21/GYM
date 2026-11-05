@@ -815,3 +815,17 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 @media (prefers-reduced-motion:reduce){
   .library-card,.workout-calculator-trigger,.set,.exercise-expand-icon{transition:none}
 }
+@media (max-width:520px){
+  .workout-screen .set .set-input>span,.workout-screen .set .set-type-label>span{font-size:11px}
+  .workout-screen .set .set-fields .set-input .in{height:50px;font-size:21px}
+  .workout-screen .set>.icon{width:40px;height:44px}
+  .workout-screen .set .set-finish:not(.set-finish-done),
+  .workout-screen .set .set-finish-done{min-height:48px}
+}
+@media (max-width:380px){
+  .workout-screen .set:not(.set-unilateral) .set-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .workout-screen .set:not(.set-unilateral) .set-fields>.set-input:first-child{grid-column:1/-1}
+  .workout-screen .set-unilateral .side-inputs{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .workout-screen .set-unilateral .side-inputs>.side-label{grid-column:1/-1}
+  .workout-screen .set-unilateral .side-inputs>.set-input:first-of-type{grid-column:1/-1}
+}
