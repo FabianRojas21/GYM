@@ -2471,10 +2471,11 @@ function homeDashboard(){
   previousStats.sessions = previousWeek.length;
   stats.sessions = week.length;
   var sorted = S.sessions.slice().sort(function(a,b){ return a.date === b.date ? (b.ts || 0) - (a.ts || 0) : (a.date < b.date ? 1 : -1); });
+  var avgVolumePerSession = week.length ? stats.volume / week.length : 0;
   var latest = sorted[0], out = '<section class="home-dashboard"><div class="home-heading"><div><span class="home-eyebrow">Tu semana de entrenamiento</span><h2>Resumen semanal</h2></div>' +
     '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
     '<p class="home-message">' + (week.length
-      ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Sigue a tu ritmo.'
+      ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Media por sesión: ' + volumeText(avgVolumePerSession) + ' ' + weightUnitLabel() + '·reps.'
       : 'Cada progreso empieza con una sesión. Hoy puedes dar ese primer paso.') + '</p>' +
     weeklyTrendSummaryHtml(stats, previousStats) +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
@@ -3066,18 +3067,32 @@ function historyTrend(current,previous){
   return (difference>0?'↑ ':'↓ ')+Math.round(Math.abs(difference)/previous*100)+'% vs periodo anterior';
 }
 function weeklyProgressStatus(current,previous){
+  function trendDetail(){
+    if(!previous || previous.sessions === 0 || (previous.volume === 0 && previous.effectiveSets === 0 && previous.sessions === 0)){
+      return 'Sin comparación previa. Añade otra semana para ver el cambio real en carga y volumen.';
+    }
+    var parts = [];
+    var sessionDelta = previous.sessions ? Math.round(((Number(current.sessions || 0) - Number(previous.sessions || 0)) / Number(previous.sessions || 0)) * 100) : (Number(current.sessions || 0) > 0 ? 100 : 0);
+    var volumeDelta = previous.volume ? Math.round(((Number(current.volume || 0) - Number(previous.volume || 0)) / Number(previous.volume || 0)) * 100) : (Number(current.volume || 0) > 0 ? 100 : 0);
+    var setDelta = previous.effectiveSets ? Math.round(((Number(current.effectiveSets || 0) - Number(previous.effectiveSets || 0)) / Number(previous.effectiveSets || 0)) * 100) : (Number(current.effectiveSets || 0) > 0 ? 100 : 0);
+    if(current.sessions !== previous.sessions) parts.push('entrenos ' + (sessionDelta >= 0 ? '+' + sessionDelta : sessionDelta) + '%');
+    if(current.volume !== previous.volume) parts.push('volumen ' + (volumeDelta >= 0 ? '+' + volumeDelta : volumeDelta) + '%');
+    if(current.effectiveSets !== previous.effectiveSets) parts.push('series ' + (setDelta >= 0 ? '+' + setDelta : setDelta) + '%');
+    if(!parts.length) parts.push('mantienes la misma línea');
+    return parts.join(' · ');
+  }
   if(!previous || previous.sessions === 0 || previous.volume === 0 && previous.effectiveSets === 0){
     return {status:'igual', label:'Sin comparación previa', detail:'Hay suficientes datos para comparar; añade otra semana y la tendencia aparece aquí.'};
   }
   var score = (Number(current.volume || 0) / Math.max(Number(previous.volume || 0), 1)) * 0.7 +
     (Number(current.effectiveSets || 0) / Math.max(Number(previous.effectiveSets || 0), 1)) * 0.3;
   if(score >= 1.12){
-    return {status:'mejor', label:'Mejor', detail:'La semana va mejor que la anterior: ' + historyTrend(current.volume, previous.volume) + ' · ' + historyTrend(current.effectiveSets, previous.effectiveSets)};
+    return {status:'mejor', label:'Mejor', detail:'La semana va mejor que la anterior · ' + trendDetail()};
   }
   if(score <= 0.88){
-    return {status:'peor', label:'Peor', detail:'La semana va peor que la anterior: ' + historyTrend(current.volume, previous.volume) + ' · ' + historyTrend(current.effectiveSets, previous.effectiveSets)};
+    return {status:'peor', label:'Peor', detail:'La semana va peor que la anterior · ' + trendDetail()};
   }
-  return {status:'igual', label:'Igual', detail:'La semana mantiene la misma tendencia que la anterior. Mantén el plan y revisa la recuperación.'};
+  return {status:'igual', label:'Igual', detail:'La semana mantiene la misma tendencia que la anterior · ' + trendDetail()};
 }
 function weeklyTrendSummaryHtml(currentStats, previousStats){
   var trend = weeklyProgressStatus(currentStats, previousStats);
