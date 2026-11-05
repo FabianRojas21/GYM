@@ -4859,13 +4859,19 @@ function onWorkoutKeydown(ev){
     }
     return;
   }
-  if(ev.key!=='Enter' || !ev.target.matches('input[data-f]')) return;
+  if(ev.key!=='Enter' || !ev.target.matches('input[data-f], select[data-f], textarea[data-f]')) return;
   var view=$('#view');
   if(!view || !ev.target.closest('section.card[data-ei]')) return;
-  var inputs=Array.from(view.querySelectorAll('section.card[data-ei] input[data-f]'));
+  var inputs=Array.from(view.querySelectorAll('section.card[data-ei] input[data-f], section.card[data-ei] select[data-f], section.card[data-ei] textarea[data-f]'));
   var index=inputs.indexOf(ev.target);
   if(index<0) return;
   ev.preventDefault();
+  if(ev.shiftKey && index>0){
+    var prev=inputs[index-1];
+    prev.focus();
+    if(prev.select) prev.select();
+    return;
+  }
   var next=inputs[index+1];
   if(!next){ ev.target.blur(); return; }
   next.focus();
