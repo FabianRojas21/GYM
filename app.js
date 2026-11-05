@@ -2214,11 +2214,31 @@ function humanDuration(ms){
   var rest = minutes % 60;
   return hours ? hours + ' h' + (rest ? ' ' + rest + ' min' : '') : minutes + ' min';
 }
+function linkSessionRoutine(session,routineId,routines){
+  if(!routineId){
+    delete session.routineId;delete session.routineName;delete session.programId;
+    return true;
+  }
+  var routine=routines.filter(function(item){return item.id===routineId;})[0];
+  if(!routine) return false;
+  session.routineId=routine.id;session.routineName=routine.name;
+  if(routine.programId) session.programId=routine.programId;
+  else delete session.programId;
+  return true;
+}
 function sessionEditorHtml(session){
   var edit = S.sessionEdit;
   var minutes = Math.max(0, Math.floor((Number(session.durationMs) || 0) / 60000));
   var hours = Math.floor(minutes / 60), remainder = minutes % 60;
   var data = edit.session, date = edit.date, editHours = edit.hours, editMinutes = edit.minutes;
+  var sessionRoutine=data.routineId&&S.profile.routines[data.routineId];
+  var routineOptions='<option value="">Sin rutina ni programa</option>'+routineList().map(function(routine){
+    var program=routine.programId&&S.profile.programs[routine.programId];
+    return '<option value="'+esc(routine.id)+'"'+(data.routineId===routine.id?' selected':'')+'>'+esc(routine.name+(program?' · '+program.name:''))+'</option>';
+  }).join('');
+  if(data.routineId&&!sessionRoutine){
+    routineOptions+='<option value="'+esc(data.routineId)+'" selected>'+esc((data.routineName||'Rutina eliminada')+' · asociación anterior')+'</option>';
+  }
   var setsHtml = data.entries.map(function(entry, entryIndex){
     var exercise = exName(entry.exId);
     var collapsed = edit.collapsedEntries.has(entry);
@@ -2257,6 +2277,7 @@ function sessionEditorHtml(session){
   var addPicker=edit.addPicker ? '<div class="field"><label class="lab" for="session-add-exercise">Ejercicio</label><select id="session-add-exercise" class="txt" data-session-add-exercise>'+
     '<option value="">Seleccionar ejercicio</option>'+Object.keys(S.profile.exercises).filter(function(id){return !S.profile.exercises[id].archived;}).map(function(id){var ex=S.profile.exercises[id];return '<option value="'+esc(id)+'">'+esc(ex.name)+'</option>';}).join('')+'</select></div><button class="btn ghost sm" data-act="session-add-exercise-cancel"'+(edit.saving?' disabled':'')+'>Cancelar</button>' : '<button class="btn ghost sm" data-act="session-add-exercise-picker"'+(edit.saving?' disabled':'')+'>Añadir ejercicio</button>';
   return '<section class="card"><p class="sec-title">Editar entrenamiento</p>' +
+    '<div class="field"><label class="lab" for="session-routine-link">Rutina / programa</label><select class="txt" id="session-routine-link" data-session-routine-link'+(edit.saving?' disabled':'')+'>'+routineOptions+'</select><span class="hint">Solo se asociará si eliges una rutina. La app no asigna entrenos antiguos automáticamente.</span></div>' +
     '<div class="fields"><div class="field"><label class="lab" for="session-edit-date">Día del entrenamiento</label><input class="txt" id="session-edit-date" data-session-meta="date" type="date" required value="' + esc(date) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
     '<div class="field"><label class="lab" for="session-edit-hours">Horas</label><input class="txt" id="session-edit-hours" data-session-meta="hours" type="number" min="0" max="999" step="1" inputmode="numeric" required value="' + esc(editHours) + '"' + (edit.saving ? ' disabled' : '') + '></div>' +
     '<div class="field"><label class="lab" for="session-edit-minutes">Minutos</label><input class="txt" id="session-edit-minutes" data-session-meta="minutes" type="number" min="0" max="59" step="1" inputmode="numeric" required value="' + esc(editMinutes) + '"' + (edit.saving ? ' disabled' : '') + '></div></div>' +
@@ -4275,6 +4296,13 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.sessionRoutineLink!==undefined){
+    var editedSession=S.sessionEdit&&S.sessionEdit.session;
+    if(!editedSession||!linkSessionRoutine(editedSession,t.value,routineList())){
+      toast('No se pudo asociar la rutina seleccionada');render();return;
+    }
+    render();return;
+  }
   if(t.dataset.activePlan!==undefined){
     if(!t.value){deactivateTrainingPlan();return;}
     var separator=t.value.indexOf(':'),kind=t.value.slice(0,separator),id=t.value.slice(separator+1);

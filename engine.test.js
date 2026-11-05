@@ -1011,6 +1011,10 @@ test('el editor del historial mantiene avance, plegado y estado de series', () =
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   const readme=fs.readFileSync('./README.md','utf8');
+  assert.match(app,/function linkSessionRoutine\(session,routineId,routines\)/);
+  assert.match(app,/data-session-routine-link/);
+  assert.match(app,/if\(t\.dataset\.sessionRoutineLink!==undefined\)/);
+  assert.match(app,/La app no asigna entrenos antiguos automáticamente/);
   assert.match(app,/function prepareSessionForEdit\(session\)/);
   assert.match(app,/function sessionEditProgressText\(entry, exercise\)/);
   assert.match(app,/data-act="session-toggle-entry"/);
@@ -1020,6 +1024,21 @@ test('el editor del historial mantiene avance, plegado y estado de series', () =
   assert.match(app,/updateSessionEditFinishControls\(\+t\.dataset\.entry,\+t\.dataset\.set\)/);
   assert.ok(styles.includes('.session-entry-edit .session-set-edit .set-finish'));
   assert.match(readme,/Al \*\*editar un entrenamiento del historial\*\*[\s\S]*?no inicia un descanso/);
+
+  const helper=app.match(/function linkSessionRoutine\(session,routineId,routines\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={};
+  vm.runInNewContext(helper[0]+';globalThis.link=linkSessionRoutine;',context);
+  const routines=[{id:'standalone',name:'Libre'},{id:'r-a',name:'Día A',programId:'p-a'}];
+  const session={routineId:'old',routineName:'Entreno anterior',programId:'old-program'};
+  assert.equal(context.link(session,'r-a',routines),true);
+  assert.deepEqual(JSON.parse(JSON.stringify(session)),{routineId:'r-a',routineName:'Día A',programId:'p-a'});
+  assert.equal(context.link(session,'standalone',routines),true);
+  assert.deepEqual(JSON.parse(JSON.stringify(session)),{routineId:'standalone',routineName:'Libre'});
+  assert.equal(context.link(session,'missing',routines),false);
+  assert.deepEqual(JSON.parse(JSON.stringify(session)),{routineId:'standalone',routineName:'Libre'});
+  assert.equal(context.link(session,'',routines),true);
+  assert.deepEqual(JSON.parse(JSON.stringify(session)),{});
 });
 
 test('el error de renderizado muestra sus detalles técnicos sin alterar los datos', () => {
