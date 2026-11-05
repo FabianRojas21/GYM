@@ -1736,7 +1736,7 @@ function entryHtml(en, ei){
     }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"></label>' +
       '<label class="set-input"><span>Reps</span><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"></label>' +
       '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '"></label></div>';
-    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + '" data-ri="' + ri + '">' +
+    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + '" data-ri="' + ri + '">' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
       '<label class="set-type-label"><span>Tipo de serie</span><select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select></label>' +
@@ -2327,6 +2327,9 @@ function homeDashboard(){
   var sorted = S.sessions.slice().sort(function(a,b){ return a.date === b.date ? (b.ts || 0) - (a.ts || 0) : (a.date < b.date ? 1 : -1); });
   var latest = sorted[0], out = '<section class="home-dashboard"><div class="home-heading"><div><span class="home-eyebrow">Tu semana de entrenamiento</span><h2>Resumen semanal</h2></div>' +
     '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
+    '<p class="home-message">' + (week.length
+      ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Sigue a tu ritmo.'
+      : 'Cada progreso empieza con una sesión. Hoy puedes dar ese primer paso.') + '</p>' +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
     '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>carga × reps · sin aprox.</span></div></div>' +
@@ -2349,7 +2352,7 @@ function homeDashboard(){
     out += '<section class="latest-workout empty-latest"><span class="home-eyebrow">Tu actividad reciente</span><h3>Tu primer entreno empieza aquí</h3><p>Cuando registres una sesión, aquí verás su duración, volumen y ejercicios.</p></section>';
   }
   out += '</section>';
-  if(!latest && !routineList().length) out += '<section class="card home-first"><div><p class="sec-title">Empieza en dos pasos</p><p>Prepara una rutina o registra un ejercicio ahora. La app irá sugiriendo cómo progresar en tus próximos entrenos.</p></div><div class="row"><button class="btn sm" data-act="library-open-section" data-section="rutinas">Crear rutina</button><button class="btn ghost sm" data-act="demo-load">Probar con ejemplo</button></div></section>';
+  if(!latest && !routineList().length) out += '<section class="card home-first"><div class="home-first-intro"><span class="home-first-icon" aria-hidden="true">✦</span><div><p class="sec-title">Tu entrenamiento, a tu manera</p><p>Empieza con un ejemplo o prepara tu propia rutina. La app te ayudará a registrar cada sesión y a decidir qué buscar la próxima vez.</p></div></div><div class="home-first-steps"><div><strong>1</strong><span>Elige una rutina o empieza con ejercicios sugeridos.</span></div><div><strong>2</strong><span>Anota peso, repeticiones y esfuerzo en cada serie.</span></div></div><div class="row"><button class="btn sm" data-act="library-open-section" data-section="rutinas">Crear rutina</button><button class="btn ghost sm" data-act="demo-load">Probar con ejemplo</button></div></section>';
   out += routineQuick() + suggestHtml();
   if(S.picker) out += pickerHtml('day');
   return out;
@@ -2843,10 +2846,12 @@ function viewEj(){
   return out + '<div class="list">' + ids.map(function(id){
     var ex = exById(id), p = planFor(ex), open = S.openEx === id;
     var goal = p.status === 'nuevo' ? 'Sin registros todavía' : 'Próximo: ' + (p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · ')));
-    return '<section class="card"><button class="exrow" data-act="toggle-ex" data-id="' + esc(id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+    return '<section class="card exercise-progress-card' + (open ? ' is-open' : '') + '"><button class="exrow" data-act="toggle-ex" data-id="' + esc(id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
       '<div class="top2"><h3>' + esc(ex.name) + '</h3>' + chip(p.status) + '</div>' +
       '<span class="small muted">' + esc(goal) + ' · ' + ex.sets + '×' + ex.min + '–' + ex.max + ' reps' + (ex.unilateral ? ' por lado' : '') + '</span>' +
-      (p.status !== 'nuevo' ? barHtml(p, ex) : '') + '</button>' + (open ? exDetail(ex) : '') + '</section>';
+      (p.status !== 'nuevo' ? barHtml(p, ex) : '') +
+      '<span class="exercise-expand-hint"><span>' + (open ? 'Ocultar detalles' : 'Ver progreso y ajustes') + '</span><span class="exercise-expand-icon" aria-hidden="true">⌄</span></span>' +
+      '</button>' + (open ? exDetail(ex) : '') + '</section>';
   }).join('') + '</div>';
 }
 function viewHist(){
@@ -2857,7 +2862,7 @@ function viewHist(){
   return out + '<section class="card history-tools"><label class="field"><span class="lab">Buscar entreno, ejercicio o rutina</span><input class="txt" data-history-search type="search" autocomplete="off" placeholder="Ej. Press banca" value="' + esc(S.historyQuery) + '"></label>' +
     '<label class="field"><span class="lab">Periodo</span><select class="txt" data-history-range><option value="all"' + (S.historyRange==='all'?' selected':'') + '>Todo el historial</option><option value="90"' + (S.historyRange==='90'?' selected':'') + '>Últimos 90 días</option><option value="30"' + (S.historyRange==='30'?' selected':'') + '>Últimos 30 días</option><option value="7"' + (S.historyRange==='7'?' selected':'') + '>Últimos 7 días</option></select></label></section>' +
     '<div id="history-summary">' + historySummaryHtml(ss) + '</div>' +
-    '<div class="list" id="history-list">' + (ss.length ? ss.map(historyCardHtml).join('') : '<div class="card"><p class="muted">No hay entrenos que coincidan. Prueba otro término o periodo.</p></div>') + '</div>';
+    '<div class="list" id="history-list">' + (ss.length ? ss.map(historyCardHtml).join('') : historyEmptyHtml()) + '</div>';
 }
 function historyWindowBounds(days,today){
   var currentEnd=parseISO(today); currentEnd.setHours(0,0,0,0);
@@ -2969,11 +2974,17 @@ function historyCardHtml(s){
           ? '<button class="btn danger sm" data-act="del-sess-ok" data-id="' + esc(s.id) + '">Confirmar: borrar entreno</button>'
           : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</div>') + '</section>';
 }
+function historyEmptyHtml(){
+  var hasQuery=!!S.historyQuery.trim(), hasRange=S.historyRange!=='all';
+  var title=hasQuery?'No encontramos ese entreno':'No hay entrenos en este periodo';
+  var detail=hasQuery&&hasRange?'Prueba otro nombre o amplía el periodo.':hasQuery?'Prueba con otro ejercicio, entreno o rutina.':'Amplía el periodo para ver entrenos anteriores.';
+  return '<section class="card history-empty"><span aria-hidden="true">⌕</span><h3>'+title+'</h3><p class="small muted">'+detail+'</p><button class="btn ghost sm" data-act="history-reset">Quitar filtros y ver todo</button></section>';
+}
 function refreshHistoryResults(){
   var list=$('#history-list');
   if(!list) return;
   var matches=filteredHistorySessions();
-  list.innerHTML=matches.length ? matches.map(historyCardHtml).join('') : '<div class="card"><p class="muted">No hay entrenos que coincidan. Prueba otro término o periodo.</p></div>';
+  list.innerHTML=matches.length ? matches.map(historyCardHtml).join('') : historyEmptyHtml();
   var summary=$('#history-summary');
   if(summary) summary.innerHTML=historySummaryHtml(matches);
   var count=$('#history-count');
@@ -3642,6 +3653,7 @@ function onClick(ev){
       if($('#load-tool-settings')) $('#load-tool-settings').scrollIntoView({block:'start'});
       break;
     case 'tab': if(t.dataset.tab!=='hoy'&&S.loadingCalc) S.loadingCalc.open=false; S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
+    case 'history-reset': S.historyQuery=''; S.historyRange='all'; render(); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
     case 'reminder-dismiss':
       try { localStorage.setItem(REMINDER_DISMISSED_KEY,String(t.dataset.session)+':'+iso(new Date())); }

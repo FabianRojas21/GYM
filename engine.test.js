@@ -904,8 +904,14 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?select\[data-it="warmupMode"\]/);
   assert.match(app,/class="card history-session-card"/);
   assert.match(app,/class="row history-actions"/);
+  assert.match(app,/function historyEmptyHtml\(\)[\s\S]*?data-act="history-reset"/);
+  assert.match(app,/case 'history-reset': S\.historyQuery=''; S\.historyRange='all'; render\(\); break;/);
+  assert.match(styles,/\.history-empty\{[^}]*text-align:center/);
   assert.match(app,/class="row settings-data-actions"/);
   assert.match(styles,/\.profile-nav\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(app,/class="card exercise-progress-card' \+ \(open \? ' is-open' : ''\)/);
+  assert.match(app,/aria-expanded="' \+ \(open \? 'true' : 'false'\) \+ '"[\s\S]*?Ver progreso y ajustes/);
+  assert.match(styles,/\.exercise-expand-icon\{[^}]*transition:transform/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.history-actions\{display:grid/);
   assert.match(app,/case 'finish-set':[\s\S]*?startRest\(finishRestSeconds, finishRow\.restToken\)/);
   assert.match(app,/set-finish-done/);
