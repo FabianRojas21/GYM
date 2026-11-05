@@ -94,6 +94,11 @@ test('el resumen semanal compara la tendencia con la semana previa y la etiqueta
   const context = {
     Number,
     Math,
+    Intl: {
+      NumberFormat: function(){
+        return {format(value){ return String(Math.round(value)); }};
+      }
+    },
     historyTrend(current, previous){
       if(previous === 0) return current === 0 ? 'Sin cambios previos' : 'Nuevo periodo';
       var difference = current - previous;
@@ -103,6 +108,7 @@ test('el resumen semanal compara la tendencia con la semana previa y la etiqueta
   };
   vm.runInNewContext(helper[0] + ';globalThis.weeklyProgressStatusForTest = weeklyProgressStatus;', context);
   assert.equal(context.weeklyProgressStatusForTest({sessions:4, volume:15000, effectiveSets:20}, {sessions:3, volume:10000, effectiveSets:15}).status, 'mejor');
+  assert.match(context.weeklyProgressStatusForTest({sessions:4, volume:15000, effectiveSets:20}, {sessions:3, volume:10000, effectiveSets:15}).detail, /volumen: \+50%/);
   assert.equal(context.weeklyProgressStatusForTest({sessions:4, volume:12000, effectiveSets:18}, {sessions:4, volume:13000, effectiveSets:20}).status, 'igual');
   assert.equal(context.weeklyProgressStatusForTest({sessions:2, volume:7000, effectiveSets:12}, {sessions:4, volume:13000, effectiveSets:20}).status, 'peor');
 });

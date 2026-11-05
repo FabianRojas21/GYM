@@ -3067,17 +3067,26 @@ function historyTrend(current,previous){
   return (difference>0?'↑ ':'↓ ')+Math.round(Math.abs(difference)/previous*100)+'% vs periodo anterior';
 }
 function weeklyProgressStatus(current,previous){
+  function metricDelta(currentValue, previousValue, label, formatter){
+    var currentNum = Number(currentValue || 0);
+    var previousNum = Number(previousValue || 0);
+    if(previousNum === 0){
+      if(currentNum === 0) return label + ': sin cambios';
+      return label + ': +' + formatter(currentNum) + ' nuevo';
+    }
+    var delta = currentNum - previousNum;
+    var percent = Math.round((delta / previousNum) * 100);
+    var sign = percent > 0 ? '+' : '';
+    return label + ': ' + sign + percent + '% (' + formatter(currentNum) + ' vs ' + formatter(previousNum) + ')';
+  }
   function trendDetail(){
     if(!previous || previous.sessions === 0 || (previous.volume === 0 && previous.effectiveSets === 0 && previous.sessions === 0)){
       return 'Sin comparación previa. Añade otra semana para ver el cambio real en carga y volumen.';
     }
     var parts = [];
-    var sessionDelta = previous.sessions ? Math.round(((Number(current.sessions || 0) - Number(previous.sessions || 0)) / Number(previous.sessions || 0)) * 100) : (Number(current.sessions || 0) > 0 ? 100 : 0);
-    var volumeDelta = previous.volume ? Math.round(((Number(current.volume || 0) - Number(previous.volume || 0)) / Number(previous.volume || 0)) * 100) : (Number(current.volume || 0) > 0 ? 100 : 0);
-    var setDelta = previous.effectiveSets ? Math.round(((Number(current.effectiveSets || 0) - Number(previous.effectiveSets || 0)) / Number(previous.effectiveSets || 0)) * 100) : (Number(current.effectiveSets || 0) > 0 ? 100 : 0);
-    if(current.sessions !== previous.sessions) parts.push('entrenos ' + (sessionDelta >= 0 ? '+' + sessionDelta : sessionDelta) + '%');
-    if(current.volume !== previous.volume) parts.push('volumen ' + (volumeDelta >= 0 ? '+' + volumeDelta : volumeDelta) + '%');
-    if(current.effectiveSets !== previous.effectiveSets) parts.push('series ' + (setDelta >= 0 ? '+' + setDelta : setDelta) + '%');
+    if(current.sessions !== previous.sessions) parts.push(metricDelta(current.sessions, previous.sessions, 'entrenos', function(value){ return String(value); }));
+    if(current.volume !== previous.volume) parts.push(metricDelta(current.volume, previous.volume, 'volumen', function(value){ return new Intl.NumberFormat('es-CL',{maximumFractionDigits:0}).format(Math.round(value)); }));
+    if(current.effectiveSets !== previous.effectiveSets) parts.push(metricDelta(current.effectiveSets, previous.effectiveSets, 'series', function(value){ return String(value); }));
     if(!parts.length) parts.push('mantienes la misma línea');
     return parts.join(' · ');
   }
