@@ -1,6 +1,8 @@
 (function(){
 'use strict';
 
+var Catalog = SobrecargaCatalog;
+
 /* ---------- utilidades ---------- */
 var $ = function(s, el){ return (el||document).querySelector(s); };
 var esc = function(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
@@ -59,37 +61,12 @@ var clientDeviceId = (function(){
 })();
 var clientWriterId=clientDeviceId+':'+uid('tab');
 
-/* ---------- catálogo sugerido ---------- */
-var LIB = [
-  {name:'Press banca', sets:3, min:6, max:10, inc:2.5},
-  {name:'Sentadilla', sets:3, min:6, max:10, inc:2.5},
-  {name:'Peso muerto', sets:3, min:5, max:8, inc:5},
-  {name:'Press militar', sets:3, min:6, max:10, inc:2.5},
-  {name:'Remo con barra', sets:3, min:8, max:12, inc:2.5},
-  {name:'Dominadas lastradas', sets:3, min:5, max:8, inc:2.5},
-  {name:'Press inclinado con mancuernas', sets:3, min:8, max:12, inc:2},
-  {name:'Peso muerto rumano', sets:3, min:8, max:12, inc:2.5},
-  {name:'Prensa de piernas', sets:3, min:10, max:15, inc:5},
-  {name:'Hip thrust', sets:3, min:8, max:12, inc:5},
-  {name:'Jalón al pecho', sets:3, min:8, max:12, inc:2.5},
-  {name:'Curl de bíceps', sets:3, min:10, max:15, inc:2},
-  {name:'Extensión de tríceps en polea', sets:3, min:10, max:15, inc:2.5},
-  {name:'Elevaciones laterales', sets:3, min:12, max:20, inc:1}
-];
-var MUSCLES = {
-  unassigned:'Sin asignar',
-  chestUpper:'Pecho superior', chestMid:'Pecho medio', chestLower:'Pecho inferior',
-  shoulderAnterior:'Hombro anterior', shoulderLateral:'Hombro lateral', shoulderPosterior:'Hombro posterior',
-  lats:'Dorsales', upperBack:'Espalda alta / romboides', lowerBack:'Lumbar', traps:'Trapecio', serratus:'Serrato anterior',
-  bicepsLong:'Bíceps · porción larga', bicepsShort:'Bíceps · porción corta', brachialis:'Braquial', forearms:'Antebrazos',
-  tricepsLong:'Tríceps · porción larga', tricepsLateral:'Tríceps · porción lateral', tricepsMedial:'Tríceps · porción medial',
-  quads:'Cuádriceps', adductors:'Aductores', hamstrings:'Isquiotibiales', glutesMax:'Glúteo mayor', glutesMed:'Glúteo medio',
-  calvesGastro:'Pantorrilla · gastrocnemio', calvesSoleus:'Pantorrilla · sóleo', tibialis:'Tibial anterior', hipFlexors:'Flexores de cadera',
-  rectusAbdominis:'Abdominal recto', obliques:'Oblicuos', transverseCore:'Transverso / core profundo', neck:'Cuello', other:'Otro'
-};
-var LEGACY_MUSCLE_IDS={shoulders:'shoulderLateral',back:'lats',chest:'chestMid',biceps:'bicepsShort',triceps:'tricepsLong',glutes:'glutesMax',calves:'calvesGastro',core:'rectusAbdominis'};
-var MUSCLE_GROUPS={chest:'Pecho',shoulder:'Hombros',back:'Espalda',biceps:'Bíceps',triceps:'Tríceps',forearms:'Antebrazos',quads:'Cuádriceps',adductors:'Aductores',hipFlexors:'Flexores de cadera',hamstrings:'Isquiotibiales',glutes:'Glúteos',calves:'Pantorrillas',core:'Core',neck:'Cuello',unassigned:'Sin asignar',other:'Otro'};
-var EQUIPMENT_TYPES={barbell:'Barra',dumbbell:'Mancuernas',machine:'Máquina',cable:'Polea',bodyweight:'Peso corporal',other:'Otro / no indicado'};
+/* ---------- catálogo sugerido y metadatos ---------- */
+var LIB = Catalog.LIB;
+var MUSCLES = Catalog.MUSCLES;
+var LEGACY_MUSCLE_IDS = Catalog.LEGACY_MUSCLE_IDS;
+var MUSCLE_GROUPS = Catalog.MUSCLE_GROUPS;
+var EQUIPMENT_TYPES = Catalog.EQUIPMENT_TYPES;
 function exerciseEquipment(ex){ return Object.prototype.hasOwnProperty.call(EQUIPMENT_TYPES,ex&&ex.equipment)?ex.equipment:'other'; }
 function equipmentLabel(ex){ return EQUIPMENT_TYPES[exerciseEquipment(ex)]; }
 function equipmentFilterOptions(selected){
@@ -117,10 +94,7 @@ function filteredSubstitutions(baseId,kind,key){
 function muscleGroupId(id){
   return SobrecargaEngine.muscleGroupId(id);
 }
-var MEASUREMENT_FIELDS={
-  weight:'Peso corporal', height:'Altura', chest:'Pecho', waist:'Cintura', abdomen:'Abdomen', hips:'Cadera', neck:'Cuello',
-  armLeft:'Brazo izquierdo', armRight:'Brazo derecho', thighLeft:'Muslo izquierdo', thighRight:'Muslo derecho', calfLeft:'Pantorrilla izquierda', calfRight:'Pantorrilla derecha', bodyFat:'Grasa corporal'
-};
+var MEASUREMENT_FIELDS = Catalog.MEASUREMENT_FIELDS;
 
 /* ---------- estado ---------- */
 var DK = 'sobrecarga:draft:v1';
@@ -1955,37 +1929,10 @@ function recentSessionDetailsHtml(session){
   return '<details class="home-recent-details"><summary>Ver series, reps, esfuerzo y próximos objetivos</summary><div class="home-recent-entry-list">'+
     (entries||'<p class="small muted">No hay detalle de ejercicios para esta sesión.</p>')+'</div></details>';
 }
-function orderedProgramRoutines(program,routines){
-  if(!program) return [];
-  var members=routines.filter(function(routine){return routine.programId===program.id;});
-  var byId={};members.forEach(function(routine){byId[routine.id]=routine;});
-  var ordered=[],seen={};
-  (Array.isArray(program.routineOrder)?program.routineOrder:[]).forEach(function(id){
-    if(byId[id]&&!seen[id]){ordered.push(byId[id]);seen[id]=true;}
-  });
-  members.filter(function(routine){return !seen[routine.id];})
-    .sort(function(a,b){return a.name.localeCompare(b.name,'es');})
-    .forEach(function(routine){ordered.push(routine);});
-  return ordered;
-}
-function programRoutineOrderConfigured(program,routines){
-  if(!program||!Array.isArray(program.routineOrder)) return false;
-  var memberIds=routines.filter(function(routine){return routine.programId===program.id;}).map(function(routine){return routine.id;});
-  return memberIds.length>0&&memberIds.every(function(id){return program.routineOrder.indexOf(id)>=0;});
-}
-function programRecommendation(program,routines,sessions){
-  var sequence=orderedProgramRoutines(program,routines);
-  if(!sequence.length||!programRoutineOrderConfigured(program,routines)) return null;
-  var latest=sessions.filter(function(session){
-    return session.programId===program.id&&sequence.some(function(routine){return routine.id===session.routineId;});
-  }).sort(function(a,b){return a.date===b.date?(Number(b.ts)||0)-(Number(a.ts)||0):b.date.localeCompare(a.date);})[0];
-  var index=latest?sequence.findIndex(function(routine){return routine.id===latest.routineId;}):-1;
-  return {program:program,current:latest||null,routine:sequence[(index+1)%sequence.length]};
-}
 function nextProgramRoutine(){
   var program=S.profile.activeProgramId&&S.profile.programs[S.profile.activeProgramId];
   if(!program) return null;
-  return programRecommendation(program,routineList(),S.sessions);
+  return Engine.programRecommendation(program,routineList(),S.sessions);
 }
 function activePlanControlsHtml(program){
   var programs=Object.keys(S.profile.programs||{}).map(function(id){return S.profile.programs[id];})
@@ -1996,8 +1943,8 @@ function activePlanControlsHtml(program){
   var options='<option value="">Sin plan activo</option>'+
     programs.map(function(item){return '<option value="program:'+esc(item.id)+'"'+(selected==='program:'+item.id?' selected':'')+'>Programa · '+esc(item.name)+'</option>';}).join('')+
     routines.map(function(item){return '<option value="routine:'+esc(item.id)+'"'+(selected==='routine:'+item.id?' selected':'')+'>Rutina · '+esc(item.name)+'</option>';}).join('');
-  var sequence=program?orderedProgramRoutines(program,routines):[];
-  var recommendation=program&&programRecommendation(program,routines,S.sessions);
+  var sequence=program?Engine.orderedProgramRoutines(program,routines):[];
+  var recommendation=program&&Engine.programRecommendation(program,routines,S.sessions);
   var nextRoutineId=recommendation&&recommendation.routine.id;
   var sequenceHtml=program&&sequence.length?'<div class="home-plan-sequence"><strong>Rutinas del programa</strong>'+
     '<ol>'+sequence.map(function(routine){return '<li><span>'+esc(routine.name)+'</span><button class="btn ghost sm" data-act="rut-start" data-id="'+esc(routine.id)+'">'+(routine.id===nextRoutineId?'Siguiente · empezar':'Empezar')+'</button></li>';}).join('')+'</ol></div>':'';
@@ -2019,7 +1966,7 @@ function activeTrainingPlanHtml(){
   return '<section class="home-active-plan"><div class="home-plan-empty"><span>No hay un plan activo</span></div>'+activePlanControlsHtml(null)+'</section>';
 }
 function moveProgramRoutine(programId,routineId,direction){
-  var program=S.profile.programs[programId],sequence=orderedProgramRoutines(program,routineList());
+  var program=S.profile.programs[programId],sequence=Engine.orderedProgramRoutines(program,routineList());
   var from=sequence.findIndex(function(routine){return routine.id===routineId;}),to=from+direction;
   if(from<0||to<0||to>=sequence.length) return false;
   var ids=sequence.map(function(routine){return routine.id;}),moved=ids.splice(from,1)[0];
@@ -2552,8 +2499,8 @@ function viewRut(){
     }).join('') + '</div>';
   if(activeProgram || S.librarySection === 'programas'){
     if(activeProgram){
-      var programRoutines = orderedProgramRoutines(activeProgram,rs);
-      var hasRoutineOrder=programRoutineOrderConfigured(activeProgram,rs);
+      var programRoutines = Engine.orderedProgramRoutines(activeProgram,rs);
+      var hasRoutineOrder=Engine.programRoutineOrderConfigured(activeProgram,rs);
       out += '<div class="library-sort"><span>Secuencia del programa</span><button class="text-button" data-act="program-edit" data-id="' + esc(activeProgram.id) + '">Editar programa</button></div>' +
         '<p class="small muted program-sequence-hint">'+(hasRoutineOrder?'Usa las flechas para definir qué rutina sigue.':'Orden inicial alfabético. Confirma o ajusta la secuencia para sugerir el próximo día.')+'</p>' +
         '<button class="btn '+(S.profile.activeProgramId===activeProgram.id?'ghost':'')+' sm program-activate" data-act="program-activate" data-id="'+esc(activeProgram.id)+'"'+(S.profile.activeProgramId===activeProgram.id?' disabled':'')+'>' +
@@ -3518,11 +3465,11 @@ function saveRoutine(){
 function saveProgramRoutineOrder(programId){
   var program=S.profile.programs[programId];
   if(!program) return false;
-  program.routineOrder=orderedProgramRoutines(program,routineList()).map(function(routine){return routine.id;});
+  program.routineOrder=Engine.orderedProgramRoutines(program,routineList()).map(function(routine){return routine.id;});
   Store.saveProfile();return true;
 }
 function activateProgram(programId){
-  var program=S.profile.programs[programId],sequence=orderedProgramRoutines(program,routineList());
+  var program=S.profile.programs[programId],sequence=Engine.orderedProgramRoutines(program,routineList());
   if(!program||!sequence.length){toast('Añade al menos una rutina antes de activar el programa');return false;}
   program.routineOrder=sequence.map(function(routine){return routine.id;});
   S.profile.activeProgramId=programId;S.profile.activeRoutineId=null;

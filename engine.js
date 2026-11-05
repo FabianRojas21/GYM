@@ -355,6 +355,34 @@
     return sets.filter(function(set){ return complete[String(set.pair)]; });
   }
 
+  function orderedProgramRoutines(program, routines){
+    if(!program) return [];
+    var members=routines.filter(function(routine){return routine.programId===program.id;});
+    var byId={};members.forEach(function(routine){byId[routine.id]=routine;});
+    var ordered=[],seen={};
+    (Array.isArray(program.routineOrder)?program.routineOrder:[]).forEach(function(id){
+      if(byId[id]&&!seen[id]){ordered.push(byId[id]);seen[id]=true;}
+    });
+    members.filter(function(routine){return !seen[routine.id];})
+      .sort(function(a,b){return a.name.localeCompare(b.name,'es');})
+      .forEach(function(routine){ordered.push(routine);});
+    return ordered;
+  }
+  function programRoutineOrderConfigured(program, routines){
+    if(!program||!Array.isArray(program.routineOrder)) return false;
+    var memberIds=routines.filter(function(routine){return routine.programId===program.id;}).map(function(routine){return routine.id;});
+    return memberIds.length>0&&memberIds.every(function(id){return program.routineOrder.indexOf(id)>=0;});
+  }
+  function programRecommendation(program, routines, sessions){
+    var sequence=orderedProgramRoutines(program,routines);
+    if(!sequence.length||!programRoutineOrderConfigured(program,routines)) return null;
+    var latest=sessions.filter(function(session){
+      return session.programId===program.id&&sequence.some(function(routine){return routine.id===session.routineId;});
+    }).sort(function(a,b){return a.date===b.date?(Number(b.ts)||0)-(Number(a.ts)||0):b.date.localeCompare(a.date);})[0];
+    var index=latest?sequence.findIndex(function(routine){return routine.id===latest.routineId;}):-1;
+    return {program:program,current:latest||null,routine:sequence[(index+1)%sequence.length]};
+  }
+
   function analyze(ex, sets, prevSets, settings){
     if(!ex.unilateral) return analyzeCore(ex, sets, prevSets, settings);
     var current = completeUnilateralSets(sets);
@@ -383,6 +411,8 @@
     inferSecondaryMuscles:inferSecondaryMuscles, muscleAssignments:muscleAssignments,
     curatedMuscleProfile:curatedMuscleProfile,
     muscleGroupId:muscleGroupId, effectiveBodyweight:effectiveBodyweight,
+    orderedProgramRoutines:orderedProgramRoutines, programRoutineOrderConfigured:programRoutineOrderConfigured,
+    programRecommendation:programRecommendation,
     comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend
   };
 });

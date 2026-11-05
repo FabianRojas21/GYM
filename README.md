@@ -7,7 +7,8 @@ App de gimnasio para PC y móvil.
 - `index.html`: estructura de la aplicación.
 - `styles.css`: estilos y diseño.
 - `app.js`: interfaz, almacenamiento y flujo de la aplicación.
-- `engine.js`: motor independiente de progresión.
+- `catalog.js`: catálogo sugerido y etiquetas de ejercicios, músculos, equipo y medidas.
+- `engine.js`: reglas de progresión, músculos y secuencia de programas.
 - `backup.js`: migración y serialización de respaldos.
 - `store.js`: operaciones de persistencia y reconciliación de datos de Firebase.
 - `sw.js` y los iconos PNG: instalación offline como PWA.

@@ -4,7 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const {analyze, analyzeCore, effTxt, calculatePlateLoad} = require('./engine.js');
+const Engine = require('./engine.js');
+const {analyze, analyzeCore, effTxt, calculatePlateLoad} = Engine;
+const catalog = require('./catalog.js');
 const {createCloudDataStore, mergeCloudSessions} = require('./store.js');
 const {migrateBackup, parseBackup, serializeBackup, stampSession, hasSessionConflict, csvSetType, csvSessionSignature, parseNumber} = require('./backup.js');
 
@@ -25,6 +27,20 @@ test('calcula discos por lado para barra y carga independiente por brazo', () =>
   assert.equal(calculatePlateLoad({type:'bar',baseWeight:20,plates:[2.5]},61).exact,false);
   assert.equal(calculatePlateLoad({type:'bar',baseWeight:20,plates:[20,20]},61).lower.totalKg,60);
   assert.equal(calculatePlateLoad({type:'unknown',baseWeight:0,plates:[]},10),null);
+});
+
+test('el catálogo de la app se carga antes del motor y conserva sus datos básicos', () => {
+  const index=fs.readFileSync('./index.html','utf8');
+  const serviceWorker=fs.readFileSync('./sw.js','utf8');
+  assert.ok(index.indexOf('catalog.js?v=__BUILD_ID__')<index.indexOf('engine.js?v=__BUILD_ID__'));
+  assert.match(serviceWorker,/catalog\.js\?v=__BUILD_ID__/);
+  assert.equal(catalog.LIB.length,14);
+  assert.equal(catalog.LIB[0].name,'Press banca');
+  assert.equal(catalog.MUSCLES.chestMid,'Pecho medio');
+  assert.equal(catalog.MUSCLE_GROUPS.shoulder,'Hombros');
+  assert.equal(catalog.EQUIPMENT_TYPES.dumbbell,'Mancuernas');
+  assert.equal(catalog.MEASUREMENT_FIELDS.bodyFat,'Grasa corporal');
+  assert.equal(catalog.LEGACY_MUSCLE_IDS.back,'lats');
 });
 
 test('sube cuando las series requeridas llegan al máximo con esfuerzo razonable', () => {
@@ -858,13 +874,15 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
   assert.match(app,/function recentSessionDetailsHtml\(session\)[\s\S]*?setsText\(entry\.sets,true\)[\s\S]*?Próximo objetivo/);
   assert.match(app,/function activeTrainingPlanHtml\(\)[\s\S]*?Programa activo/);
   assert.match(app,/recentSessionDetailsHtml\(latest\)/);
-  assert.match(app,/function programRoutineOrderConfigured\(program,routines\)[\s\S]*?program\.routineOrder\.indexOf\(id\)>=0/);
   assert.match(app,/data-act="program-order-save"/);
   assert.match(app,/data-act="program-routine-move"/);
   assert.match(app,/data-act="program-activate"/);
   assert.match(app,/data-act="routine-activate"/);
   assert.match(app,/session\.programId=S\.draft\.programId/);
   assert.match(app,/programId:r\.programId && S\.profile\.programs\[r\.programId\] \? r\.programId : null/);
+  assert.match(app,/Engine\.orderedProgramRoutines\(program,routines\)/);
+  assert.match(app,/Engine\.programRecommendation\(program,routines,S\.sessions\)/);
+  assert.match(app,/Engine\.programRoutineOrderConfigured\(activeProgram,rs\)/);
   assert.match(app,/activeProgramId/);
   assert.match(app,/data-active-plan/);
   assert.match(app,/data-act="plan-deactivate"/);
@@ -874,12 +892,6 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
   assert.match(styles,/\.home-next-routine\{/);
   assert.match(styles,/\.home-plan-controls>summary\{[^}]*min-height:44px/);
 
-  const helper=app.match(/function orderedProgramRoutines\(program,routines\)\{[\s\S]*?\n\}/);
-  const configured=app.match(/function programRoutineOrderConfigured\(program,routines\)\{[\s\S]*?\n\}/);
-  const recommendation=app.match(/function programRecommendation\(program,routines,sessions\)\{[\s\S]*?\n\}/);
-  assert.ok(helper&&configured&&recommendation);
-  const context={Array,Object,Number};
-  vm.runInNewContext(helper[0]+';'+configured[0]+';'+recommendation[0]+';globalThis.orderProgramRoutines=orderedProgramRoutines;globalThis.recommendProgramRoutine=programRecommendation;',context);
   const routines=[
     {id:'a',name:'Día A',programId:'p'},
     {id:'b',name:'Día B',programId:'p'},
@@ -888,18 +900,19 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
   ];
   const program={id:'p',routineOrder:['b','c','a']};
   const ordered=['b','c','a'];
-  assert.deepEqual(Array.from(context.orderProgramRoutines(program,routines),routine=>routine.id),ordered);
-  assert.equal(context.recommendProgramRoutine(program,routines,[]).routine.id,'b');
-  assert.equal(context.recommendProgramRoutine(program,routines,[
+  assert.equal(Engine.programRoutineOrderConfigured(program,routines),true);
+  assert.deepEqual(Engine.orderedProgramRoutines(program,routines).map(routine=>routine.id),ordered);
+  assert.equal(Engine.programRecommendation(program,routines,[]).routine.id,'b');
+  assert.equal(Engine.programRecommendation(program,routines,[
     {id:'a1',date:'2026-01-01',ts:1,programId:'p',routineId:'b'},
     {id:'other',date:'2026-01-05',ts:5,programId:'other',routineId:'other'},
     {id:'legacy',date:'2026-01-06',ts:6,routineId:'c'},
     {id:'p2',date:'2026-01-02',ts:2,programId:'p',routineId:'c'}
   ]).routine.id,'a');
-  assert.equal(context.recommendProgramRoutine(program,routines,[
+  assert.equal(Engine.programRecommendation(program,routines,[
     {id:'a1',date:'2026-01-01',ts:1,programId:'p',routineId:'b'}
   ]).routine.id,'c');
-  assert.equal(context.recommendProgramRoutine({id:'p'},routines,[]),null);
+  assert.equal(Engine.programRecommendation({id:'p'},routines,[]),null);
   assert.deepEqual(routines.map(routine=>routine.id),['a','b','c','other']);
 });
 
