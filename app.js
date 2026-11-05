@@ -1984,17 +1984,36 @@ function nextProgramRoutine(){
   if(!program) return null;
   return programRecommendation(program,routineList(),S.sessions);
 }
+function activePlanControlsHtml(program){
+  var programs=Object.keys(S.profile.programs||{}).map(function(id){return S.profile.programs[id];})
+    .sort(function(a,b){return a.name.localeCompare(b.name,'es');});
+  var routines=routineList().slice().sort(function(a,b){return a.name.localeCompare(b.name,'es');});
+  var selected=S.profile.activeProgramId?'program:'+S.profile.activeProgramId:
+    S.profile.activeRoutineId?'routine:'+S.profile.activeRoutineId:'';
+  var options='<option value="">Sin plan activo</option>'+
+    programs.map(function(item){return '<option value="program:'+esc(item.id)+'"'+(selected==='program:'+item.id?' selected':'')+'>Programa · '+esc(item.name)+'</option>';}).join('')+
+    routines.map(function(item){return '<option value="routine:'+esc(item.id)+'"'+(selected==='routine:'+item.id?' selected':'')+'>Rutina · '+esc(item.name)+'</option>';}).join('');
+  var sequence=program?orderedProgramRoutines(program,routines):[];
+  var recommendation=program&&programRecommendation(program,routines,S.sessions);
+  var nextRoutineId=recommendation&&recommendation.routine.id;
+  var sequenceHtml=program&&sequence.length?'<div class="home-plan-sequence"><strong>Rutinas del programa</strong>'+
+    '<ol>'+sequence.map(function(routine){return '<li><span>'+esc(routine.name)+'</span><button class="btn ghost sm" data-act="rut-start" data-id="'+esc(routine.id)+'">'+(routine.id===nextRoutineId?'Siguiente · empezar':'Empezar')+'</button></li>';}).join('')+'</ol></div>':'';
+  return '<details class="home-plan-controls"><summary>Cambiar plan o elegir otro día</summary>'+
+    '<label class="field"><span class="lab">Plan activo</span><select class="txt" data-active-plan>'+options+'</select></label>'+
+    (selected?'<button class="btn ghost sm" data-act="plan-deactivate">Desactivar plan</button>':'')+sequenceHtml+
+    '</details>';
+}
 function activeTrainingPlanHtml(){
   var next=nextProgramRoutine(),activeRoutine=S.profile.activeRoutineId&&S.profile.routines[S.profile.activeRoutineId];
-  if(next) return '<div class="home-next-routine"><div><span class="home-eyebrow">Programa activo · '+esc(next.program.name)+'</span><strong>'+esc(next.routine.name)+'</strong><small>'+(next.current?'Siguiente después de '+esc(next.current.routineName||next.current.routineId):'Primera rutina del programa')+'</small></div>'+
-    '<button class="btn sm" data-act="rut-start" data-id="'+esc(next.routine.id)+'">Empezar</button></div>';
+  if(next) return '<section class="home-active-plan"><div class="home-next-routine"><div><span class="home-eyebrow">Programa activo · '+esc(next.program.name)+'</span><strong>'+esc(next.routine.name)+'</strong><small>'+(next.current?'Siguiente después de '+esc(next.current.routineName||next.current.routineId):'Primera rutina del programa')+'</small></div>'+
+    '<button class="btn sm" data-act="rut-start" data-id="'+esc(next.routine.id)+'">Empezar</button></div>'+activePlanControlsHtml(next.program)+'</section>';
   if(S.profile.activeProgramId){
     var activeProgram=S.profile.programs[S.profile.activeProgramId];
-    return '<div class="home-next-routine"><div><span class="home-eyebrow">Programa activo</span><strong>'+esc((activeProgram||{}).name||'Programa')+'</strong><small>Añade una rutina y define su secuencia en Biblioteca.</small></div><button class="btn ghost sm" data-act="program-open" data-id="'+esc(S.profile.activeProgramId)+'">Ver programa</button></div>';
+    return '<section class="home-active-plan"><div class="home-next-routine"><div><span class="home-eyebrow">Programa activo</span><strong>'+esc((activeProgram||{}).name||'Programa')+'</strong><small>Añade una rutina y define su secuencia en Biblioteca.</small></div><button class="btn ghost sm" data-act="program-open" data-id="'+esc(S.profile.activeProgramId)+'">Ver programa</button></div>'+activePlanControlsHtml(activeProgram)+'</section>';
   }
-  if(activeRoutine) return '<div class="home-next-routine"><div><span class="home-eyebrow">Rutina activa</span><strong>'+esc(activeRoutine.name)+'</strong><small>Repite esta rutina cuando quieras; el progreso se calcula por ejercicio.</small></div>'+
-    '<button class="btn sm" data-act="rut-start" data-id="'+esc(activeRoutine.id)+'">Empezar</button></div>';
-  return '<div class="home-plan-empty"><span>No hay un plan activo</span><button class="text-button" data-act="library-open-section" data-section="programas">Elegir programa o rutina</button></div>';
+  if(activeRoutine) return '<section class="home-active-plan"><div class="home-next-routine"><div><span class="home-eyebrow">Rutina activa</span><strong>'+esc(activeRoutine.name)+'</strong><small>Repite esta rutina cuando quieras; el progreso se calcula por ejercicio.</small></div>'+
+    '<button class="btn sm" data-act="rut-start" data-id="'+esc(activeRoutine.id)+'">Empezar</button></div>'+activePlanControlsHtml(null)+'</section>';
+  return '<section class="home-active-plan"><div class="home-plan-empty"><span>No hay un plan activo</span></div>'+activePlanControlsHtml(null)+'</section>';
 }
 function moveProgramRoutine(programId,routineId,direction){
   var program=S.profile.programs[programId],sequence=orderedProgramRoutines(program,routineList());
@@ -3493,6 +3512,10 @@ function activateRoutine(routineId){
   Store.saveProfile();S.selectedRoutine=routineId;S.librarySection='rutinas';render();
   toast('Rutina activa: '+routine.name);return true;
 }
+function deactivateTrainingPlan(){
+  S.profile.activeProgramId=null;S.profile.activeRoutineId=null;
+  Store.saveProfile();render();toast('Plan desactivado');
+}
 function saveProgram(){
   var program = S.pedit, name = program && program.name.trim();
   if(!name){ toast('Ponle un nombre al programa'); return; }
@@ -3820,6 +3843,7 @@ function onClick(ev){
     case 'program-order-save':
       if(saveProgramRoutineOrder(t.dataset.id)){render();toast('Secuencia del programa guardada');}
       break;
+    case 'plan-deactivate': deactivateTrainingPlan(); break;
     case 'program-routine-move':
       if(moveProgramRoutine(t.dataset.program,t.dataset.id,Number(t.dataset.direction))){render();toast('Orden del programa actualizado');}
       break;
@@ -4251,6 +4275,14 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.activePlan!==undefined){
+    if(!t.value){deactivateTrainingPlan();return;}
+    var separator=t.value.indexOf(':'),kind=t.value.slice(0,separator),id=t.value.slice(separator+1);
+    if(separator<0||!id){toast('Elige un programa o rutina válido');render();return;}
+    if(kind==='program'){activateProgram(id);return;}
+    if(kind==='routine'){activateRoutine(id);return;}
+    toast('Elige un programa o rutina válido');render();return;
+  }
   if(t.dataset.plateProfile!==undefined){
     var changedProfile=plateProfiles().filter(function(profile){return profile.id===t.dataset.id;})[0];
     if(!changedProfile){render();return;}

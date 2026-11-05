@@ -31,7 +31,9 @@ rutina o la que sigue al último entreno registrado dentro de ese programa.
 También puedes elegir una rutina individual como activa desde su detalle; al
 hacerlo, se desactiva el programa anterior. Los entrenos nuevos conservan el
 programa y la rutina con que se iniciaron, y los registros antiguos no se
-reasignan automáticamente.
+reasignan automáticamente. Desde **Hoy → Cambiar plan o elegir otro día**
+puedes cambiar o desactivar el plan y empezar cualquier rutina de la secuencia;
+el siguiente objetivo seguirá el último día que realmente completaste.
 
 En **Yo → Resumen → Objetivos**, las metas de peso en un ejercicio, entrenos
 totales y entrenos de los últimos 7 días se actualizan con tus datos. Los

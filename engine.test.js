@@ -862,8 +862,13 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
   assert.match(app,/session\.programId=S\.draft\.programId/);
   assert.match(app,/programId:r\.programId && S\.profile\.programs\[r\.programId\] \? r\.programId : null/);
   assert.match(app,/activeProgramId/);
+  assert.match(app,/data-active-plan/);
+  assert.match(app,/data-act="plan-deactivate"/);
+  assert.match(app,/data-act="rut-start".*Siguiente · empezar/);
+  assert.match(app,/if\(t\.dataset\.activePlan!==undefined\)/);
   assert.match(styles,/\.home-recent-details>summary\{[^}]*min-height:44px/);
   assert.match(styles,/\.home-next-routine\{/);
+  assert.match(styles,/\.home-plan-controls>summary\{[^}]*min-height:44px/);
 
   const helper=app.match(/function orderedProgramRoutines\(program,routines\)\{[\s\S]*?\n\}/);
   const configured=app.match(/function programRoutineOrderConfigured\(program,routines\)\{[\s\S]*?\n\}/);
