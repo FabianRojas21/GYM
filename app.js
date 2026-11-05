@@ -1490,6 +1490,18 @@ function effDisplay(row){
   var v = num(row.rir); if(v === null) return '';
   return fmt(S.profile.settings.mode === 'rpe' ? 10 - v : v);
 }
+function recommendationStateLine(a){
+  var labelMap = {
+    sube:'Sube peso',
+    reps:'Suma reps',
+    confirma:'Confirmar',
+    mantener:'Mantén',
+    bajar:'Baja peso',
+    nuevo:'Nuevo'
+  };
+  var headline = labelMap[a.status] || 'Objetivo';
+  return '<div class="goal-state-line"><div class="goal-state-copy"><span>Estado</span>' + chip(a.status) + '</div><strong>' + esc(headline) + ' · ' + esc(a.headline) + '</strong></div>';
+}
 function liveHtml(ei){
   var en = S.draft.entries[ei], ex = effEx(en);
   var sets = rowsToSets(en.rows, ex.unilateral);
@@ -1500,7 +1512,7 @@ function liveHtml(ei){
     ? 'Completa peso y repeticiones en ambos lados para ver tu progreso.'
     : 'Anota tus series y verás cuánto te falta para subir de peso.') + '</p>';
   var resultSets = datedSets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && validReps(set.r); });
-  return '<div class="goal-row">' + chip(a.status) + '<strong>Así vas: ' + esc(a.headline) + '</strong></div>' + barHtml(a, ex) +
+  return recommendationStateLine(a) + barHtml(a, ex) +
     '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Resultado de hoy: ' + esc(setsText(resultSets)) + '</p><p class="small">' + esc(a.detail) + '</p></details>';
 }
 function previousWorkSet(exId, workIndex, unilateral){
@@ -2470,10 +2482,11 @@ function homeDashboard(){
   }, {volume:0, effectiveSets:0, sessions:previousWeek.length});
   previousStats.sessions = previousWeek.length;
   stats.sessions = week.length;
+  var trend = weeklyProgressStatus(stats, previousStats);
   var sorted = S.sessions.slice().sort(function(a,b){ return a.date === b.date ? (b.ts || 0) - (a.ts || 0) : (a.date < b.date ? 1 : -1); });
   var avgVolumePerSession = week.length ? stats.volume / week.length : 0;
   var latest = sorted[0], out = '<section class="home-dashboard"><div class="home-heading"><div><span class="home-eyebrow">Tu semana de entrenamiento</span><h2>Resumen semanal</h2></div>' +
-    '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
+    '<div class="home-heading-side"><span class="home-state-badge ' + esc(trend.status) + '">' + esc(trend.label) + '</span><span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div></div>' +
     '<p class="home-message">' + (week.length
       ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Media por sesión: ' + volumeText(avgVolumePerSession) + ' ' + weightUnitLabel() + '·reps.'
       : 'Cada progreso empieza con una sesión. Hoy puedes dar ese primer paso.') + '</p>' +
