@@ -140,14 +140,15 @@ listas de discos compartibles y asignarlas a varios equipos. Si editas el perfil
 el cambio se refleja en todos los equipos vinculados. También puedes conservar
 una lista propia para cada equipo o convertir una lista existente en un perfil.
 No se registran cantidades de discos físicos. En **Barras y máquinas cargables**
-puedes crear hasta diez equipos para la calculadora. Durante el entrenamiento, cada ejercicio tiene
-un acceso directo que abre la calculadora en un panel inferior sin salir de la
-sesión; toma como objetivo el peso escrito para la siguiente serie o, si aún no
-lo hay, el recomendado para el ejercicio. El panel muestra el reparto visual
-de discos y permanece abierto al calcular. Puedes elegir una serie, preparar
-una combinación exacta o aproximada y confirmar antes de aplicar el peso; si
-la serie es unilateral, lo aplica a ambos lados. Los atajos suman el peso del
-par de discos para una barra y el peso de un disco por brazo en una máquina
+puedes crear hasta diez equipos para la calculadora. Durante el entrenamiento,
+cada ejercicio tiene un acceso directo que abre la calculadora en un panel
+inferior sin salir de la sesión; toma como objetivo el peso escrito para la
+siguiente serie o, si aún no lo hay, el recomendado para el ejercicio. El panel
+muestra el reparto visual de discos, queda por encima de la navegación y
+desplaza el resultado a la vista al calcular. Puedes elegir una serie, preparar
+una combinación exacta o aproximada y confirmar antes de aplicar el peso; si la
+serie es unilateral, lo aplica a ambos lados. Los atajos suman el peso del par
+de discos para una barra y el peso de un disco por brazo en una máquina
 independiente. La vista del entreno también resume duración, carga × reps y
 avance de series, con un tema oscuro de alto contraste.
 En cada equipo puedes escribir una categoría propia —por ejemplo, prensa,

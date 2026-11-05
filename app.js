@@ -2515,7 +2515,7 @@ function viewHoy(){
           : '<button class="btn ghost" data-act="discard">Descartar</button>') + '</div></div>';
     }
   }
-  return out + workoutCalculatorSheetHtml() + '</div>';
+  return out + '</div>' + workoutCalculatorSheetHtml();
 }
 
 /* ---------- rutinas ---------- */
@@ -3760,7 +3760,10 @@ function onClick(ev){
       if(!calculation){toast('Revisa el peso base y los discos configurados');break;}
       calcExercise.loadToolId=selectedTool.id;
       S.loadingCalc={exId:calcExercise.id,entryIndex:S.loadingCalc&&S.loadingCalc.exId===calcExercise.id?S.loadingCalc.entryIndex:null,rowIndex:S.loadingCalc&&S.loadingCalc.exId===calcExercise.id?S.loadingCalc.rowIndex:null,toolId:selectedTool.id,targetKg:targetKg,result:calculation,pendingApply:null,open:!!(S.loadingCalc&&S.loadingCalc.open)};
-      Store.saveProfile();render();break;
+      Store.saveProfile();render();
+      var calculatorResult=$('.loading-sheet .load-result');
+      if(calculatorResult) calculatorResult.scrollIntoView({block:'nearest'});
+      break;
     case 'loading-target-step':
       if(!S.loadingCalc||!Number.isFinite(Number(t.dataset.weight))) break;
       var stepTool=loadToolProfiles().filter(function(tool){return tool.id===S.loadingCalc.toolId;})[0];
@@ -4208,6 +4211,18 @@ function onClick(ev){
 }
 function onInput(ev){
   var t = ev.target;
+  if(t.dataset.plateProfile!==undefined){
+    var inputProfile=plateProfiles().filter(function(profile){return profile.id===t.dataset.id;})[0];
+    if(!inputProfile) return;
+    if(t.dataset.plateProfile==='name'){
+      var typedName=t.value.trim(),duplicateName=plateProfiles().some(function(profile){return profile.id!==inputProfile.id&&profile.name.toLocaleLowerCase()===typedName.toLocaleLowerCase();});
+      if(typedName&&typedName.length<=50&&!duplicateName){inputProfile.name=typedName;Store.saveProfile();}
+    }else if(t.dataset.plateProfile==='plates'){
+      var typedPlates=parsePlateWeights(t.value);
+      if(typedPlates!==null){inputProfile.plates=typedPlates;Store.saveProfile();}
+    }
+    return;
+  }
   if(t.dataset.loadTool!==undefined){
     var inputTool=(S.profile.settings.loadingTools||[]).filter(function(tool){return tool&&tool.id===t.dataset.id;})[0];
     if(!inputTool) return;
@@ -4313,17 +4328,23 @@ function onChange(ev){
   }
   if(t.dataset.plateProfile!==undefined){
     var changedProfile=plateProfiles().filter(function(profile){return profile.id===t.dataset.id;})[0];
-    if(!changedProfile){render();return;}
+    if(!changedProfile) return;
     if(t.dataset.plateProfile==='name'){
       var profileName=t.value.trim(), duplicateProfile=plateProfiles().some(function(profile){return profile.id!==changedProfile.id&&profile.name.toLocaleLowerCase()===profileName.toLocaleLowerCase();});
-      if(!profileName||profileName.length>50||duplicateProfile){toast(duplicateProfile?'El nombre ya pertenece a otro perfil':'Escribe un nombre de hasta 50 caracteres');render();return;}
+      if(!profileName||profileName.length>50||duplicateProfile){
+        toast(duplicateProfile?'El nombre ya pertenece a otro perfil':'Escribe un nombre de hasta 50 caracteres');
+        t.value=changedProfile.name;return;
+      }
       changedProfile.name=profileName;
     }else if(t.dataset.plateProfile==='plates'){
       var profilePlates=parsePlateWeights(t.value);
-      if(profilePlates===null){toast('Revisa los discos: usa hasta 30 pesos positivos separados por punto y coma');render();return;}
+      if(profilePlates===null){
+        toast('Revisa los discos: usa hasta 30 pesos positivos separados por punto y coma');
+        t.value=changedProfile.plates.map(weightInput).join('; ');return;
+      }
       changedProfile.plates=profilePlates;
-    }else{render();return;}
-    S.loadingCalc=null;Store.saveProfile();render();return;
+    }else return;
+    S.loadingCalc=null;Store.saveProfile();return;
   }
   if(t.dataset.loadingRow!==undefined){
     var rowCalc=S.loadingCalc, rowEntry=rowCalc&&Number.isInteger(rowCalc.entryIndex)?S.draft.entries[rowCalc.entryIndex]:null;

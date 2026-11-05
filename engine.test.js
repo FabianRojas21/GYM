@@ -798,6 +798,10 @@ test('la interfaz configura equipo cargable y diferencia peso por brazo del tota
   assert.match(source,/No se asumirá un peso estándar/);
   assert.match(source,/data-act="configure-load-tools"/);
   assert.match(source,/Configuración pendiente:/);
+  assert.match(source,/function onInput\(ev\)\{[\s\S]*?if\(t\.dataset\.plateProfile!==undefined\)[\s\S]*?inputProfile\.plates=typedPlates;Store\.saveProfile\(\)/);
+  assert.match(source,/if\(t\.dataset\.plateProfile!==undefined\)\{[\s\S]*?S\.loadingCalc=null;Store\.saveProfile\(\);return;/);
+  assert.match(source,/return out \+ '<\/div>' \+ workoutCalculatorSheetHtml\(\)/);
+  assert.match(source,/calculatorResult\.scrollIntoView\(\{block:'nearest'\}\)/);
   assert.match(source,/tool\.category===undefined\|\|\(typeof tool\.category==='string'/);
   assert.match(source,/function onInput\(ev\)[\s\S]*?if\(t\.dataset\.loadTool!==undefined\)[\s\S]*?inputTool\.plates=inputPlates;Store\.saveProfile\(\)/);
   assert.match(source,/function loadingCalculatorHtml\(ex\)/);
