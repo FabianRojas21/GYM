@@ -58,6 +58,15 @@ test('el motor presenta recomendaciones en la unidad elegida sin cambiar cálcul
   assert.match(kgResult.headline,/62 kg/);
 });
 
+test('la meta por sesión etiqueta la recomendación según el objetivo elegido', () => {
+  const strength = analyze(baseExercise,[set(10),set(10),set(10)],null,{...rirSettings,trainingGoal:'strength'});
+  const volume = analyze(baseExercise,[set(8),set(9),set(9)],null,{...rirSettings,trainingGoal:'volume'});
+  assert.match(strength.headline,/Fuerza/);
+  assert.match(strength.detail,/objetivo actual: fuerza/i);
+  assert.match(volume.headline,/Volumen/);
+  assert.match(volume.detail,/objetivo actual: volumen/i);
+});
+
 test('ajusta la recomendación al incremento disponible del equipo', () => {
   const exercise = {...baseExercise, inc:2, loadStep:2};
   const result = analyze(exercise, [set(10,2,26), set(10,2,26), set(10,2,26)], null, rirSettings);

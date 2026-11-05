@@ -103,7 +103,11 @@ var TK = 'sobrecarga:tab';
 var RTK = 'sobrecarga:rest-timer:v1';
 var RTOK = RTK + ':owner';
 var WORKOUT_SIMPLE_KEY='sobrecarga:workout-simple:v1';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, activeProgramId:null, activeRoutineId:null, goals:{}, measurements:[], recoveryRatings:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', trainingGoal:'hypertrophy', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, activeProgramId:null, activeRoutineId:null, goals:{}, measurements:[], recoveryRatings:{}}; }
+function trainingGoalLabel(goal){
+  var labels={hypertrophy:'Hipertrofia', strength:'Fuerza', volume:'Volumen'};
+  return labels[goal] || 'Hipertrofia';
+}
 function normProfile(p){
   var d = defaultProfile();
   if(!p) return d;
@@ -115,6 +119,7 @@ function normProfile(p){
   d.settings.reminderEnabled=d.settings.reminderEnabled===true;
   if(![2,3,5,7].includes(Number(d.settings.reminderIntervalDays))) d.settings.reminderIntervalDays=3;
   if(!['any','sameRoutine'].includes(d.settings.previousExerciseScope)) d.settings.previousExerciseScope='any';
+  if(!['hypertrophy','strength','volume'].includes(d.settings.trainingGoal)) d.settings.trainingGoal='hypertrophy';
   if(![60,90,120,180,300].includes(Number(d.settings.restSeconds))) d.settings.restSeconds = 90;
   if(![0,15,30,45,60,90,120].includes(Number(d.settings.warmupRestSeconds))) d.settings.warmupRestSeconds = 45;
   d.exercises = p.exercises || {};
@@ -3214,6 +3219,7 @@ function viewSet(){
   var hasDemo = S.sessions.some(function(s){ return s.demo; });
   var out = '<div class="head-row"><h2>Ajustes</h2></div>';
   out += '<section class="card"><p class="sec-title">Unidades de peso</p><label class="field"><span class="lab">Mostrar e ingresar pesos en</span><select class="txt" data-setting="weightUnit"><option value="kg"' + (st.weightUnit==='kg'?' selected':'') + '>Kilogramos (kg)</option><option value="lb"' + (st.weightUnit==='lb'?' selected':'') + '>Libras (lb)</option></select></label><p class="small muted">Cambiar esta opción solo convierte lo que ves y escribes. Los datos se conservan en kg para mantener la sincronización, el historial y la progresión consistentes.</p></section>';
+  out += '<section class="card"><p class="sec-title">Objetivo del entrenamiento</p><label class="field"><span class="lab">Qué priorizas hoy</span><select class="txt" data-setting="trainingGoal"><option value="hypertrophy"' + (st.trainingGoal==='hypertrophy'?' selected':'') + '>Hipertrofia</option><option value="strength"' + (st.trainingGoal==='strength'?' selected':'') + '>Fuerza</option><option value="volume"' + (st.trainingGoal==='volume'?' selected':'') + '>Volumen</option></select></label><p class="small muted">Esto cambia la forma en que la app interpreta la recomendación del siguiente entrenamiento: fuerza suele priorizar intensidad, volumen prioriza repeticiones y hipertrofia mantiene el equilibrio.</p></section>';
   out += loadToolSettingsHtml();
   out += '<section class="card"><p class="sec-title">Escala de esfuerzo</p><div class="seg" role="group" aria-label="Escala de esfuerzo">' +
     '<button data-act="set-mode" data-mode="rir" aria-pressed="' + (st.mode === 'rir') + '">RIR</button>' +
@@ -4571,6 +4577,10 @@ function onChange(ev){
     var reminderDays=Number(t.value);
     if(![2,3,5,7].includes(reminderDays)){ render(); return; }
     S.profile.settings.reminderIntervalDays=reminderDays; Store.saveProfile(); render(); return;
+  }
+  if(t.dataset.setting === 'trainingGoal'){
+    if(!['hypertrophy','strength','volume'].includes(t.value)){ render(); return; }
+    S.profile.settings.trainingGoal=t.value; Store.saveProfile(); render(); return;
   }
   if(t.dataset.setting === 'previousExerciseScope'){
     if(!['any','sameRoutine'].includes(t.value)){ render(); return; }

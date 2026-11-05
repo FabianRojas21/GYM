@@ -247,6 +247,12 @@
     var same = targets.every(function(value){ return value === targets[0]; });
     return same ? effTxt(targets[0], settings) : targets.map(function(value){ return effTxt(value, settings); }).join(' / ');
   }
+  function sessionGoalProfile(settings){
+    var goal = settings && settings.trainingGoal ? settings.trainingGoal : 'hypertrophy';
+    if(goal === 'strength') return {label:'Fuerza', helper:'prioriza intensidad y baja un poco el esfuerzo objetivo'};
+    if(goal === 'volume') return {label:'Volumen', helper:'prioriza más repeticiones antes de aumentar la carga'};
+    return {label:'Hipertrofia', helper:'mantiene un equilibrio entre intensidad y volumen'};
+  }
   function roundTo(value, step){ return Math.round(value / step) * step; }
   function availableWeight(value, step, direction){
     if(!(Number(step) > 0)) return value;
@@ -283,7 +289,8 @@
       if(reps[j] !== undefined) repsFalt += Math.max(0, ex.max - reps[j]);
     }
     var serFalt = Math.max(0, need - n);
-    var result = {W:weight, nextW:weight, progressTarget:availableWeight(weight + increment, ex.loadStep || increment, 'up'), reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[]};
+    var goalProfile = sessionGoalProfile(settings);
+    var result = {W:weight, nextW:weight, progressTarget:availableWeight(weight + increment, ex.loadStep || increment, 'up'), reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[], goal:goalProfile.label};
     var fill = function(value){ return Array.apply(null, Array(need)).map(function(){ return value; }); };
 
     if((allTop && okEffort) || easy){
@@ -333,6 +340,10 @@
       }
       result.headline = weightText(weight,settings) + ', suma reps';
       result.detail = 'Objetivo: ' + result.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + weightText(result.progressTarget,settings) + '.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '), así que mantén las reps.');
+    }
+    if(goalProfile.label !== 'Hipertrofia'){
+      result.headline = result.headline + ' · ' + goalProfile.label;
+      result.detail = result.detail + ' Objetivo actual: ' + goalProfile.label.toLowerCase() + ' (' + goalProfile.helper + ').';
     }
     return result;
   }
