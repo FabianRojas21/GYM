@@ -1189,7 +1189,8 @@ function importSessionsCsv(text){
 /* ---------- presentación de series ---------- */
 var CHIP = {
   sube:['go','Sube de peso'], reps:['acc','Sumar reps'], confirma:['warn','Confirmar'],
-  mantener:['warn','Mantener'], bajar:['stop','Bajar'], nuevo:['mut','Nuevo']
+  mantener:['warn','Mantener'], bajar:['stop','Bajar'], nuevo:['mut','Nuevo'],
+  mejor:['go','Mejor'], igual:['warn','Igual'], peor:['stop','Peor']
 };
 function chip(st){ var c = CHIP[st] || CHIP.nuevo; return '<span class="chip ' + c[0] + '">' + c[1] + '</span>'; }
 function setsText(sets, withWarm){
@@ -2382,22 +2383,39 @@ function homeDashboard(){
   start.setDate(start.getDate() - mondayOffset); start.setHours(0, 0, 0, 0);
   var from = iso(start);
   var through=iso(new Date());
+  var previousStart = new Date(start.getTime());
+  previousStart.setDate(previousStart.getDate() - 7);
+  var previousThrough = new Date(start.getTime());
+  previousThrough.setDate(previousThrough.getDate() - 1);
+  previousThrough.setHours(23, 59, 59, 999);
   var week = S.sessions.filter(function(session){ return session.date >= from&&session.date<=through; });
+  var previousWeek = S.sessions.filter(function(session){ return session.date >= iso(previousStart) && session.date <= iso(previousThrough); });
   var stats = week.reduce(function(total, session){
     var values = sessionStats(session);
     total.duration += Number(session.durationMs) || 0;
     if(Number(session.durationMs) > 0) total.hasDuration = true;
     total.volume += values.volume;
+    total.effectiveSets += values.effectiveSets;
     return total;
-  }, {duration:0, hasDuration:false, volume:0});
+  }, {duration:0, hasDuration:false, volume:0, effectiveSets:0});
+  var previousStats = previousWeek.reduce(function(total, session){
+    var values = sessionStats(session);
+    total.volume += values.volume;
+    total.effectiveSets += values.effectiveSets;
+    return total;
+  }, {volume:0, effectiveSets:0, sessions:previousWeek.length});
+  previousStats.sessions = previousWeek.length;
+  stats.sessions = week.length;
   var sorted = S.sessions.slice().sort(function(a,b){ return a.date === b.date ? (b.ts || 0) - (a.ts || 0) : (a.date < b.date ? 1 : -1); });
   var latest = sorted[0], out = '<section class="home-dashboard"><div class="home-heading"><div><span class="home-eyebrow">Tu semana de entrenamiento</span><h2>Resumen semanal</h2></div>' +
     '<span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div>' +
     '<p class="home-message">' + (week.length
       ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Sigue a tu ritmo.'
       : 'Cada progreso empieza con una sesión. Hoy puedes dar ese primer paso.') + '</p>' +
+    weeklyTrendSummaryHtml(stats, previousStats) +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
+    '<div class="weekly-stat"><strong>' + stats.effectiveSets + '</strong><span>series efectivas</span></div>' +
     '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>carga × reps · sin aprox.</span></div></div>' +
     workoutReminderHtml(latest) + activeTrainingPlanHtml() +
     '<button class="btn home-start" data-act="start" data-home-start><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
@@ -2982,6 +3000,24 @@ function historyTrend(current,previous){
   var difference=current-previous;
   if(!difference) return 'Sin cambios';
   return (difference>0?'↑ ':'↓ ')+Math.round(Math.abs(difference)/previous*100)+'% vs periodo anterior';
+}
+function weeklyProgressStatus(current,previous){
+  if(!previous || previous.sessions === 0 || previous.volume === 0 && previous.effectiveSets === 0){
+    return {status:'igual', label:'Sin comparación previa', detail:'Hay suficientes datos para comparar; añade otra semana y la tendencia aparece aquí.'};
+  }
+  var score = (Number(current.volume || 0) / Math.max(Number(previous.volume || 0), 1)) * 0.7 +
+    (Number(current.effectiveSets || 0) / Math.max(Number(previous.effectiveSets || 0), 1)) * 0.3;
+  if(score >= 1.12){
+    return {status:'mejor', label:'Mejor', detail:'La semana va mejor que la anterior: ' + historyTrend(current.volume, previous.volume) + ' · ' + historyTrend(current.effectiveSets, previous.effectiveSets)};
+  }
+  if(score <= 0.88){
+    return {status:'peor', label:'Peor', detail:'La semana va peor que la anterior: ' + historyTrend(current.volume, previous.volume) + ' · ' + historyTrend(current.effectiveSets, previous.effectiveSets)};
+  }
+  return {status:'igual', label:'Igual', detail:'La semana mantiene la misma tendencia que la anterior. Mantén el plan y revisa la recuperación.'};
+}
+function weeklyTrendSummaryHtml(currentStats, previousStats){
+  var trend = weeklyProgressStatus(currentStats, previousStats);
+  return '<div class="home-week-trend"><div class="home-week-trend-head">' + chip(trend.status) + '<strong>' + esc(trend.label) + '</strong></div><small>' + esc(trend.detail) + '</small></div>';
 }
 function historySummaryHtml(matches){
   var current=historyAggregate(matches), trendHtml='';

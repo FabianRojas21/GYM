@@ -71,6 +71,26 @@ test('las series normales extra se guardan pero no bloquean la subida', () => {
   assert.deepEqual(result.reps, [10,10,10]);
 });
 
+test('el resumen semanal compara la tendencia con la semana previa y la etiqueta como mejor, igual o peor', () => {
+  const source = fs.readFileSync('./app.js', 'utf8');
+  const helper = source.match(/function weeklyProgressStatus\(current,previous\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context = {
+    Number,
+    Math,
+    historyTrend(current, previous){
+      if(previous === 0) return current === 0 ? 'Sin cambios previos' : 'Nuevo periodo';
+      var difference = current - previous;
+      if(!difference) return 'Sin cambios';
+      return (difference > 0 ? '↑ ' : '↓ ') + Math.round(Math.abs(difference) / previous * 100) + '% vs periodo anterior';
+    }
+  };
+  vm.runInNewContext(helper[0] + ';globalThis.weeklyProgressStatusForTest = weeklyProgressStatus;', context);
+  assert.equal(context.weeklyProgressStatusForTest({sessions:4, volume:15000, effectiveSets:20}, {sessions:3, volume:10000, effectiveSets:15}).status, 'mejor');
+  assert.equal(context.weeklyProgressStatusForTest({sessions:4, volume:12000, effectiveSets:18}, {sessions:4, volume:13000, effectiveSets:20}).status, 'igual');
+  assert.equal(context.weeklyProgressStatusForTest({sessions:2, volume:7000, effectiveSets:12}, {sessions:4, volume:13000, effectiveSets:20}).status, 'peor');
+});
+
 test('repite para confirmar si las series al máximo superan el esfuerzo pedido', () => {
   const result = analyze(baseExercise, [set(10,0), set(10,0), set(10,0)], null, rirSettings);
   assert.equal(result.status, 'confirma');
