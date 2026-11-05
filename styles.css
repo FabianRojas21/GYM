@@ -428,6 +428,27 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .home-exercise-name{max-width:100%;overflow:hidden;color:#C8CBD0;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
 .home-exercise-meta,.more-exercises{color:#858A93;font-size:11px}
 .more-exercises{align-self:center}
+.home-recent-details{padding-top:2px;border-top:1px solid rgba(180,195,225,.12)}
+.home-recent-details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:#AFC8FF;font-size:13px;font-weight:600;list-style-position:inside}
+.home-recent-entry-list{display:flex;flex-direction:column;gap:8px;padding-top:4px}
+.home-recent-entry{display:flex;flex-direction:column;gap:7px;min-width:0;padding:11px;border:1px solid rgba(180,195,225,.12);border-radius:11px;background:rgba(255,255,255,.035)}
+.home-recent-entry>div:first-child{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.home-recent-entry>div:first-child strong{min-width:0;overflow-wrap:anywhere}
+.home-recent-entry>div:first-child .small{flex:0 0 auto;font-size:11px}
+.home-recent-set-detail{color:#CFD3DB;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.home-recent-target{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0;color:#AAB0BB;font-size:12px}
+.home-recent-target>span:first-child{margin-right:auto}
+.home-recent-target strong{color:#E6EAF2;font-weight:600}
+.home-next-routine{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px;border:1px solid rgba(125,163,255,.23);border-radius:12px;background:linear-gradient(120deg,rgba(49,95,224,.13),rgba(255,255,255,.035))}
+.home-next-routine>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.home-next-routine .home-eyebrow{font-size:11px}
+.home-next-routine strong{font-size:15px;overflow-wrap:anywhere}
+.home-next-routine small{color:#A8AEB8;font-size:12px}
+.home-next-routine .btn{min-height:42px;flex:0 0 auto}
+.program-sequence-hint{margin-top:-4px}
+.program-order-save{align-self:flex-start}
+.program-routine-move{width:40px;height:40px}
+.program-routine-move[disabled]{opacity:.35}
 .empty-latest p{color:#969BA3;font-size:14px}
 .home-start{width:100%;min-height:54px;border:0;border-radius:999px;background:#E7E7E8;color:#111318;font:600 19px/1 var(--font-display);letter-spacing:0;text-transform:none}
 .home-dashboard>.home-start{position:sticky;top:64px;z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.2)}
@@ -608,6 +629,14 @@ nav.tabs .in{min-height:66px}
   .workout-heading-actions{align-items:flex-start}
   .workout-heading .btn{min-height:40px;padding:0 10px;font-size:13px}
   .loading-sheet{padding-right:14px;padding-left:14px}
+  .home-exercises{grid-template-columns:1fr;gap:8px}
+  .home-exercise{flex-direction:row;justify-content:flex-start;text-align:left}
+  .home-exercise .exercise-mark{width:38px;height:38px;flex:0 0 38px;border-radius:11px;font-size:16px}
+  .home-exercise-name{flex:1}
+  .home-exercise-meta{flex:0 0 auto;font-size:12px}
+  .home-next-routine{align-items:flex-start}
+  .home-next-routine .btn{padding:0 10px}
+  .library-card-actions .program-routine-move{width:44px;height:44px}
 }
 @media (min-width:900px){body{padding-top:22px}.wrap{max-width:900px}.home-dashboard{padding:24px}.card{padding:18px}nav.tabs .in{max-width:900px}}
 @media (max-width:520px){

@@ -23,6 +23,12 @@ reglas de progresión.
 La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
 con accesos a tus rutinas y a los ejercicios que puedes retomar. La semana del
 resumen va del lunes al día actual e ignora sesiones fechadas en el futuro.
+La tarjeta del último entreno conserva un resumen breve de ejercicios, series y
+repeticiones; al desplegarla muestra peso, reps, RIR/RPE y el objetivo de
+progresión por ejercicio. Si el entreno pertenece a un programa, puedes definir
+su secuencia desde el detalle del programa: el orden inicial es alfabético y se
+puede ajustar con las flechas. Una vez guardada esa secuencia, **Hoy** sugiere
+la rutina siguiente y permite iniciarla desde la tarjeta.
 
 En **Yo → Resumen → Objetivos**, las metas de peso en un ejercicio, entrenos
 totales y entrenos de los últimos 7 días se actualizan con tus datos. Los

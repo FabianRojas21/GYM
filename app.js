@@ -1935,6 +1935,67 @@ function savedHtml(){
     '<div class="list"><p class="sec-title">Objetivo para la próxima sesión</p>' +
       (items || '<p class="small muted">Registra otro entreno para obtener sugerencias.</p>') + '</div></section>';
 }
+function recentSessionDetailsHtml(session){
+  var entries=session.entries.map(function(entry){
+    var exercise=exById(entry.exId);
+    if(!exercise) return '';
+    var configured=Object.assign({},exercise,entry.cfg||{}), plan=planFor(configured);
+    var target=plan.status==='nuevo'?'Aún sin recomendación':(plan.displayTarget||weightText(plan.nextW)+' × '+plan.target.join(' · '));
+    return '<article class="home-recent-entry"><div><strong>'+esc(exercise.name)+'</strong><span class="small muted">'+entryEffectiveSets(entry)+' series efectivas'+(entry.unilateral?' por lado':'')+'</span></div>'+
+      '<p class="home-recent-set-detail">'+esc(setsText(entry.sets,true))+'</p>'+
+      '<p class="home-recent-target"><span>Próximo objetivo</span>'+chip(plan.status)+'<strong>'+esc(target)+'</strong></p></article>';
+  }).join('');
+  return '<details class="home-recent-details"><summary>Ver series, reps, esfuerzo y próximos objetivos</summary><div class="home-recent-entry-list">'+
+    (entries||'<p class="small muted">No hay detalle de ejercicios para esta sesión.</p>')+'</div></details>';
+}
+function orderedProgramRoutines(program,routines){
+  if(!program) return [];
+  var members=routines.filter(function(routine){return routine.programId===program.id;});
+  var byId={};members.forEach(function(routine){byId[routine.id]=routine;});
+  var ordered=[],seen={};
+  (Array.isArray(program.routineOrder)?program.routineOrder:[]).forEach(function(id){
+    if(byId[id]&&!seen[id]){ordered.push(byId[id]);seen[id]=true;}
+  });
+  members.filter(function(routine){return !seen[routine.id];})
+    .sort(function(a,b){return a.name.localeCompare(b.name,'es');})
+    .forEach(function(routine){ordered.push(routine);});
+  return ordered;
+}
+function programRoutineOrderConfigured(program,routines){
+  if(!program||!Array.isArray(program.routineOrder)) return false;
+  var memberIds=routines.filter(function(routine){return routine.programId===program.id;}).map(function(routine){return routine.id;});
+  return memberIds.length>0&&memberIds.every(function(id){return program.routineOrder.indexOf(id)>=0;});
+}
+function nextProgramRoutine(session){
+  var current=session&&session.routineId&&S.profile.routines[session.routineId];
+  var program=current&&current.programId&&S.profile.programs[current.programId];
+  var routines=routineList();
+  if(!current||!program||!programRoutineOrderConfigured(program,routines)) return null;
+  var sequence=orderedProgramRoutines(program,routines),index=sequence.findIndex(function(routine){return routine.id===current.id;});
+  if(index<0||!sequence.length) return null;
+  return {program:program,current:current,routine:sequence[(index+1)%sequence.length]};
+}
+function nextProgramRoutineHtml(session){
+  var next=nextProgramRoutine(session);
+  if(!next) return '';
+  return '<div class="home-next-routine"><div><span class="home-eyebrow">Siguiente del programa · '+esc(next.program.name)+'</span><strong>'+esc(next.routine.name)+'</strong><small>Después de '+esc(next.current.name)+'</small></div>'+
+    '<button class="btn sm" data-act="rut-start" data-id="'+esc(next.routine.id)+'">Empezar</button></div>';
+}
+function moveProgramRoutine(programId,routineId,direction){
+  var program=S.profile.programs[programId],sequence=orderedProgramRoutines(program,routineList());
+  var from=sequence.findIndex(function(routine){return routine.id===routineId;}),to=from+direction;
+  if(from<0||to<0||to>=sequence.length) return false;
+  var ids=sequence.map(function(routine){return routine.id;}),moved=ids.splice(from,1)[0];
+  ids.splice(to,0,moved);program.routineOrder=ids;
+  Store.saveProfile();return true;
+}
+function recentSessionPreview(session){
+  return session.entries.slice(0,3).map(function(entry){
+    var values=entry.sets.filter(function(set){return setType(set)!=='warmup'&&setType(set)!=='drop';});
+    var reps=values.reduce(function(total,set){return total+(Number(set.r)||0);},0);
+    return '<span class="home-recent-exercise"><strong>'+esc(exName(entry.exId))+'</strong><small>'+entryEffectiveSets(entry)+' series · '+reps+' reps'+(entry.unilateral?' totales, ambos lados':'')+'</small></span>';
+  }).join('')+(session.entries.length>3?'<span class="home-recent-more">+'+(session.entries.length-3)+' ejercicios más</span>':'');
+}
 function sessionStats(session){
   var stats = {effectiveSets:0, reps:0, volume:0};
   session.entries.forEach(function(entry){
@@ -2338,15 +2399,17 @@ function homeDashboard(){
     weeklyMuscleSummaryHtml(week);
   if(latest){
     var latestStats = sessionStats(latest);
-    var exercises = latest.entries.slice(0, 6).map(function(entry){
+    var exercises = latest.entries.slice(0, 3).map(function(entry){
       var name = exName(entry.exId), initials = name.split(/\s+/).slice(0, 2).map(function(part){ return part.charAt(0); }).join('').toUpperCase();
       var effective = entryEffectiveSets(entry);
-      return '<div class="home-exercise"><span class="exercise-mark" aria-hidden="true">' + esc(initials) + '</span><span class="home-exercise-name">' + esc(name) + '</span><span class="home-exercise-meta">' + effective + ' series</span></div>';
+      var reps=entry.sets.reduce(function(total,set){return total+(setType(set)==='warmup'?0:Number(set.r)||0);},0);
+      return '<div class="home-exercise"><span class="exercise-mark" aria-hidden="true">' + esc(initials) + '</span><span class="home-exercise-name">' + esc(name) + '</span><span class="home-exercise-meta">' + effective + ' series · ' + reps + ' reps</span></div>';
     }).join('');
     out += '<section class="latest-workout"><div class="latest-head"><div><span class="home-eyebrow">Tu actividad reciente</span><h3>' + esc(latest.routineName || (latest.demo ? 'Entreno de ejemplo' : 'Entrenamiento')) + '</h3><span class="latest-date">' + esc(dFmt(latest.date, {weekday:'long', day:'numeric', month:'long'})) + '</span></div>' +
       '<button class="text-button" data-act="tab" data-tab="historial">Ver historial</button></div>' +
       '<div class="latest-stats"><span><strong>' + (Number(latest.durationMs) > 0 ? humanDuration(latest.durationMs) : '—') + '</strong> duración</span><span><strong>' + volumeText(latestStats.volume) + ' ' + weightUnitLabel() + '·reps</strong> carga × reps · sin aprox.</span><span><strong>' + latestStats.effectiveSets + '</strong> series efectivas</span></div>' +
-      (exercises ? '<div class="home-exercises">' + exercises + (latest.entries.length > 6 ? '<span class="more-exercises">+' + (latest.entries.length - 6) + ' más</span>' : '') + '</div>' : '') +
+      (exercises ? '<div class="home-exercises">' + exercises + (latest.entries.length > 3 ? '<span class="more-exercises">+' + (latest.entries.length - 3) + ' más</span>' : '') + '</div>' : '') +
+      recentSessionDetailsHtml(latest) + nextProgramRoutineHtml(latest) +
       '</section>';
   } else {
     out += '<section class="latest-workout empty-latest"><span class="home-eyebrow">Tu actividad reciente</span><h3>Tu primer entreno empieza aquí</h3><p>Cuando registres una sesión, aquí verás su duración, volumen y ejercicios.</p></section>';
@@ -2431,10 +2494,13 @@ function viewRut(){
     }).join('') + '</div>';
   if(activeProgram || S.librarySection === 'programas'){
     if(activeProgram){
-      var programRoutines = rs.filter(function(r){ return r.programId === activeProgram.id; });
-      out += '<div class="library-sort"><span>Rutinas del programa</span><button class="text-button" data-act="program-edit" data-id="' + esc(activeProgram.id) + '">Editar programa</button></div>';
+      var programRoutines = orderedProgramRoutines(activeProgram,rs);
+      var hasRoutineOrder=programRoutineOrderConfigured(activeProgram,rs);
+      out += '<div class="library-sort"><span>Secuencia del programa</span><button class="text-button" data-act="program-edit" data-id="' + esc(activeProgram.id) + '">Editar programa</button></div>' +
+        '<p class="small muted program-sequence-hint">'+(hasRoutineOrder?'Usa las flechas para definir qué rutina sigue.':'Orden inicial alfabético. Confirma o ajusta la secuencia para sugerir el próximo día.')+'</p>';
       out += programRoutines.length
-        ? '<div class="library-list">' + programRoutines.map(libraryRoutineCard).join('') + '</div>'
+        ? '<div class="library-list">' + programRoutines.map(function(routine,index){return libraryRoutineCard(routine,{programId:activeProgram.id,index:index,count:programRoutines.length});}).join('') +
+          (!hasRoutineOrder?'<button class="btn ghost sm program-order-save" data-act="program-order-save" data-id="'+esc(activeProgram.id)+'">Usar este orden</button>':'') + '</div>'
         : '<section class="library-empty"><span>▤</span><h3>Este programa todavía no tiene rutinas</h3><p>Añade una rutina nueva y asígnala a este programa.</p><button class="btn" data-act="rut-new">Crear rutina</button></section>';
       if(S.confirm === 'delp:' + activeProgram.id) out += '<section class="card"><p>¿Borrar el programa? Las rutinas se conservarán sin asignación.</p><div class="row"><button class="btn danger sm" data-act="program-del-ok" data-id="' + esc(activeProgram.id) + '">Confirmar: borrar programa</button><button class="btn ghost sm" data-act="program-cancel-delete">Cancelar</button></div></section>';
     } else {
@@ -2460,10 +2526,12 @@ function viewRut(){
   }
   return out;
 }
-function libraryRoutineCard(routine){
+function libraryRoutineCard(routine,programOrder){
   var count = routine.items.length, replacing = S.confirm === 'start:' + routine.id, summary=routineSummary(routine);
   return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="' + esc(routine.id) + '"><span class="library-cover routine-cover">' + esc(routine.name.trim().charAt(0).toUpperCase() || 'R') + '</span><span><strong>' + esc(routine.name) + '</strong><small class="routine-card-volume">' + count + ' ejercicio' + (count === 1 ? '' : 's') + ' · '+summary.workingSets+' series</small><small class="routine-card-meta">'+esc(routineMuscleLabel(summary))+' · '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</small></span></button>' +
-    '<div class="library-card-actions"><button class="btn sm" data-act="rut-start" data-id="' + esc(routine.id) + '">' + (replacing ? 'Reemplazar' : 'Entrenar') + '</button><button class="mini" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar ' + esc(routine.name) + '">✎</button><button class="mini" data-act="rut-duplicate" data-id="' + esc(routine.id) + '" aria-label="Duplicar ' + esc(routine.name) + '">⧉</button>' +
+    '<div class="library-card-actions">' +
+    (programOrder?'<button class="mini program-routine-move" data-act="program-routine-move" data-program="'+esc(programOrder.programId)+'" data-id="'+esc(routine.id)+'" data-direction="-1"'+(programOrder.index===0?' disabled':'')+' aria-label="Mover '+esc(routine.name)+' antes">↑</button><button class="mini program-routine-move" data-act="program-routine-move" data-program="'+esc(programOrder.programId)+'" data-id="'+esc(routine.id)+'" data-direction="1"'+(programOrder.index===programOrder.count-1?' disabled':'')+' aria-label="Mover '+esc(routine.name)+' después">↓</button>':'') +
+    '<button class="btn sm" data-act="rut-start" data-id="' + esc(routine.id) + '">' + (replacing ? 'Reemplazar' : 'Entrenar') + '</button><button class="mini" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar ' + esc(routine.name) + '">✎</button><button class="mini" data-act="rut-duplicate" data-id="' + esc(routine.id) + '" aria-label="Duplicar ' + esc(routine.name) + '">⧉</button>' +
     (S.confirm === 'delr:' + routine.id
       ? '<button class="mini danger" data-act="rut-del-ok" data-id="' + esc(routine.id) + '" aria-label="Confirmar borrar rutina">✓</button>'
       : '<button class="mini" data-act="rut-del" data-id="' + esc(routine.id) + '" aria-label="Borrar ' + esc(routine.name) + '">×</button>') + '</div></div>';
@@ -3371,11 +3439,24 @@ function saveRoutine(){
   if(!r.items.length){ toast('Añade al menos un ejercicio'); return; }
   var id = r.id || uid('r_');
   var prev = S.profile.routines[id] || {};
+  var previousProgramId=prev.programId, nextProgramId=r.programId && S.profile.programs[r.programId] ? r.programId : null;
   S.profile.routines[id] = {id:id, name:name, demo:prev.demo, programId:r.programId && S.profile.programs[r.programId] ? r.programId : null, items:clone(r.items)};
   if(!prev.demo) delete S.profile.routines[id].demo;
+  if(previousProgramId&&previousProgramId!==nextProgramId&&S.profile.programs[previousProgramId]&&Array.isArray(S.profile.programs[previousProgramId].routineOrder)){
+    S.profile.programs[previousProgramId].routineOrder=S.profile.programs[previousProgramId].routineOrder.filter(function(routineId){return routineId!==id;});
+  }
+  if(nextProgramId&&S.profile.programs[nextProgramId]&&Array.isArray(S.profile.programs[nextProgramId].routineOrder)&&S.profile.programs[nextProgramId].routineOrder.indexOf(id)<0){
+    S.profile.programs[nextProgramId].routineOrder.push(id);
+  }
   S.selectedRoutine = id; S.librarySection = 'rutinas';
   Store.saveProfile(); S.redit = null; render(); window.scrollTo(0, 0);
   toast('Rutina guardada. Se usa en tu próximo entreno.');
+}
+function saveProgramRoutineOrder(programId){
+  var program=S.profile.programs[programId];
+  if(!program) return false;
+  program.routineOrder=orderedProgramRoutines(program,routineList()).map(function(routine){return routine.id;});
+  Store.saveProfile();return true;
 }
 function saveProgram(){
   var program = S.pedit, name = program && program.name.trim();
@@ -3699,6 +3780,12 @@ function onClick(ev){
     case 'program-cancel': S.pedit = null; render(); break;
     case 'program-open': S.selectedProgram = t.dataset.id; S.librarySection = 'programas'; S.selectedRoutine = null; render(); break;
     case 'program-back': S.selectedProgram = null; render(); break;
+    case 'program-order-save':
+      if(saveProgramRoutineOrder(t.dataset.id)){render();toast('Secuencia del programa guardada');}
+      break;
+    case 'program-routine-move':
+      if(moveProgramRoutine(t.dataset.program,t.dataset.id,Number(t.dataset.direction))){render();toast('Orden del programa actualizado');}
+      break;
     case 'program-del': S.confirm = 'delp:' + t.dataset.id; render(); break;
     case 'program-cancel-delete': S.confirm = null; render(); break;
     case 'program-del-ok':
@@ -3750,7 +3837,12 @@ function onClick(ev){
       else startRoutine(t.dataset.id);
       break;
     case 'rut-del': S.confirm = 'delr:' + t.dataset.id; render(); break;
-    case 'rut-del-ok': delete S.profile.routines[t.dataset.id]; S.selectedRoutine = null; Store.saveProfile(); S.confirm = null; render(); toast('Rutina borrada'); break;
+    case 'rut-del-ok':
+      var deletedRoutine=S.profile.routines[t.dataset.id];
+      if(deletedRoutine&&deletedRoutine.programId&&S.profile.programs[deletedRoutine.programId]&&Array.isArray(S.profile.programs[deletedRoutine.programId].routineOrder)){
+        S.profile.programs[deletedRoutine.programId].routineOrder=S.profile.programs[deletedRoutine.programId].routineOrder.filter(function(id){return id!==t.dataset.id;});
+      }
+      delete S.profile.routines[t.dataset.id]; S.selectedRoutine = null; Store.saveProfile(); S.confirm = null; render(); toast('Rutina borrada'); break;
     case 'move-exercise':
       var moveFrom = ei, moveTo = ei + Number(t.dataset.direction);
       if(!Number.isInteger(moveTo) || moveTo < 0 || moveTo >= S.draft.entries.length) break;

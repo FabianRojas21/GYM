@@ -848,6 +848,33 @@ test('la biblioteca resume rutinas y muestra la última actividad de sus ejercic
   assert.match(readme,/Las tarjetas de \*\*Rutinas\*\* resumen sus series planificadas/);
 });
 
+test('Hoy mantiene el detalle de la última sesión y sugiere la siguiente rutina solo con orden definido', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
+  assert.match(app,/function recentSessionDetailsHtml\(session\)[\s\S]*?setsText\(entry\.sets,true\)[\s\S]*?Próximo objetivo/);
+  assert.match(app,/function nextProgramRoutineHtml\(session\)[\s\S]*?Siguiente del programa/);
+  assert.match(app,/recentSessionDetailsHtml\(latest\) \+ nextProgramRoutineHtml\(latest\)/);
+  assert.match(app,/function programRoutineOrderConfigured\(program,routines\)[\s\S]*?program\.routineOrder\.indexOf\(id\)>=0/);
+  assert.match(app,/data-act="program-order-save"/);
+  assert.match(app,/data-act="program-routine-move"/);
+  assert.match(styles,/\.home-recent-details>summary\{[^}]*min-height:44px/);
+  assert.match(styles,/\.home-next-routine\{/);
+
+  const helper=app.match(/function orderedProgramRoutines\(program,routines\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={Array,Object};
+  vm.runInNewContext(helper[0]+';globalThis.orderProgramRoutines=orderedProgramRoutines;',context);
+  const routines=[
+    {id:'a',name:'Día A',programId:'p'},
+    {id:'b',name:'Día B',programId:'p'},
+    {id:'c',name:'Día C',programId:'p'},
+    {id:'other',name:'Otra rutina',programId:'other'}
+  ];
+  const program={id:'p',routineOrder:['b','c','a']};
+  assert.deepEqual(Array.from(context.orderProgramRoutines(program,routines),routine=>routine.id),['b','c','a']);
+  assert.deepEqual(routines.map(routine=>routine.id),['a','b','c','other']);
+});
+
 test('el entrenamiento muestra un resumen y abre la calculadora contextual en una hoja inferior', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
