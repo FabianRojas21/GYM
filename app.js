@@ -239,8 +239,40 @@ function normalizeDraft(value){
     : [];
   return draft;
 }
+function safeJsonParseLocal(raw){
+  if(typeof raw !== 'string') return null;
+  if(typeof SobrecargaBackup !== 'undefined' && SobrecargaBackup && typeof SobrecargaBackup.safeJsonParse === 'function') return SobrecargaBackup.safeJsonParse(raw);
+  try {
+    var parsed = JSON.parse(raw);
+    if(parsed !== null && typeof parsed === 'object'){
+      var unsafe = Object.keys(parsed).some(function(key){ return key === '__proto__' || key === 'constructor' || key === 'prototype'; });
+      if(unsafe) return null;
+      var stack = [parsed];
+      var seen = [];
+      while(stack.length){
+        var current = stack.pop();
+        if(current === null || typeof current !== 'object') continue;
+        if(seen.indexOf(current) >= 0) continue;
+        seen.push(current);
+        var proto = Object.getPrototypeOf(current);
+        if(proto !== Object.prototype && proto !== Array.prototype && proto !== null) return null;
+        Object.keys(current).forEach(function(key){
+          if(key === '__proto__' || key === 'constructor' || key === 'prototype') { unsafe = true; }
+          if(current[key] && typeof current[key] === 'object') stack.push(current[key]);
+        });
+        if(unsafe) break;
+      }
+      if(unsafe) return null;
+    }
+    return parsed;
+  } catch(e){ return null; }
+}
 function loadDraft(){
-  try { var d = JSON.parse(localStorage.getItem(DK)); if(d && Array.isArray(d.entries)) return normalizeDraft(d); } catch(e){}
+  try {
+    var raw = localStorage.getItem(DK);
+    var d = safeJsonParseLocal(raw);
+    if(d && Array.isArray(d.entries)) return normalizeDraft(d);
+  } catch(e){}
   return blankDraft();
 }
 function loadRestEnd(){
@@ -448,7 +480,7 @@ var Store = {
   },
   readLocalDataSnapshot:function(){
     try {
-      var data=JSON.parse(localStorage.getItem(LK));
+      var data=safeJsonParseLocal(localStorage.getItem(LK));
       return data;
     } catch(error){
       console.warn('No se pudieron leer los datos locales',error);
@@ -4549,7 +4581,14 @@ function onChange(ev){
   }
   if(t.id === 'routine-file'){
     var routineFile=t.files&&t.files[0]; if(!routineFile)return;
-    var routineReader=new FileReader(); routineReader.onload=function(){ try{ importRoutine(JSON.parse(String(routineReader.result))); }catch(e){toast('El archivo no contiene una rutina válida de Sobrecarga');} t.value=''; }; routineReader.readAsText(routineFile); return;
+    var routineReader=new FileReader(); routineReader.onload=function(){
+      try {
+        var parsed=safeJsonParseLocal(String(routineReader.result));
+        if(!parsed) throw new Error('invalid routine');
+        importRoutine(parsed);
+      } catch(e){toast('El archivo no contiene una rutina válida de Sobrecarga');}
+      t.value='';
+    }; routineReader.readAsText(routineFile); return;
   }
   if(t.id === 'csv-file'){
     var csvFile = t.files && t.files[0];
@@ -4576,8 +4615,8 @@ function onChange(ev){
     var reader = new FileReader();
     reader.onload = function(){
       try {
-        var parsed = JSON.parse(String(reader.result));
-        var data = SobrecargaBackup.migrateBackup(parsed);
+        var parsed = safeJsonParseLocal(String(reader.result));
+        var data = parsed ? SobrecargaBackup.migrateBackup(parsed) : null;
         if(!data || !validBackup(data)) throw new Error('invalid backup');
         S.pendingImport = data; render();
         toast('Respaldo listo para restaurar');
@@ -4826,8 +4865,30 @@ function createAutoBackup(){
 }
 function readStoredBackup(key){
   try {
-    var value=JSON.parse(localStorage.getItem(key));
-    return value && typeof value==='object' ? value : null;
+    var raw = localStorage.getItem(key);
+    if(typeof raw !== 'string') return null;
+    var value = (typeof SobrecargaBackup !== 'undefined' && SobrecargaBackup && typeof SobrecargaBackup.safeJsonParse === 'function') ? SobrecargaBackup.safeJsonParse(raw) : null;
+    if(value === null){
+      try { value = JSON.parse(raw); } catch(error){ return null; }
+    }
+    if(value !== null && typeof value === 'object'){
+      var stack = [value];
+      var seen = [];
+      while(stack.length){
+        var current = stack.pop();
+        if(current === null || typeof current !== 'object') continue;
+        if(seen.indexOf(current) >= 0) continue;
+        seen.push(current);
+        var proto = Object.getPrototypeOf(current);
+        if(proto !== Object.prototype && proto !== Array.prototype && proto !== null) return null;
+        Object.keys(current).forEach(function(key){
+          if(key === '__proto__' || key === 'constructor' || key === 'prototype') { value = null; return; }
+          if(current[key] && typeof current[key] === 'object') stack.push(current[key]);
+        });
+        if(value === null) break;
+      }
+    }
+    return value && typeof value === 'object' ? value : null;
   } catch(error){ console.warn('No se pudo leer la información del respaldo',error); return null; }
 }
 function hasAutoBackup(){

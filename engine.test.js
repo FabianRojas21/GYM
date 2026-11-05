@@ -14,6 +14,13 @@ const rirSettings = {mode:'rir', targetRir:2};
 const baseExercise = {sets:3, min:8, max:10, inc:2, efforts:[2,2,2]};
 const set = (reps, rir=2, weight=60, type='normal') => ({w:weight, r:reps, rir, type});
 
+test('rechaza JSON con claves peligrosas y protege la lectura del respaldo', () => {
+  assert.ok(parseBackup('{"ok":true,"nested":{"answer":42}}'));
+  assert.equal(parseBackup('{"__proto__":{"polluted":true}}'), null);
+  assert.equal(parseBackup('{"constructor":{"prototype":{"polluted":true}}}'), null);
+  assert.equal(require('./backup.js').safeJsonParse('{"__proto__":{"polluted":true}}'), null);
+});
+
 test('calcula discos por lado para barra y carga independiente por brazo', () => {
   const bar=calculatePlateLoad({type:'bar',baseWeight:20,plates:[20,10,5,2.5]},60);
   assert.equal(bar.exact,true);

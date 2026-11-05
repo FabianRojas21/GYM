@@ -77,9 +77,31 @@
       };
     }).sort(function(a,b){ return JSON.stringify(a).localeCompare(JSON.stringify(b)); }));
   }
+  function hasUnsafeKeys(value, seen){
+    if(value===null || typeof value!=='object') return false;
+    if(!seen) seen=new WeakSet();
+    if(seen.has(value)) return false;
+    seen.add(value);
+    var prototype=Object.getPrototypeOf(value);
+    if(prototype!==Object.prototype && prototype!==Array.prototype && prototype!==null) return true;
+    return Object.keys(value).some(function(key){
+      if(key==='__proto__' || key==='constructor' || key==='prototype') return true;
+      return hasUnsafeKeys(value[key], seen);
+    });
+  }
+  function safeJsonParse(text){
+    if(typeof text!=='string') return null;
+    try {
+      var parsed=JSON.parse(text);
+      if(hasUnsafeKeys(parsed)) return null;
+      return parsed;
+    } catch(e){ return null; }
+  }
   function parseBackup(text){
-    try { return migrateBackup(JSON.parse(String(text))); }
+    var parsed=safeJsonParse(String(text));
+    if(parsed===null) return null;
+    try { return migrateBackup(parsed); }
     catch(e){ return null; }
   }
-  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, stampSession:stampSession, hasSessionConflict:hasSessionConflict, csvSetType:csvSetType, csvSessionSignature:csvSessionSignature, parseNumber:parseNumber};
+  return {migrateBackup:migrateBackup, serializeBackup:serializeBackup, parseBackup:parseBackup, safeJsonParse:safeJsonParse, stampSession:stampSession, hasSessionConflict:hasSessionConflict, csvSetType:csvSetType, csvSessionSignature:csvSessionSignature, parseNumber:parseNumber};
 });
