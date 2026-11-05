@@ -249,9 +249,9 @@
   }
   function sessionGoalProfile(settings){
     var goal = settings && settings.trainingGoal ? settings.trainingGoal : 'hypertrophy';
-    if(goal === 'strength') return {label:'Fuerza', helper:'prioriza intensidad y baja un poco el esfuerzo objetivo'};
-    if(goal === 'volume') return {label:'Volumen', helper:'prioriza más repeticiones antes de aumentar la carga'};
-    return {label:'Hipertrofia', helper:'mantiene un equilibrio entre intensidad y volumen'};
+    if(goal === 'strength') return {label:'Fuerza', helper:'prioriza intensidad y baja un poco el esfuerzo objetivo', effortTolerance:0, easyThreshold:1, repStep:1};
+    if(goal === 'volume') return {label:'Volumen', helper:'prioriza más repeticiones antes de aumentar la carga', effortTolerance:-2, easyThreshold:2, repStep:2};
+    return {label:'Hipertrofia', helper:'mantiene un equilibrio entre intensidad y volumen', effortTolerance:-1, easyThreshold:2, repStep:1};
   }
   function roundTo(value, step){ return Math.round(value / step) * step; }
   function availableWeight(value, step, direction){
@@ -276,9 +276,10 @@
     var avgDiff = diffs.length ? mean(diffs) : null;
     var n = at.length, need = ex.sets, increment = ex.inc;
     var avgReps = mean(reps);
+    var goalProfile = sessionGoalProfile(settings);
     var allTop = n >= need && reps.every(function(value){ return value >= ex.max; });
-    var okEffort = avgDiff === null || avgDiff >= -1;
-    var easy = avgDiff !== null && avgDiff >= 2 && n >= need && reps.every(function(value){ return value >= ex.min; });
+    var okEffort = avgDiff === null || avgDiff >= goalProfile.effortTolerance;
+    var easy = avgDiff !== null && avgDiff >= goalProfile.easyThreshold && n >= need && reps.every(function(value){ return value >= ex.min; });
     var span = Math.max(1, ex.max - ex.min), progress = 0;
     for(var i = 0; i < need; i++){
       progress += Math.min(1, Math.max(0, ((reps[i] !== undefined ? reps[i] : ex.min) - ex.min) / span));
@@ -289,7 +290,6 @@
       if(reps[j] !== undefined) repsFalt += Math.max(0, ex.max - reps[j]);
     }
     var serFalt = Math.max(0, need - n);
-    var goalProfile = sessionGoalProfile(settings);
     var result = {W:weight, nextW:weight, progressTarget:availableWeight(weight + increment, ex.loadStep || increment, 'up'), reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[], goal:goalProfile.label};
     var fill = function(value){ return Array.apply(null, Array(need)).map(function(){ return value; }); };
 
@@ -334,9 +334,10 @@
     } else {
       result.status = 'reps';
       var last = reps[reps.length - 1];
+      var repStep = goalProfile.repStep || 1;
       for(var k = 0; k < need; k++){
         var current = reps[k] !== undefined ? reps[k] : last;
-        result.target.push(okEffort ? Math.min(ex.max, current + 1) : current);
+        result.target.push(okEffort ? Math.min(ex.max, current + repStep) : current);
       }
       result.headline = weightText(weight,settings) + ', suma reps';
       result.detail = 'Objetivo: ' + result.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + weightText(result.progressTarget,settings) + '.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '), así que mantén las reps.');

@@ -1363,6 +1363,26 @@ function previousExerciseEntry(exId, scope, routineId){
   entries.forEach(function(entry){ sets=sets.concat(entry.sets || []); });
   return {session:session, entry:entries[0], sets:sets};
 }
+function quickFillPreviousWeight(entry, ex){
+  var previous=previousExerciseEntry(entry.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
+  if(!previous || !!previous.entry.unilateral !== !!ex.unilateral) return false;
+  var source=previous.sets.filter(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
+  if(!source.length) return false;
+  var changed=false, workIndex=0;
+  entry.rows.forEach(function(row){
+    if(setType(row)!=='normal') return;
+    var candidate = source[workIndex] || source[source.length-1];
+    if(!candidate) return;
+    if(ex.unilateral){
+      ['right','left'].forEach(function(side){
+        if(!row[side]) row[side]={w:'',r:'',rir:''};
+        if(String(row[side].w || '').trim() === ''){ row[side].w = String(candidate[side].w); changed = true; }
+      });
+    } else if(String(row.w || '').trim() === ''){ row.w = String(candidate.w); changed = true; }
+    workIndex++;
+  });
+  return changed;
+}
 function applyPreviousValues(exId, rows, unilateral, routineId){
   var previous=previousExerciseEntry(exId,S.profile.settings.previousExerciseScope,routineId);
   if(!previous || !!previous.entry.unilateral!==!!unilateral) return;
@@ -1683,6 +1703,9 @@ function entryHtml(en, ei){
   var targetSets = Math.max(1, Number(ex.sets) || 1);
   var completedSets = completedWorkSets(en, ex);
   var collapsed = S.collapsedEntries.has(en.uiId);
+  var previousForFill = previousExerciseEntry(en.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
+  var quickFillAvailable = !!previousForFill && previousForFill.sets.some(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
+  var quickFillHtml = quickFillAvailable ? '<div class="quick-fill-bar"><button class="btn ghost sm" data-act="fill-previous-load" data-ei="' + ei + '">Usar último peso</button></div>' : '';
   var baseExId=en.baseExId||en.exId, alternatives=exerciseSubstitutions(baseExId);
   var substitutionHtml=alternatives.length
     ? (function(){
@@ -1700,6 +1723,9 @@ function entryHtml(en, ei){
       (formatChanged?'La alternativa cambia de '+(ex.unilateral?'unilateral':'bilateral')+' a '+(pendingTarget.unilateral?'unilateral':'bilateral')+'. ':'')+
       'Al cambiar se limpiarán los valores cargados o anotados y el temporizador de este bloque. La rutina original se conservará. ¿Continuar?</p><div class="row"><button class="btn danger sm" data-act="substitution-confirm">Cambiar y limpiar series</button><button class="btn ghost sm" data-act="substitution-cancel">Cancelar</button></div></div>';
   }
+  var previousForFill = previousExerciseEntry(en.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
+  var quickFillAvailable = !!previousForFill && previousForFill.sets.some(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
+  var quickFillHtml = quickFillAvailable ? '<div class="quick-fill-bar"><button class="btn ghost sm" data-act="fill-previous-load" data-ei="' + ei + '">Usar último peso</button></div>' : '';
   var workIndex = 0;
   var rows = en.rows.map(function(r, ri){
     ensureRowMode(r, ex.unilateral);
@@ -1739,6 +1765,7 @@ function entryHtml(en, ei){
       '<button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="1"' + (ei === S.draft.entries.length - 1 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' abajo" title="Mover abajo">↓</button></div>'
     : '';
   return '<section class="card workout-card' + (collapsed ? ' is-collapsed' : '') + (S.simpleWorkoutMode?' workout-card-simple':'') + '" data-ei="' + ei + '">' +
+    quickFillHtml +
     '<div class="card-head workout-card-head"><h3 class="workout-card-heading"><button class="workout-card-toggle" data-act="toggle-entry" data-ei="' + ei + '" aria-expanded="' + (!collapsed) + '">' +
     '<span class="workout-card-title"><span class="workout-card-name">' + esc(ex.name) + '</span><span class="workout-progress">' + completedSets + '/' + targetSets + ' series</span></span>' +
     '<span class="workout-card-chevron" aria-hidden="true">' + (collapsed ? '▸' : '▾') + '</span></button></h3>' +
@@ -3962,6 +3989,12 @@ function onClick(ev){
       var rows = S.draft.entries[ei].rows, lr = rows[rows.length-1];
       var entryEx = effEx(S.draft.entries[ei]);
       rows.push(nextRow(lr, entryEx.unilateral)); saveDraft(); render(); break;
+    case 'fill-previous-load':
+      var fillEntry = S.draft.entries[ei], fillExercise = fillEntry && effEx(fillEntry);
+      if(!fillEntry || !fillExercise) break;
+      if(quickFillPreviousWeight(fillEntry, fillExercise)){ saveDraft(); render(); toast('Se reutilizó el último peso disponible'); }
+      else toast('No hay un peso anterior para reutilizar');
+      break;
     case 'finish-set':
       var finishEntry = S.draft.entries[ei], finishExercise = finishEntry && effEx(finishEntry);
       var finishRow = finishEntry && finishEntry.rows[ri];
