@@ -2490,6 +2490,17 @@ function homeDashboard(){
     '<p class="home-message">' + (week.length
       ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Media por sesión: ' + volumeText(avgVolumePerSession) + ' ' + weightUnitLabel() + '·reps.'
       : 'Cada progreso empieza con una sesión. Hoy puedes dar ese primer paso.') + '</p>' +
+    '<div class="home-focus-card">' +
+      '<div class="home-focus-copy">' +
+        '<span class="home-eyebrow">Qué te está diciendo la app</span>' +
+        '<strong>' + (week.length ? 'Tu próximo paso es claro' : 'Empieza con la primera sesión') + '</strong>' +
+        '<small>' + (week.length ? 'La recomendación cambia según tu esfuerzo, el rango de reps y el objetivo del mes.' : 'Registra una serie y la app te dirá si hoy conviene subir peso o sumar reps.') + '</small>' +
+      '</div>' +
+      '<div class="home-focus-actions">' +
+        '<span class="home-mini-chip ' + esc(trend.status) + '">' + esc(trend.label) + '</span>' +
+        '<span class="home-mini-chip neutral">' + esc(trainingGoalLabel(S.profile.settings.trainingGoal)) + '</span>' +
+      '</div>' +
+    '</div>' +
     weeklyTrendSummaryHtml(stats, previousStats) +
     '<div class="weekly-stats"><div class="weekly-stat"><strong>' + week.length + '</strong><span>entrenamientos</span></div>' +
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +

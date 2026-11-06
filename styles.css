@@ -126,7 +126,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .icon:hover{color:var(--ink)}
 
 /* cards */
-.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:0 8px 28px rgba(15,23,42,.04)}
 .card h3{font:700 24px/1.1 var(--font-display);letter-spacing:.03em;text-transform:uppercase;text-wrap:balance}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .workout-card-head{align-items:center;padding-bottom:4px}
@@ -235,7 +235,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .workout-finish .row{padding-top:8px}
 .rest-timer{position:sticky;top:66px;z-index:3;box-shadow:0 6px 16px rgba(0,0,0,.08)}
 .goal-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.goal-state-line{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid rgba(145,174,255,.2);border-radius:10px;background:linear-gradient(180deg,rgba(72,106,222,.12),rgba(255,255,255,.02));}
+.goal-state-line{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid rgba(145,174,255,.2);border-radius:10px;background:linear-gradient(180deg,rgba(72,106,222,.12),rgba(255,255,255,.02));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
 .goal-state-copy{display:flex;align-items:center;gap:8px;min-width:0}
 .goal-state-copy span{color:var(--muted);font:600 11px/1 var(--font-display);letter-spacing:.08em;text-transform:uppercase}
 .goal-state-line strong{font:700 16px/1.2 var(--font-display);letter-spacing:.02em;overflow-wrap:anywhere}
@@ -339,7 +339,8 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .hero p{max-width:52ch}
 .home-dashboard{
   display:flex;flex-direction:column;gap:18px;padding:18px;
-  background:linear-gradient(180deg,#181b22 0%,#101318 100%);color:#F1F2F4;border:1px solid rgba(148,162,194,.14);border-radius:16px;
+  background:linear-gradient(180deg,rgba(78,103,234,.2) 0%,rgba(18,22,32,.96) 56%,rgba(10,12,17,1) 100%);
+  color:#F1F2F4;border:1px solid rgba(148,162,194,.14);border-radius:16px;
   box-shadow:0 12px 32px rgba(0,0,0,.18);
 }
 .home-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
@@ -352,7 +353,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .home-heading h2{margin-top:5px;font:700 30px/1 var(--font-display);letter-spacing:.02em;text-transform:uppercase}
 .home-week,.latest-date{color:#858A93;font-size:13px;text-align:right}
 .weekly-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.weekly-stat{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 10px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.015));border:1px solid rgba(176,184,199,.09)}
+.weekly-stat{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 10px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid rgba(176,184,199,.1)}
 .weekly-stat strong{font:700 clamp(18px,5vw,26px)/1.1 var(--font-display);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .weekly-stat span{color:#969BA3;font-size:12px}
 .weekly-muscles{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:8px;background:#101114;border:1px solid #25272C}
@@ -484,7 +485,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .backup-status{display:grid;gap:5px;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:13px}
 .backup-status p{margin:0}
 .backup-status .small{font-size:12px}
-@media (max-width:520px){.workout-reminder{align-items:stretch;flex-direction:column}.workout-reminder .row{width:100%}.backup-status{font-size:12px}}
+@media (max-width:520px){.workout-reminder{align-items:stretch;flex-direction:column}.workout-reminder .row{width:100%}.backup-status{font-size:12px}.home-focus-card{flex-direction:column;align-items:flex-start}.home-focus-actions{width:100%;justify-content:flex-start}} 
 @media (max-width:520px){.workout-heading{align-items:flex-start;flex-direction:column}.workout-heading-actions{width:100%;justify-content:space-between}.workout-heading-actions .workout-meta{flex:1;justify-content:flex-end}}
 .home-first{border-radius:10px}
 .home-first>div:first-child{display:flex;flex-direction:column;gap:7px}
@@ -737,6 +738,16 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 }
 .home-heading h2{font-size:clamp(29px,6vw,36px);line-height:.98}
 .home-message{max-width:48ch;color:#C2C9D6;font-size:14px;line-height:1.45}
+.home-focus-card{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;border:1px solid rgba(135,158,255,.2);border-radius:14px;background:linear-gradient(135deg,rgba(98,122,255,.12),rgba(255,255,255,.03));box-shadow:0 10px 22px rgba(16,21,30,.08)}
+.home-focus-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.home-focus-copy strong{font:700 18px/1.1 var(--font-display);letter-spacing:.03em;text-transform:uppercase;overflow-wrap:anywhere}
+.home-focus-copy small{color:#A4AAB3;font-size:12px;line-height:1.45;max-width:42ch}
+.home-focus-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.home-mini-chip{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:4px 8px;border-radius:999px;border:1px solid transparent;font:700 11px/1 var(--font-display);letter-spacing:.08em;text-transform:uppercase}
+.home-mini-chip.mejor{background:rgba(77,175,93,.16);color:#9fe7aa;border-color:rgba(77,175,93,.4)}
+.home-mini-chip.igual{background:rgba(255,180,67,.12);color:#f7d78c;border-color:rgba(255,180,67,.4)}
+.home-mini-chip.peor{background:rgba(214,77,77,.12);color:#f5a9a9;border-color:rgba(214,77,77,.4)}
+.home-mini-chip.neutral{background:rgba(147,164,191,.08);color:#dce3ee;border-color:rgba(147,164,191,.22)}
 .weekly-stats{gap:10px}
 .weekly-stat{
   position:relative;overflow:hidden;min-height:88px;padding:13px 12px;
