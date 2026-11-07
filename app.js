@@ -203,6 +203,8 @@ function normalizeExerciseAlias(value){
   return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 }
 function inferPrimaryMuscle(name){
+  var catalogMatch=catalogExerciseMatch(name);
+  if(catalogMatch) return catalogMatch.primaryMuscle;
   var normalized = normalizeExerciseAlias(name), padded = ' ' + normalized + ' ';
   var has = function(words){ return words.some(function(word){ return padded.indexOf(' ' + normalizeExerciseAlias(word) + ' ') !== -1; }); };
   if(has(['antebrazo','antebrazos','forearm','forearms','muneca','wrist curl','reverse wrist curl'])) return 'forearms';
@@ -223,7 +225,7 @@ function inferPrimaryMuscle(name){
   if(has(['sentadilla','squat','prensa de piernas','press de piernas','press piernas','leg press','zancada','zancadas','lunge','lunges','extension de cuadriceps','extensiones de cuadriceps','leg extension'])) return 'quads';
   if(has(['press inclinado','incline press'])) return 'chestUpper';
   if(has(['press declinado','decline press'])) return 'chestLower';
-  if(has(['press banca','press de banca','bench press','press plano','press de pecho','chest press','flexion','flexiones','push up','pushup','fondos','apertura','aperturas','fly'])) return 'chestMid';
+  if(has(['press banca','press de banca','bench press','press plano','press de pecho','chest press','flexion de brazos','flexiones de brazos','flexiones','push up','pushup','fondos','apertura','aperturas','fly'])) return 'chestMid';
   return null;
 }
 function catalogExerciseMatch(name){

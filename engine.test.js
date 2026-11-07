@@ -113,8 +113,18 @@ test('el catálogo reconoce alias sin coincidencias parciales y solo completa ej
   assert.equal(context.inferMuscleForTest('Elevaciones posteriores'),'shoulderPosterior');
   assert.equal(context.inferMuscleForTest('Flexiones'),'chestMid');
   assert.equal(context.inferMuscleForTest('Elevación de piernas colgado'),'rectusAbdominis');
+  assert.equal(context.inferMuscleForTest('Flexión de cadera'),null);
+  assert.equal(context.inferMuscleForTest('Flexión de cuello'),'neck');
+  assert.equal(context.inferMuscleForTest('Flexión de brazos'),'chestMid');
   assert.equal(context.inferMuscleForTest('Press con mancuernas'),null);
   assert.equal(context.inferMuscleForTest('Press'),null);
+  for(const exercise of catalog.EXERCISE_CATALOG){
+    assert.equal(
+      context.inferMuscleForTest(exercise.name),
+      exercise.primaryMuscle,
+      `${exercise.name} debe inferir el músculo principal del catálogo`
+    );
+  }
   const legExtension=context.catalogDefaultsForTest('leg extension');
   assert.equal(legExtension.muscle,'quads');
   assert.equal(legExtension.equipment,'machine');
