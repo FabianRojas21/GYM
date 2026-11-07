@@ -197,7 +197,11 @@ búsqueda: la última vez que hiciste el ejercicio en cualquier rutina
 Al añadir el ejercicio, sus series normales precargan peso, repeticiones y
 esfuerzo de esa sesión; los valores siguen siendo editables y se muestra la
 fecha de referencia. El cambio de preferencia no sobrescribe las series que ya
-están en curso.
+están en curso. En la tarjeta de Hoy también aparece un resumen de lo que
+hiciste en la última sesión y del objetivo actual. Si ajustas el peso de la
+primera serie, puedes copiarlo a las series posteriores cuyo peso no hayas
+editado; las reps y el esfuerzo no cambian. En ejercicios unilaterales la copia
+respeta cada lado por separado.
 
 En **Biblioteca → Ejercicios**, configura para cada movimiento el **Equipo** y
 el **Grupo muscular principal**, y marca sus **Ejercicios alternativos**.

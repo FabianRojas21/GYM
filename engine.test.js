@@ -1189,7 +1189,7 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
 
 test('las recomendaciones muestran el motivo y el resultado solo al desplegar el detalle', () => {
   const app=fs.readFileSync('./app.js','utf8');
-  const goal=app.match(/function goalHtml\(ex\)\{[\s\S]*?\n\}/);
+  const goal=app.match(/function goalHtml\(ex(?:, planned)?\)\{[\s\S]*?\n\}/);
   const live=app.match(/function liveHtml\(ei\)\{[\s\S]*?\n\}/);
   assert.ok(goal&&live);
   assert.match(goal[0],/<details class="goal-more"><summary>Ver motivo<\/summary>/);
@@ -1456,6 +1456,53 @@ test('precarga los valores de la última sesión y respeta el alcance de rutina 
   assert.deepEqual(noRoutineRows[0],{type:'normal',w:'',r:'',rir:''});
 });
 
+test('copia solo pesos no editados y respeta cada lado en ejercicios unilaterales', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const names=['weightCanBeFilled','copyFirstWeightToUntouched'];
+  const helpers=names.map(name=>{
+    const match=source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`));
+    assert.ok(match,`missing ${name}`);
+    return match[0];
+  }).join('\n');
+  const context={
+    setType:row=>row.type||'normal',
+    validWeight:value=>Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=1000,
+    ensureRowMode:row=>row
+  };
+  vm.runInNewContext(helpers+';globalThis.copyWeightsForTest=copyFirstWeightToUntouched;',context);
+  const entry={rows:[
+    {type:'normal',w:'60',weightTouched:true,r:'8'},
+    {type:'normal',w:'70',weightTouched:false,r:'12',rir:'1'},
+    {type:'normal',w:'75',weightTouched:true,r:'9'},
+    {type:'normal',w:'',weightTouched:true,r:'10'},
+    {type:'normal',w:'',r:'8'},
+    {type:'warmup',w:'20',weightTouched:false}
+  ]};
+  const copied=context.copyWeightsForTest(entry,false);
+  assert.equal(copied.sourceAvailable,true);
+  assert.equal(copied.copied,2);
+  assert.equal(entry.rows[1].w,'60');
+  assert.equal(entry.rows[1].r,'12');
+  assert.equal(entry.rows[1].rir,'1');
+  assert.equal(entry.rows[2].w,'75');
+  assert.equal(entry.rows[3].w,'');
+  assert.equal(entry.rows[4].w,'60');
+  assert.equal(entry.rows[5].w,'20');
+  const unilateral={rows:[
+    {type:'normal',right:{w:'20',weightTouched:false},left:{w:'18',weightTouched:false}},
+    {type:'normal',right:{w:'22',weightTouched:true},left:{w:'',weightTouched:false}},
+    {type:'normal',right:{w:'',weightTouched:false},left:{w:'16',weightTouched:false}}
+  ]};
+  const copiedSides=context.copyWeightsForTest(unilateral,true);
+  assert.equal(copiedSides.copied,3);
+  assert.equal(unilateral.rows[1].right.w,'22');
+  assert.equal(unilateral.rows[1].left.w,'18');
+  assert.equal(unilateral.rows[2].right.w,'20');
+  assert.equal(unilateral.rows[2].left.w,'18');
+  assert.match(source,/target\.weightTouched=true/);
+  assert.match(source,/data-act="copy-first-weight"/);
+});
+
 test('alternativas, modo simple y borrado reversible están conectados al entrenamiento', () => {
   const source=fs.readFileSync('./app.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
@@ -1545,6 +1592,29 @@ test('la comparación muestra el progreso de reps y el cambio de esfuerzo', () =
   assert.match(reference,/RIR 2/);
   context.S.profile.settings.mode='rpe';
   assert.match(context.previousReferenceHtmlForTest('press',0,false),/RPE 8/);
+});
+
+test('el resumen del entreno anterior coincide con el objetivo actual y omite ejercicios nuevos', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function previousWorkoutSummaryHtml\([\s\S]*?\n\}/);
+  assert.ok(helper,'missing previousWorkoutSummaryHtml');
+  const context={
+    dFmt:value=>value,
+    esc:value=>String(value),
+    setsText:sets=>sets.map(set=>`${set.w} × ${set.r}`).join(' | '),
+    weightText:value=>`${value} kg`
+  };
+  vm.runInNewContext(helper[0]+';globalThis.previousSummaryForTest=previousWorkoutSummaryHtml;',context);
+  const summary=context.previousSummaryForTest({
+    status:'reps',
+    last:{date:'2026-10-30',sets:[{w:60,r:8},{w:60,r:9}]},
+    displayTarget:'60 kg × 10 · 10 · 10'
+  });
+  assert.match(summary,/Último entreno · 2026-10-30/);
+  assert.match(summary,/60 × 8 \| 60 × 9/);
+  assert.match(summary,/Hoy busca:<\/strong> 60 kg × 10 · 10 · 10/);
+  assert.equal(context.previousSummaryForTest({status:'nuevo'}),'');
+  assert.match(source,/previousWorkoutSummaryHtml\(p\) \+ goalHtml\(ex,p\)/);
 });
 
 test('los filtros de sustitución acotan por equipo y grupo, y el cambio unilateral pide confirmación', () => {

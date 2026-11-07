@@ -1503,13 +1503,16 @@ function ensureRowMode(row, unilateral){
     if(row.savedSides){
       row.right = row.savedSides.right; row.left = row.savedSides.left; delete row.savedSides;
     } else if(!row.right || !row.left){
-      var side = function(){ return {w:row.w || '', r:row.r || '', rir:row.rir || ''}; };
+      var side = function(){ return {w:row.w || '', r:row.r || '', rir:row.rir || '', weightTouched:row.weightTouched}; };
       row.right = side(); row.left = side();
     }
     row.type = type; delete row.w; delete row.r; delete row.rir; delete row.warm;
   } else if(row.right || row.left){
     var right = row.right || {}, left = row.left || {};
     row.w = right.w || left.w || ''; row.r = right.r || left.r || ''; row.rir = right.rir || left.rir || '';
+    if(right.weightTouched === true || left.weightTouched === true) row.weightTouched = true;
+    else if(right.weightTouched === false && left.weightTouched === false) row.weightTouched = false;
+    else delete row.weightTouched;
     row.savedSides = {right:clone(right), left:clone(left)};
     delete row.right; delete row.left;
   }
@@ -1538,8 +1541,8 @@ function newRow(w, unilateral){
   var value = w ? String(w).replace('.', ',') : '';
   var row = {type:'normal'};
   if(unilateral){
-    row.right = {w:value, r:'', rir:''}; row.left = {w:value, r:'', rir:''};
-  } else { row.w=value; row.r=''; row.rir=''; }
+    row.right = {w:value, r:'', rir:'', weightTouched:false}; row.left = {w:value, r:'', rir:'', weightTouched:false};
+  } else { row.w=value; row.r=''; row.rir=''; row.weightTouched=false; }
   return row;
 }
 function plannedRow(plan, unilateral, fallback){
@@ -1620,9 +1623,9 @@ function quickFillPreviousWeight(entry, ex){
     if(ex.unilateral){
       ['right','left'].forEach(function(side){
         if(!row[side]) row[side]={w:'',r:'',rir:''};
-        if(String(row[side].w || '').trim() === ''){ row[side].w = String(candidate[side].w); changed = true; }
+        if(weightCanBeFilled(row[side])){ row[side].w = String(candidate[side].w); changed = true; }
       });
-    } else if(String(row.w || '').trim() === ''){ row.w = String(candidate.w); changed = true; }
+    } else if(weightCanBeFilled(row)){ row.w = String(candidate.w); changed = true; }
     workIndex++;
   });
   return changed;
@@ -1659,6 +1662,30 @@ function applyPreviousValues(exId, rows, unilateral, routineId){
       row.rir=past.rir===null||past.rir===undefined?'':String(past.rir);
     }
   });
+}
+function weightCanBeFilled(target){
+  if(target.weightTouched === true) return false;
+  return target.weightTouched === false || String(target.w === undefined || target.w === null ? '' : target.w).trim() === '';
+}
+function copyFirstWeightToUntouched(entry, unilateral){
+  var workRows=entry.rows.filter(function(row){return setType(row)==='normal';});
+  var source=workRows[0], sides=unilateral?['right','left']:['weight'];
+  var sourceAvailable=sides.some(function(side){
+    var values=side==='weight'?source:source&&source[side];
+    return values&&validWeight(values.w);
+  });
+  if(!sourceAvailable) return {sourceAvailable:false,copied:0};
+  var copied=0;
+  workRows.slice(1).forEach(function(row){
+    if(unilateral) ensureRowMode(row,true);
+    sides.forEach(function(side){
+      var target=side==='weight'?row:row[side], sourceValues=side==='weight'?source:source[side];
+      if(!target||!sourceValues||!validWeight(sourceValues.w)||!weightCanBeFilled(target)) return;
+      target.w=String(sourceValues.w);
+      copied++;
+    });
+  });
+  return {sourceAvailable:true,copied:copied};
 }
 function refreshAutoWarmupInputs(ei, en, ex){
   syncAutoWarmupWeights(en, ex);
@@ -1892,8 +1919,8 @@ function workingDone(){
   });
   return c;
 }
-function goalHtml(ex){
-  var p = planFor(ex);
+function goalHtml(ex, planned){
+  var p = planned || planFor(ex);
   var plan = '<p class="muted small">' + ex.sets + (ex.unilateral ? ' rondas · cada lado: ' : ' series × ') + ex.min + '–' + ex.max + ' reps · esfuerzo por serie: ' + esc(tgtText(ex, S.profile.settings)) + ' · salto ' + weightText(ex.inc) + '</p>';
   if(p.status === 'nuevo'){
     return '<div class="goal"><div class="goal-row">' + chip('nuevo') + '<strong>Primera vez</strong></div>' +
@@ -1902,6 +1929,15 @@ function goalHtml(ex){
   return '<div class="goal"><div class="goal-row">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</span></div>' +
     barHtml(p, ex) +
     '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Último entreno, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div>';
+}
+function previousWorkoutSummaryHtml(plan){
+  if(!plan || plan.status==='nuevo' || !plan.last) return '';
+  var target=plan.displayTarget || (Number.isFinite(plan.nextW) && plan.target
+    ? weightText(plan.nextW)+' × '+plan.target.join(' · ')
+    : '');
+  if(!target) return '';
+  return '<div class="previous-workout-summary"><p><strong>Último entreno · '+esc(dFmt(plan.last.date))+':</strong> '+esc(setsText(plan.last.sets))+'</p>' +
+    '<p><strong>Hoy busca:</strong> '+esc(target)+'</p></div>';
 }
 function completedWorkSets(en, ex){
   var target = Math.max(1, Number(ex.sets) || 1);
@@ -1959,9 +1995,6 @@ function entryHtml(en, ei){
   var targetSets = Math.max(1, Number(ex.sets) || 1);
   var completedSets = completedWorkSets(en, ex);
   var collapsed = S.collapsedEntries.has(en.uiId);
-  var previousForFill = previousExerciseEntry(en.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
-  var quickFillAvailable = !!previousForFill && previousForFill.sets.some(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
-  var quickFillHtml = quickFillAvailable ? '<div class="quick-fill-bar"><button class="btn ghost sm" data-act="fill-previous-load" data-ei="' + ei + '">Usar último peso</button></div>' : '';
   var baseExId=en.baseExId||en.exId, alternatives=exerciseSubstitutions(baseExId);
   var substitutionHtml=alternatives.length
     ? (function(){
@@ -1981,7 +2014,12 @@ function entryHtml(en, ei){
   }
   var previousForFill = previousExerciseEntry(en.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
   var quickFillAvailable = !!previousForFill && previousForFill.sets.some(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
-  var quickFillHtml = quickFillAvailable ? '<div class="quick-fill-bar"><button class="btn ghost sm" data-act="fill-previous-load" data-ei="' + ei + '">Usar último peso</button></div>' : '';
+  var copyWeightAvailable=en.rows.filter(function(row){return setType(row)==='normal';}).length>1;
+  var quickFillButtons=[];
+  if(quickFillAvailable) quickFillButtons.push('<button class="btn ghost sm" data-act="fill-previous-load" data-ei="' + ei + '">Usar último peso</button>');
+  if(copyWeightAvailable) quickFillButtons.push('<button class="btn ghost sm" data-act="copy-first-weight" data-ei="' + ei + '">' +
+    (ex.unilateral?'Copiar pesos por lado':'Copiar peso a series sin tocar')+'</button>');
+  var quickFillHtml=quickFillButtons.length?'<div class="quick-fill-bar">'+quickFillButtons.join('')+'</div>':'';
   var workIndex = 0;
   var rows = en.rows.map(function(r, ri){
     ensureRowMode(r, ex.unilateral);
@@ -2027,7 +2065,7 @@ function entryHtml(en, ei){
     '<span class="workout-card-chevron" aria-hidden="true">' + (collapsed ? '▸' : '▾') + '</span></button></h3>' +
     '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
     substitutionHtml +
-    (collapsed ? '' : '<div class="workout-card-body">' + goalHtml(ex) +
+    (collapsed ? '' : '<div class="workout-card-body">' + previousWorkoutSummaryHtml(p) + goalHtml(ex,p) +
     '<button class="workout-calculator-trigger" data-act="open-loading-calculator" data-ei="' + ei + '"><span aria-hidden="true">＋</span><span><strong>Calculadora de discos</strong><small>'+esc(calculatorHint)+'</small></span><span aria-hidden="true">›</span></button>' +
     '<div class="sets">' + rows + '</div>' +
     '<details class="workout-help"><summary>Ayuda con las series</summary><p class="hint">' + (ex.unilateral
@@ -4170,7 +4208,9 @@ function onClick(ev){
         var confirmedSides=ensureRowMode(confirmedRow,true);
         confirmedSides.right.w=String(confirmedPending.weightKg);
         confirmedSides.left.w=String(confirmedPending.weightKg);
-      }else confirmedRow.w=String(confirmedPending.weightKg);
+        confirmedSides.right.weightTouched=true;
+        confirmedSides.left.weightTouched=true;
+      }else{confirmedRow.w=String(confirmedPending.weightKg);confirmedRow.weightTouched=true;}
       confirmedCalc.targetKg=confirmedPending.weightKg;confirmedCalc.pendingApply=null;
       saveDraft();render();toast('Peso aplicado a la serie '+(confirmedPending.rowIndex+1));break;
     case 'cancel-loading-apply':
@@ -4342,6 +4382,14 @@ function onClick(ev){
       if(quickFillPreviousWeight(fillEntry, fillExercise)){ saveDraft(); render(); toast('Se reutilizó el último peso disponible'); }
       else toast('No hay un peso anterior para reutilizar');
       break;
+    case 'copy-first-weight':
+      var copyEntry=S.draft.entries[ei], copyExercise=copyEntry&&effEx(copyEntry);
+      if(!copyEntry||!copyExercise) break;
+      var copiedWeights=copyFirstWeightToUntouched(copyEntry,copyExercise.unilateral);
+      if(!copiedWeights.sourceAvailable) toast('Ingresa un peso válido en la primera serie');
+      else if(!copiedWeights.copied) toast('No hay pesos posteriores sin modificar');
+      else{saveDraft();render();toast('Peso copiado a '+copiedWeights.copied+' campo'+(copiedWeights.copied===1?'':'s')+' sin modificar');}
+      break;
     case 'finish-set':
       var finishEntry = S.draft.entries[ei], finishExercise = finishEntry && effEx(finishEntry);
       var finishRow = finishEntry && finishEntry.rows[ri];
@@ -4399,11 +4447,13 @@ function onClick(ev){
           copiedRow[side].w=previousRow[side].w;
           copiedRow[side].r=previousRow[side].r;
           copiedRow[side].rir=previousRow[side].rir;
+          copiedRow[side].weightTouched=true;
         });
       }else{
         copiedRow.w=previousRow.w;
         copiedRow.r=previousRow.r;
         copiedRow.rir=previousRow.rir;
+        copiedRow.weightTouched=true;
       }
       delete copiedRow.restTriggered; delete copiedRow.restCompletedAt; delete copiedRow.restMs;
       delete copiedRow.restToken;
@@ -4654,6 +4704,7 @@ function onInput(ev){
   if(f === 'w'){
     var kilograms=t.value.trim()===''?null:toKg(t.value);
     target.w=kilograms===null?'':String(kilograms);
+    target.weightTouched=true;
   }
   else if(f === 'r') target.r = t.value;
   else if(f === 'e'){
