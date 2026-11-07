@@ -50,6 +50,14 @@ test('el catálogo de la app se carga antes del motor y conserva sus datos bási
   assert.equal(catalog.LEGACY_MUSCLE_IDS.back,'lats');
 });
 
+test('la UI deja claro para nuevos usuarios qué músculo trabaja cada ejercicio', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  assert.match(app,/function simpleMuscleSummaryName\(/);
+  assert.match(app,/Pecho · medio/);
+  assert.match(app,/Qué activa/);
+  assert.match(app,/exerciseMuscleSummary\(ex\)/);
+});
+
 test('sube cuando las series requeridas llegan al máximo con esfuerzo razonable', () => {
   const result = analyze(baseExercise, [set(10), set(10), set(10)], null, rirSettings);
   assert.equal(result.status, 'sube');

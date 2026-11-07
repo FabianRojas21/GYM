@@ -188,10 +188,63 @@ function muscleId(ex){
   var id=LEGACY_MUSCLE_IDS[ex.muscle] || ex.muscle;
   return Object.prototype.hasOwnProperty.call(MUSCLES, id) ? id : 'unassigned';
 }
+function simpleMuscleSummaryName(id){
+  var normalized = LEGACY_MUSCLE_IDS[id] || id || 'unassigned';
+  if(!Object.prototype.hasOwnProperty.call(MUSCLES, normalized)) normalized = 'unassigned';
+  var group = SobrecargaEngine.muscleGroupId(normalized);
+  var map = {
+    chest:'Pecho',
+    shoulder:'Hombros',
+    back:'Espalda',
+    biceps:'Bíceps',
+    triceps:'Tríceps',
+    forearms:'Antebrazos',
+    quads:'Cuádriceps',
+    adductors:'Aductores',
+    hipFlexors:'Flexores de cadera',
+    hamstrings:'Isquiotibiales',
+    glutes:'Glúteos',
+    calves:'Pantorrillas',
+    core:'Core',
+    neck:'Cuello',
+    unassigned:'Sin asignar',
+    other:'Otro'
+  };
+  return map[group] || MUSCLES[normalized] || 'Sin asignar';
+}
+function muscleOptionLabel(id){
+  var normalized = LEGACY_MUSCLE_IDS[id] || id || 'unassigned';
+  if(!Object.prototype.hasOwnProperty.call(MUSCLES, normalized)) normalized = 'unassigned';
+  var base = MUSCLES[normalized] || 'Sin asignar';
+  var group = simpleMuscleSummaryName(normalized);
+  if(!base || base === group || base === 'Sin asignar') return group;
+  var labels = {
+    chestUpper:'Pecho · superior', chestMid:'Pecho · medio', chestLower:'Pecho · inferior',
+    shoulderAnterior:'Hombros · anterior', shoulderLateral:'Hombros · lateral', shoulderPosterior:'Hombros · posterior',
+    lats:'Espalda · dorsales', upperBack:'Espalda · alta', lowerBack:'Espalda · baja', traps:'Espalda · trapecio', serratus:'Pecho · serrato',
+    bicepsLong:'Bíceps · larga', bicepsShort:'Bíceps · corta', brachialis:'Bíceps · braquial', forearms:'Antebrazos',
+    tricepsLong:'Tríceps · larga', tricepsLateral:'Tríceps · lateral', tricepsMedial:'Tríceps · medial',
+    quads:'Cuádriceps', adductors:'Aductores', hamstrings:'Isquiotibiales', glutesMax:'Glúteos · mayor', glutesMed:'Glúteos · medio',
+    calvesGastro:'Pantorrillas · gastrocnemio', calvesSoleus:'Pantorrillas · sóleo', tibialis:'Pantorrillas · tibial',
+    rectusAbdominis:'Core · recto', obliques:'Core · oblicuos', transverseCore:'Core · profundo',
+    neck:'Cuello', other:'Otro', unassigned:'Sin asignar'
+  };
+  return labels[normalized] || group;
+}
 function muscleOptions(selected){
   return Object.keys(MUSCLES).map(function(id){
-    return '<option value="' + id + '"' + (muscleId({muscle:selected}) === id ? ' selected' : '') + '>' + MUSCLES[id] + '</option>';
+    return '<option value="' + id + '"' + (muscleId({muscle:selected}) === id ? ' selected' : '') + '>' + esc(muscleOptionLabel(id)) + '</option>';
   }).join('');
+}
+function exerciseMuscleSummary(ex){
+  var assignments = muscleAssignments(ex);
+  if(!assignments.length) return 'Sin asignar';
+  var summary = [];
+  assignments.forEach(function(assignment){
+    var label = simpleMuscleSummaryName(assignment.id);
+    if(summary.indexOf(label) < 0) summary.push(label);
+  });
+  return summary.slice(0,3).join(' + ') + (summary.length > 3 ? ' + más' : '');
 }
 function curatedMuscleProfile(ex){
   var profile=SobrecargaEngine.curatedMuscleProfile(ex&&ex.name);
@@ -2998,10 +3051,11 @@ function exDetail(ex){
     var weightSetting=['inc','loadStep','warmupStep'].includes(key);
     return '<div class="field"><label class="lab" for="cfg-' + key + '">' + label + '</label><input id="cfg-' + key + '" class="txt" inputmode="decimal" data-cfg="' + key + '" data-id="' + esc(ex.id) + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
   };
+  var muscleSummaryText = exerciseMuscleSummary(ex);
   return '<div class="list" style="gap:14px"><div><p class="sec-title" style="margin-bottom:6px">Récords personales</p>' + recordHtml + '</div><div><p class="sec-title" style="margin-bottom:6px">Progreso</p>' + chartControls + chartSvg(pts,S.progressMetric==='volume'?weightUnitLabel()+'·reps':weightUnitLabel()) +
     '<p class="muted small">Peso × (1 + (reps + RIR) ÷ 30), ' + (ex.unilateral ? 'mejor estimado del lado más débil por entreno.' : 'mejor serie de cada entreno.') + '</p></div>' +
     (rows ? '<div class="scroll-x"><table class="table"><thead><tr><th>Fecha</th><th>Series</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
-    '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="fields">' +
+    '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="field"><span class="lab">Qué activa</span><p class="small muted">' + esc(muscleSummaryText) + '</p></div><div class="fields">' +
       f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
       '</div><div class="fields"><div class="field"><label class="lab" for="cfg-equipment">Equipo</label><select id="cfg-equipment" class="txt" data-cfg="equipment" data-id="' + esc(ex.id) + '">' + Object.keys(EQUIPMENT_TYPES).map(function(id){return '<option value="' + id + '"' + (exerciseEquipment(ex)===id?' selected':'') + '>' + esc(EQUIPMENT_TYPES[id]) + '</option>';}).join('') + '</select></div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div></div>' +
