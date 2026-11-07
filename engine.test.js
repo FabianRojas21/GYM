@@ -48,7 +48,7 @@ test('el catálogo de la app se carga antes del motor y conserva sus datos bási
   assert.equal(catalog.EQUIPMENT_TYPES.dumbbell,'Mancuernas');
   assert.equal(catalog.MEASUREMENT_FIELDS.bodyFat,'Grasa corporal');
   assert.equal(catalog.LEGACY_MUSCLE_IDS.back,'lats');
-  assert.ok(catalog.EXERCISE_CATALOG.length >= 35);
+  assert.equal(catalog.EXERCISE_CATALOG.length,100);
   assert.equal(new Set(catalog.EXERCISE_CATALOG.map(exercise=>exercise.id)).size,catalog.EXERCISE_CATALOG.length);
   for(const exercise of catalog.EXERCISE_CATALOG){
     assert.ok(catalog.MUSCLES[exercise.primaryMuscle],`${exercise.name} debe tener músculo principal válido`);

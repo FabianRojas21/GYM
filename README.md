@@ -21,6 +21,11 @@ abre esta carpeta en VS Code, instala la extensión Live Server y elige
 Antes de guardar cambios en el motor, ejecuta `node --test` para comprobar sus
 reglas de progresión.
 
+El catálogo sugerido incluye 100 ejercicios con equipo y músculos principales y
+secundarios asignados. Los ejercicios personalizados y sus asignaciones se
+conservan de forma independiente; ampliar el catálogo no modifica entrenamientos
+ni ejercicios ya guardados.
+
 La pestaña **Hoy** muestra el resumen de la semana y el entreno más reciente,
 con accesos a tus rutinas y a los ejercicios que puedes retomar. La semana del
 resumen va del lunes al día actual e ignora sesiones fechadas en el futuro.
