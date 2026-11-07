@@ -54,7 +54,9 @@ respuesta; muestra qué parte no respondió y conserva los datos locales para qu
 puedas corregir la conexión y volver a intentarlo. Los entrenos nuevos se
 escriben primero en el almacenamiento local; si la escritura remota falla, la
 app avisa que quedaron guardados en este dispositivo. Al reconectar, compara
-los IDs locales con los de la nube y sube los pendientes, sin restaurar
+los IDs locales con los de la nube y sube los pendientes. Si el mismo entreno
+existe en ambos lados, conserva la versión con `updatedAt` más reciente; una
+copia local antigua no reemplaza una edición remota posterior. No restaura
 entrenos antiguos que ya se habían sincronizado y luego borrado.
 
 En **Ajustes → Recordatorio de entrenamiento** puedes activar un aviso dentro

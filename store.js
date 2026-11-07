@@ -52,12 +52,17 @@
     }
     function uploadPendingLocalSessions(localData, remoteSessions){
       var key='sobrecarga:last-cloud-sync:'+userId, lastSync=readNumber(key);
-      var remoteIds=Object.create(null), pendingById=Object.create(null);
-      (remoteSessions||[]).forEach(function(session){if(session&&session.id) remoteIds[session.id]=true;});
+      var remoteById=Object.create(null), pendingById=Object.create(null);
+      (remoteSessions||[]).forEach(function(session){if(session&&session.id) remoteById[session.id]=session;});
       ((localData&&localData.sessions)||[]).forEach(function(session){
-        if(!session||!session.id||remoteIds[session.id]) return;
+        if(!session||!session.id) return;
         var changedAt=Number(session.updatedAt)||Number(session.ts)||Number(session.finishedAt)||0;
         if(changedAt<=lastSync) return;
+        var remote=remoteById[session.id];
+        var remoteChangedAt=remote
+          ? Number(remote.updatedAt)||Number(remote.ts)||Number(remote.finishedAt)||0
+          : 0;
+        if(remote && changedAt<=remoteChangedAt) return;
         var previous=pendingById[session.id];
         if(!previous||changedAt>(Number(previous.updatedAt)||Number(previous.ts)||Number(previous.finishedAt)||0)){
           pendingById[session.id]=session;
@@ -110,7 +115,15 @@
   function mergeCloudSessions(remoteSessions, pendingSessions){
     var merged=Object.create(null);
     (remoteSessions||[]).forEach(function(session){if(session&&session.id) merged[session.id]=session;});
-    (pendingSessions||[]).forEach(function(session){if(session&&session.id&&!merged[session.id]) merged[session.id]=session;});
+    (pendingSessions||[]).forEach(function(session){
+      if(!session||!session.id) return;
+      var remote=merged[session.id];
+      var localChangedAt=Number(session.updatedAt)||Number(session.ts)||Number(session.finishedAt)||0;
+      var remoteChangedAt=remote
+        ? Number(remote.updatedAt)||Number(remote.ts)||Number(remote.finishedAt)||0
+        : 0;
+      if(!remote||localChangedAt>remoteChangedAt) merged[session.id]=session;
+    });
     return Object.keys(merged).map(function(id){return merged[id];});
   }
 

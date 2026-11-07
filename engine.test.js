@@ -793,6 +793,44 @@ test('sube sesiones locales posteriores a la última sincronización sin resucit
   assert.equal(Object.prototype.hasOwnProperty.call(remote,'B'),false);
 });
 
+test('sincroniza la versión local más reciente del mismo entreno sin sobrescribir una versión remota posterior', async () => {
+  const values=new Map([['sobrecarga:last-cloud-sync:user-conflict','200']]);
+  const remote={
+    localNewer:{id:'localNewer',updatedAt:250,notes:'versión remota anterior'},
+    remoteNewer:{id:'remoteNewer',updatedAt:400,notes:'versión remota nueva'},
+    unchanged:{id:'unchanged',updatedAt:150,notes:'sin cambios locales recientes'}
+  };
+  const col={doc:id=>({set:value=>{remote[id]=JSON.parse(JSON.stringify(value));return Promise.resolve();}})};
+  const cloudStore=createCloudDataStore({
+    userId:'user-conflict',
+    col,
+    storage:{getItem:key=>values.has(key)?values.get(key):null,setItem:(key,value)=>values.set(key,value)},
+    clone:value=>JSON.parse(JSON.stringify(value)),
+    stampSession:value=>value
+  });
+  const localData={sessions:[
+    {id:'localNewer',updatedAt:300,notes:'edición local reciente'},
+    {id:'remoteNewer',updatedAt:350,notes:'edición local obsoleta'},
+    {id:'unchanged',updatedAt:150,notes:'copia local antigua'},
+    {id:'newLocal',updatedAt:275,notes:'entreno local nuevo'}
+  ]};
+
+  const result=await cloudStore.uploadPendingLocalSessions(localData,Object.values(remote));
+  assert.equal(result.count,2);
+  assert.equal(remote.localNewer.notes,'edición local reciente');
+  assert.equal(remote.remoteNewer.notes,'versión remota nueva');
+  assert.equal(remote.unchanged.notes,'sin cambios locales recientes');
+  assert.equal(remote.newLocal.notes,'entreno local nuevo');
+
+  const merged=mergeCloudSessions(
+    [{id:'same',updatedAt:500,notes:'remoto antiguo'},{id:'remoteWins',updatedAt:700,notes:'remoto más reciente'}],
+    [{id:'same',updatedAt:600,notes:'local más reciente'},{id:'remoteWins',updatedAt:650,notes:'local obsoleto'},{id:'localOnly',updatedAt:400}]
+  );
+  assert.equal(merged.find(session=>session.id==='same').notes,'local más reciente');
+  assert.equal(merged.find(session=>session.id==='remoteWins').notes,'remoto más reciente');
+  assert.equal(merged.find(session=>session.id==='localOnly').updatedAt,400);
+});
+
 test('la primera cuenta puede subir entrenos locales ausentes aunque la migración ya se haya marcado', async () => {
   const uploaded=[];
   const col={doc:id=>({set:()=>{uploaded.push(id);return Promise.resolve();}})};
