@@ -68,6 +68,13 @@ var MUSCLES = Catalog.MUSCLES;
 var LEGACY_MUSCLE_IDS = Catalog.LEGACY_MUSCLE_IDS;
 var MUSCLE_GROUPS = Catalog.MUSCLE_GROUPS;
 var EQUIPMENT_TYPES = Catalog.EQUIPMENT_TYPES;
+var MUSCLE_GROUP_DEFAULTS = {
+  chest:'chestMid', shoulder:'shoulderLateral', back:'lats', biceps:'bicepsShort',
+  triceps:'tricepsLong', forearms:'forearms', quads:'quads', adductors:'adductors',
+  hipFlexors:'hipFlexors', hamstrings:'hamstrings', glutes:'glutesMax',
+  calves:'calvesGastro', core:'rectusAbdominis', neck:'neck',
+  unassigned:'unassigned', other:'other'
+};
 function exerciseEquipment(ex){ return Object.prototype.hasOwnProperty.call(EQUIPMENT_TYPES,ex&&ex.equipment)?ex.equipment:'other'; }
 function equipmentLabel(ex){ return EQUIPMENT_TYPES[exerciseEquipment(ex)]; }
 function equipmentFilterOptions(selected){
@@ -188,6 +195,29 @@ function exerciseLoadStep(ex){ return Number(ex.loadStep) > 0 ? Number(ex.loadSt
 function normalizeExerciseAlias(value){
   return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 }
+function inferPrimaryMuscle(name){
+  var normalized = normalizeExerciseAlias(name), padded = ' ' + normalized + ' ';
+  var has = function(words){ return words.some(function(word){ return padded.indexOf(' ' + normalizeExerciseAlias(word) + ' ') !== -1; }); };
+  if(has(['antebrazo','antebrazos','forearm','forearms','muneca','wrist curl','reverse wrist curl'])) return 'forearms';
+  if(has(['aductor','aductores','adduction','adductor'])) return 'adductors';
+  if(has(['abduccion','abduction','abductores','glute med','gluteo medio'])) return 'glutesMed';
+  if(has(['curl femoral','leg curl','isquiotibiales','hamstring','peso muerto rumano','romanian deadlift','rdl'])) return 'hamstrings';
+  if(has(['pantorrilla','pantorrillas','gemelo','gemelos','calf raise','calves','soleo'])) return has(['soleo','seated']) ? 'calvesSoleus' : 'calvesGastro';
+  if(has(['crunch','abdominal','abdomen','plancha','plank','oblicuos','oblique'])) return has(['plancha','plank','transverso']) ? 'transverseCore' : 'rectusAbdominis';
+  if(has(['triceps','tricep','triceps pressdown','press frances','skull crusher','extension de triceps'])) return 'tricepsLong';
+  if(has(['biceps','bicep','curl'])) return 'bicepsShort';
+  if(has(['face pull','rear delt','deltoide posterior','posterior de hombro','pajaro','reverse fly','elevacion posterior'])) return 'shoulderPosterior';
+  if(has(['elevacion lateral','lateral raise','hombro lateral','deltoide lateral'])) return 'shoulderLateral';
+  if(has(['press militar','military press','shoulder press','overhead press','press arnold','arnold press','elevacion frontal','front raise','hombro anterior','deltoide anterior'])) return 'shoulderAnterior';
+  if(has(['jalon','pulldown','pull down','dominada','dominadas','pull up','pullup','pullover'])) return 'lats';
+  if(has(['remo','row','encogimiento','shrug','trapecio','trapezius'])) return has(['shrug','encogimiento','trapecio','trapezius']) ? 'traps' : 'upperBack';
+  if(has(['hip thrust','puente de gluteos','glute bridge','patada de gluteo','kickback','peso muerto','deadlift'])) return 'glutesMax';
+  if(has(['sentadilla','squat','prensa de piernas','leg press','zancada','zancadas','lunge','lunges','extension de cuadriceps','leg extension'])) return 'quads';
+  if(has(['press inclinado','incline press'])) return 'chestUpper';
+  if(has(['press declinado','decline press'])) return 'chestLower';
+  if(has(['press','apertura','aperturas','fly','pecho','push up','pushup','fondos'])) return 'chestMid';
+  return null;
+}
 function catalogExerciseMatch(name){
   var query = normalizeExerciseAlias(name);
   if(!query) return null;
@@ -200,7 +230,21 @@ function catalogExerciseMatch(name){
 }
 function catalogExerciseDefaults(name){
   var match = catalogExerciseMatch(name);
-  if(!match) return null;
+  if(!match){
+    var primary = inferPrimaryMuscle(name);
+    if(!primary) return null;
+    var inferredEquipment = /polea|cable/.test(normalizeExerciseAlias(name)) ? 'cable'
+      : /maquina|machine/.test(normalizeExerciseAlias(name)) ? 'machine'
+        : /barra|barbell/.test(normalizeExerciseAlias(name)) ? 'barbell'
+          : /mancuerna|dumbbell/.test(normalizeExerciseAlias(name)) ? 'dumbbell'
+            : 'other';
+    return {
+      sets:3, min:8, max:12, inc:2.5,
+      equipment:inferredEquipment, muscle:primary,
+      secondaryMuscles:SobrecargaEngine.inferSecondaryMuscles(primary,name),
+      muscleMapping:'suggested'
+    };
+  }
   var libraryDefaults = LIB.filter(function(item){ return normalizeExerciseAlias(item.name) === normalizeExerciseAlias(match.name); })[0];
   return {
     sets: libraryDefaults ? libraryDefaults.sets : 3,
@@ -266,6 +310,11 @@ function muscleOptions(selected){
     return '<option value="' + id + '"' + (muscleId({muscle:selected}) === id ? ' selected' : '') + '>' + esc(muscleOptionLabel(id)) + '</option>';
   }).join('');
 }
+function muscleGroupOptions(selected){
+  return Object.keys(MUSCLE_GROUPS).map(function(id){
+    return '<option value="' + esc(id) + '"' + (selected === id ? ' selected' : '') + '>' + esc(MUSCLE_GROUPS[id]) + '</option>';
+  }).join('');
+}
 function exerciseMuscleSummary(ex){
   var assignments = muscleAssignments(ex);
   if(!assignments.length) return 'Sin asignar';
@@ -289,12 +338,13 @@ function normalizedSecondaryMuscles(ex){
 }
 function muscleAssignmentSource(ex){
   if(ex.muscleMapping==='manual') return 'manual';
+  if(ex.muscleMapping==='suggested') return 'suggested';
   if(Array.isArray(ex.secondaryMuscles)) return ex.muscleMapping==='catalog'?'catalog':'manual';
   return curatedMuscleProfile(ex)?'catalog':'suggested';
 }
 function muscleAssignmentSourceLabel(ex){
   var source=muscleAssignmentSource(ex);
-  return source==='catalog'?'Sugerencia curada del catálogo':source==='suggested'?'Sugerencia automática por nombre y músculo principal':'Configuración personal';
+  return source==='catalog'?'Sugerencia curada del catálogo':source==='suggested'?'Sugerencia automática por nombre':'Configuración personal';
 }
 function muscleAssignments(ex){
   var primary = muscleId(ex);
@@ -1894,7 +1944,7 @@ function entryHtml(en, ei){
   return '<section class="card workout-card' + (collapsed ? ' is-collapsed' : '') + (S.simpleWorkoutMode?' workout-card-simple':'') + '" data-ei="' + ei + '">' +
     quickFillHtml +
     '<div class="card-head workout-card-head"><h3 class="workout-card-heading"><button class="workout-card-toggle" data-act="toggle-entry" data-ei="' + ei + '" aria-expanded="' + (!collapsed) + '">' +
-    '<span class="workout-card-title"><span class="workout-card-name">' + esc(ex.name) + '</span><span class="workout-progress">' + completedSets + '/' + targetSets + ' series</span></span>' +
+    '<span class="workout-card-title"><span class="workout-card-name">' + esc(ex.name) + '</span><span class="workout-muscle-summary">Músculos: ' + esc(exerciseMuscleSummary(ex)) + '</span><span class="workout-progress">' + completedSets + '/' + targetSets + ' series</span></span>' +
     '<span class="workout-card-chevron" aria-hidden="true">' + (collapsed ? '▸' : '▾') + '</span></button></h3>' +
     '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
     substitutionHtml +
@@ -2018,6 +2068,7 @@ function pickerList(raw, mode){
   }).filter(function(entry){
     return matchesQuery(entry.name) || (entry.aliases || []).some(matchesQuery);
   });
+  var queryCatalogMatch = catalogExerciseMatch(raw);
   var out = '';
   var mm = mine, ll = lib;
   if(mm.length){
@@ -2027,12 +2078,13 @@ function pickerList(raw, mode){
   }
   if(ll.length){
     out += '<div class="pk-group">Sugeridos</div>' + ll.map(function(l){
-      return '<button class="pk" data-act="' + pa + '" data-lib="' + esc(l.name) + '"><span class="t">' + esc(l.name) + '</span><span class="s">' + l.sets + '×' + l.min + '–' + l.max + ' · ' + esc(simpleMuscleSummaryName(l.muscle)) + '</span></button>';
+      var isExactCatalogMatch=queryCatalogMatch&&queryCatalogMatch.id===l.catalogId;
+      var title=isExactCatalogMatch?'Usar '+l.name:l.name;
+      return '<button class="pk" data-act="' + pa + '" data-lib="' + esc(l.name) + '"><span class="t">' + esc(title) + '</span><span class="s">' + l.sets + '×' + l.min + '–' + l.max + ' · ' + esc(simpleMuscleSummaryName(l.muscle)) + '</span></button>';
     }).join('');
   }
-  var queryCatalogMatch = catalogExerciseMatch(raw);
   var exact = all.some(function(e){ return !e.archived && normalizeExerciseAlias(e.name) === q; }) ||
-    !!(queryCatalogMatch && (ownedCatalog[queryCatalogMatch.id] || normalizeExerciseAlias(queryCatalogMatch.name) === q));
+    !!queryCatalogMatch;
   if(q && !exact){
     var detected = catalogExerciseDefaults(raw);
     var createDetail = detected ? detected.sets + '×' + detected.min + '–' + detected.max + ' · ' + simpleMuscleSummaryName(detected.muscle) + ' · músculos sugeridos' : '3×8–12 · asigna los músculos después';
@@ -3107,7 +3159,7 @@ function exDetail(ex){
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="field"><span class="lab">Qué activa</span><p class="small muted">' + esc(muscleSummaryText) + '</p></div><div class="fields">' +
       f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-      '</div><div class="fields"><div class="field"><label class="lab" for="cfg-equipment">Equipo</label><select id="cfg-equipment" class="txt" data-cfg="equipment" data-id="' + esc(ex.id) + '">' + Object.keys(EQUIPMENT_TYPES).map(function(id){return '<option value="' + id + '"' + (exerciseEquipment(ex)===id?' selected':'') + '>' + esc(EQUIPMENT_TYPES[id]) + '</option>';}).join('') + '</select></div><div class="field"><label class="lab" for="cfg-muscle">Grupo muscular principal</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div></div>' +
+      '</div><div class="fields"><div class="field"><label class="lab" for="cfg-equipment">Equipo</label><select id="cfg-equipment" class="txt" data-cfg="equipment" data-id="' + esc(ex.id) + '">' + Object.keys(EQUIPMENT_TYPES).map(function(id){return '<option value="' + id + '"' + (exerciseEquipment(ex)===id?' selected':'') + '>' + esc(EQUIPMENT_TYPES[id]) + '</option>';}).join('') + '</select></div><div class="field"><label class="lab" for="cfg-muscle-group">Grupo muscular principal</label><select id="cfg-muscle-group" class="txt" data-cfg="muscle-group" data-id="' + esc(ex.id) + '">' + muscleGroupOptions(SobrecargaEngine.muscleGroupId(muscleId(ex))) + '</select><details class="muscle-advanced"><summary>Elegir músculo específico (avanzado)</summary><label class="lab" for="cfg-muscle">Porción o músculo</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></details>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div></div>' +
       '<fieldset class="field"><legend class="lab">Músculos secundarios</legend><p class="small muted">Fuente: ' + esc(muscleAssignmentSourceLabel(ex)) + '. Cada serie efectiva secundaria aporta 0,5 serie equivalente estimada (no se suma a carga × reps). Revisa la sugerencia y edítala según tu técnica.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
         var selected = normalizedSecondaryMuscles(ex).indexOf(id) >= 0;
         return '<label class="secondary-muscle-option"><input type="checkbox" data-cfg="secondary-muscle" data-id="' + esc(ex.id) + '" value="' + esc(id) + '"' + (selected ? ' checked' : '') + '> <span>' + esc(MUSCLES[id]) + '</span></label>';
@@ -4924,6 +4976,19 @@ function onChange(ev){
       return id!==ex.id && all.indexOf(id)===index && exById(id) && !exById(id).archived;
     });
     Store.saveProfile(); render(); return;
+  }
+  if(key === 'muscle-group'){
+    var defaultMuscle=MUSCLE_GROUP_DEFAULTS[t.value];
+    if(!defaultMuscle || !Object.prototype.hasOwnProperty.call(MUSCLE_GROUPS,t.value)){render();return;}
+    ex.muscle=defaultMuscle;
+    if(ex.muscleMapping==='catalog'||ex.muscleMapping==='suggested'){
+      delete ex.secondaryMuscles;
+      delete ex.muscleMapping;
+    }else if(Array.isArray(ex.secondaryMuscles)){
+      ex.secondaryMuscles=ex.secondaryMuscles.filter(function(id){return id!==defaultMuscle;});
+      ex.muscleMapping='manual';
+    }
+    Store.saveProfile();render();return;
   }
   if(key === 'equipment'){
     if(!Object.prototype.hasOwnProperty.call(EQUIPMENT_TYPES,t.value)){render();return;}

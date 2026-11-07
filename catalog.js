@@ -35,7 +35,7 @@
     {id:'jalon-pecho', name:'Jalón al pecho', aliases:['lat pulldown','pulldown','jalon al pecho','jalón al pecho'], equipment:'cable', primaryMuscle:'lats', secondaryMuscles:['bicepsShort','brachialis']},
     {id:'curl-biceps', name:'Curl de bíceps', aliases:['biceps curl','curl biceps','curl de biceps'], equipment:'dumbbell', primaryMuscle:'bicepsShort', secondaryMuscles:[]},
     {id:'extension-triceps', name:'Extensión de tríceps en polea', aliases:['triceps extension','triceps pressdown','extension triceps'], equipment:'cable', primaryMuscle:'tricepsLong', secondaryMuscles:[]},
-    {id:'elevaciones-laterales', name:'Elevaciones laterales', aliases:['lateral raises','elevaciones laterales','rear delt raises'], equipment:'dumbbell', primaryMuscle:'shoulderLateral', secondaryMuscles:[]},
+    {id:'elevaciones-laterales', name:'Elevaciones laterales', aliases:['lateral raises','elevaciones laterales'], equipment:'dumbbell', primaryMuscle:'shoulderLateral', secondaryMuscles:[]},
     {id:'remo-mancuerna', name:'Remo con mancuernas', aliases:['dumbbell row','remo mancuernas','row mancuernas'], equipment:'dumbbell', primaryMuscle:'upperBack', secondaryMuscles:['bicepsShort','brachialis']},
     {id:'fondos', name:'Fondos', aliases:['dip','dips','fondos en paralelas'], equipment:'bodyweight', primaryMuscle:'chestMid', secondaryMuscles:['tricepsLateral','shoulderAnterior']},
     {id:'zancadas', name:'Zancadas', aliases:['lunges','zancada','zancadas'], equipment:'barbell', primaryMuscle:'quads', secondaryMuscles:['glutesMax','hamstrings']},
@@ -46,7 +46,7 @@
     {id:'remo-polea', name:'Remo sentado en polea', aliases:['seated cable row','remo bajo polea','remo en polea'], equipment:'cable', primaryMuscle:'upperBack', secondaryMuscles:['bicepsShort','brachialis']},
     {id:'remo-pecho-apoyado', name:'Remo con pecho apoyado', aliases:['chest supported row','incline bench row'], equipment:'machine', primaryMuscle:'upperBack', secondaryMuscles:['bicepsShort','brachialis']},
     {id:'face-pull', name:'Face pull', aliases:['face pulls','jalon a la cara'], equipment:'cable', primaryMuscle:'shoulderPosterior', secondaryMuscles:['upperBack']},
-    {id:'pajaros-mancuerna', name:'Pájaros con mancuernas', aliases:['reverse fly','rear delt fly','elevaciones posteriores'], equipment:'dumbbell', primaryMuscle:'shoulderPosterior', secondaryMuscles:[]},
+    {id:'pajaros-mancuerna', name:'Pájaros con mancuernas', aliases:['reverse fly','rear delt fly','rear delt raises','elevaciones posteriores'], equipment:'dumbbell', primaryMuscle:'shoulderPosterior', secondaryMuscles:[]},
     {id:'encogimientos', name:'Encogimientos', aliases:['shrug','shrugs','encogimientos de hombros'], equipment:'dumbbell', primaryMuscle:'traps', secondaryMuscles:[]},
     {id:'extension-cuadriceps', name:'Extensión de cuádriceps', aliases:['leg extension','extensiones de cuadriceps'], equipment:'machine', primaryMuscle:'quads', secondaryMuscles:[]},
     {id:'curl-femoral', name:'Curl femoral tumbado', aliases:['lying leg curl','leg curl','curl de isquiotibiales'], equipment:'machine', primaryMuscle:'hamstrings', secondaryMuscles:[]},
@@ -62,7 +62,16 @@
     {id:'press-frances', name:'Press francés', aliases:['skull crusher','skullcrushers','extension tumbado de triceps'], equipment:'barbell', primaryMuscle:'tricepsLong', secondaryMuscles:[]},
     {id:'crunch-polea', name:'Crunch en polea', aliases:['cable crunch','abdominales en polea'], equipment:'cable', primaryMuscle:'rectusAbdominis', secondaryMuscles:['obliques']},
     {id:'plancha', name:'Plancha', aliases:['plank','front plank'], equipment:'bodyweight', primaryMuscle:'transverseCore', secondaryMuscles:['rectusAbdominis','obliques']},
-    {id:'extension-lumbar', name:'Extensión lumbar', aliases:['back extension','hyperextension','hiperextensiones'], equipment:'machine', primaryMuscle:'lowerBack', secondaryMuscles:['glutesMax','hamstrings']}
+    {id:'extension-lumbar', name:'Extensión lumbar', aliases:['back extension','hyperextension','hiperextensiones'], equipment:'machine', primaryMuscle:'lowerBack', secondaryMuscles:['glutesMax','hamstrings']},
+    {id:'jalon-neutro', name:'Jalón al pecho con agarre neutro', aliases:['neutral grip lat pulldown','jalon agarre neutro'], equipment:'cable', primaryMuscle:'lats', secondaryMuscles:['bicepsShort','brachialis']},
+    {id:'pullover-polea', name:'Pullover en polea', aliases:['cable pullover','straight arm pulldown','jalon con brazos rectos'], equipment:'cable', primaryMuscle:'lats', secondaryMuscles:[]},
+    {id:'press-arnold', name:'Press Arnold', aliases:['arnold press'], equipment:'dumbbell', primaryMuscle:'shoulderAnterior', secondaryMuscles:['shoulderLateral','tricepsLateral','tricepsMedial']},
+    {id:'elevacion-frontal', name:'Elevación frontal', aliases:['front raise','front raises','elevaciones frontales'], equipment:'dumbbell', primaryMuscle:'shoulderAnterior', secondaryMuscles:[]},
+    {id:'curl-muneca', name:'Curl de muñeca', aliases:['wrist curl','wrist curls'], equipment:'dumbbell', primaryMuscle:'forearms', secondaryMuscles:[]},
+    {id:'curl-muneca-inverso', name:'Curl de muñeca inverso', aliases:['reverse wrist curl'], equipment:'dumbbell', primaryMuscle:'forearms', secondaryMuscles:[]},
+    {id:'aductor-maquina', name:'Aductor en máquina', aliases:['hip adduction machine','adductor machine','aductores en maquina'], equipment:'machine', primaryMuscle:'adductors', secondaryMuscles:[]},
+    {id:'abduccion-cadera', name:'Abducción de cadera en máquina', aliases:['hip abduction machine','machine hip abduction'], equipment:'machine', primaryMuscle:'glutesMed', secondaryMuscles:[]},
+    {id:'abduccion-polea', name:'Abducción de cadera en polea', aliases:['cable hip abduction','abduccion de cadera en polea'], equipment:'cable', primaryMuscle:'glutesMed', secondaryMuscles:[]}
   ];
   var MUSCLES = {
     unassigned:'Sin asignar',

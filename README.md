@@ -343,13 +343,17 @@ representa peso corporal sin carga añadida.
 El selector incluye un catálogo de ejercicios con equipo y músculos principales
 y secundarios ya asignados. Puedes buscarlos por nombre o alias; al crear un
 ejercicio con un alias reconocido, la app propone esos datos sin cambiar el
-nombre que escribiste. Las asignaciones iniciales son revisables. Los ejercicios
-que ya estaban guardados no se modifican: sus IDs, entrenos y ajustes personales
-se conservan. Para nombres fuera del catálogo, la app infiere músculos
-secundarios solo cuando el nombre y el músculo principal coinciden con un patrón
-reconocido; de lo contrario no añade secundarios automáticamente. Puedes
-modificar la asignación desde **Biblioteca → Ejercicios** y los cambios manuales
-se conservan. Cada serie efectiva directa cuenta como 1 serie equivalente y cada
+nombre que escribiste; la sugerencia aparece antes de confirmar la creación.
+Para nombres reconocibles fuera del catálogo, también propone un músculo
+principal y secundarios por palabras clave, sinónimos y variantes del nombre.
+Estas asignaciones son sugerencias, no una clasificación infalible: revísalas
+en **Biblioteca → Ejercicios**. Los nombres sin una coincidencia fiable quedan
+sin asignar. El selector empieza por un grupo muscular y permite escoger una
+porción específica en el apartado avanzado. En Hoy, el nombre de cada ejercicio
+también muestra sus músculos asignados. Los ejercicios que ya estaban guardados
+no se modifican: sus IDs, entrenos y ajustes personales se conservan. Puedes
+editar las asignaciones cuando quieras y los cambios manuales se conservan.
+Cada serie efectiva directa cuenta como 1 serie equivalente y cada
 secundaria sugerida o elegida aporta 0,5; si dos porciones del mismo grupo
 participan, no se duplica su aporte. Es una estimación orientativa, no una
 medición fisiológica. La carga acumulada de peso × repeticiones se calcula aparte

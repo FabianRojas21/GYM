@@ -55,6 +55,15 @@ test('el catálogo de la app se carga antes del motor y conserva sus datos bási
     assert.ok(catalog.EQUIPMENT_TYPES[exercise.equipment],`${exercise.name} debe tener equipo válido`);
     assert.ok(exercise.secondaryMuscles.every(muscle=>catalog.MUSCLES[muscle]),`${exercise.name} debe tener músculos secundarios válidos`);
   }
+  const normalize=value=>value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  const aliases=new Map();
+  for(const exercise of catalog.EXERCISE_CATALOG){
+    for(const alias of [exercise.name,...exercise.aliases]){
+      const key=normalize(alias);
+      assert.ok(!aliases.has(key)||aliases.get(key)===exercise.id,`Alias ambiguo: ${alias}`);
+      aliases.set(key,exercise.id);
+    }
+  }
 });
 
 test('el catálogo reconoce alias sin coincidencias parciales y solo completa ejercicios nuevos', () => {
@@ -68,16 +77,19 @@ test('el catálogo reconoce alias sin coincidencias parciales y solo completa ej
     Catalog:catalog,
     EXERCISE_CATALOG:catalog.EXERCISE_CATALOG,
     LIB:catalog.LIB,
+    SobrecargaEngine:Engine,
     S:{profile:{exercises:{}}},
     Store:{saveProfile(){}},
     uid:()=> 'exercise-new'
   };
   vm.runInNewContext([
     extract('normalizeExerciseAlias'),
+    extract('inferPrimaryMuscle'),
     extract('catalogExerciseMatch'),
     extract('catalogExerciseDefaults'),
     extract('createBase'),
     'globalThis.catalogMatchForTest=catalogExerciseMatch;',
+    'globalThis.inferMuscleForTest=inferPrimaryMuscle;',
     'globalThis.catalogDefaultsForTest=catalogExerciseDefaults;',
     'globalThis.createBaseForTest=createBase;',
     extract('pickerList'),
@@ -86,11 +98,21 @@ test('el catálogo reconoce alias sin coincidencias parciales y solo completa ej
 
   assert.equal(context.catalogMatchForTest('  BENCH PRESS ').id,'press-banca');
   assert.equal(context.catalogMatchForTest('press banqueta'),null);
+  assert.equal(context.catalogMatchForTest('rear delt raises').id,'pajaros-mancuerna');
+  assert.equal(context.catalogMatchForTest('rear delt raises').primaryMuscle,'shoulderPosterior');
+  assert.ok(!catalog.EXERCISE_CATALOG.find(exercise=>exercise.id==='elevaciones-laterales').aliases.includes('rear delt raises'));
+  assert.equal(context.inferMuscleForTest('pullover'),'lats');
+  assert.equal(context.inferMuscleForTest('Jalón agarre neutro con pausa'),'lats');
+  assert.equal(context.inferMuscleForTest('Curl inclinado'),'bicepsShort');
+  assert.equal(context.inferMuscleForTest('Curl femoral unilateral'),'hamstrings');
+  assert.equal(context.inferMuscleForTest('Press militar con mancuernas'),'shoulderAnterior');
   const legExtension=context.catalogDefaultsForTest('leg extension');
   assert.equal(legExtension.muscle,'quads');
   assert.equal(legExtension.equipment,'machine');
   assert.deepEqual(Array.from(legExtension.secondaryMuscles),[]);
   assert.equal(context.catalogDefaultsForTest('movimiento inventado'),null);
+  assert.equal(context.catalogDefaultsForTest('pullover').muscle,'lats');
+  assert.equal(context.catalogDefaultsForTest('pullover').muscleMapping,'suggested');
 
   const existing={id:'old',name:'bench press',sets:5,min:3,max:5,inc:1,muscle:'other',secondaryMuscles:['forearms']};
   context.S.profile.exercises={old:existing};
@@ -109,18 +131,28 @@ test('el catálogo reconoce alias sin coincidencias parciales y solo completa ej
 
   context.S={profile:{exercises:{}},draft:{entries:[]},redit:null};
   context.esc=value=>String(value);
-  context.simpleMuscleSummaryName=()=> 'Pecho';
+  context.simpleMuscleSummaryName=id=>id==='lats'?'Espalda':'Pecho';
   const canonicalPicker=context.pickerListForTest('Press banca','day');
   assert.match(canonicalPicker,/data-lib="Press banca"/);
   assert.doesNotMatch(canonicalPicker,/data-act="create"/);
   const aliasPicker=context.pickerListForTest('bench press','day');
   assert.match(aliasPicker,/data-lib="Press banca"/);
-  assert.match(aliasPicker,/data-act="create"/);
-  assert.match(aliasPicker,/músculos sugeridos/);
+  assert.match(aliasPicker,/Usar Press banca/);
+  assert.doesNotMatch(aliasPicker,/data-act="create"/);
+  const SpanishAliasPicker=context.pickerListForTest('Press de banca','day');
+  assert.match(SpanishAliasPicker,/Usar Press banca/);
+  assert.doesNotMatch(SpanishAliasPicker,/data-act="create"/);
+  const inferredPicker=context.pickerListForTest('Pullover con cuerda','day');
+  assert.match(inferredPicker,/Espalda · músculos sugeridos/);
+  assert.match(inferredPicker,/data-act="create"/);
   context.S.profile.exercises={existing:{id:'existing',name:'bench press',sets:4,min:6,max:8,inc:1}};
   const existingPicker=context.pickerListForTest('bench press','day');
   assert.match(existingPicker,/data-id="existing"/);
   assert.doesNotMatch(existingPicker,/data-act="create"/);
+  const app=fs.readFileSync('./app.js','utf8');
+  assert.match(app,/data-cfg="muscle-group"/);
+  assert.match(app,/Elegir músculo específico \(avanzado\)/);
+  assert.match(app,/Músculos: ' \+ esc\(exerciseMuscleSummary\(ex\)\)/);
 });
 
 test('la UI deja claro para nuevos usuarios qué músculo trabaja cada ejercicio', () => {
