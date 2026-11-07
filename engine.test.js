@@ -48,6 +48,79 @@ test('el catálogo de la app se carga antes del motor y conserva sus datos bási
   assert.equal(catalog.EQUIPMENT_TYPES.dumbbell,'Mancuernas');
   assert.equal(catalog.MEASUREMENT_FIELDS.bodyFat,'Grasa corporal');
   assert.equal(catalog.LEGACY_MUSCLE_IDS.back,'lats');
+  assert.ok(catalog.EXERCISE_CATALOG.length >= 35);
+  assert.equal(new Set(catalog.EXERCISE_CATALOG.map(exercise=>exercise.id)).size,catalog.EXERCISE_CATALOG.length);
+  for(const exercise of catalog.EXERCISE_CATALOG){
+    assert.ok(catalog.MUSCLES[exercise.primaryMuscle],`${exercise.name} debe tener músculo principal válido`);
+    assert.ok(catalog.EQUIPMENT_TYPES[exercise.equipment],`${exercise.name} debe tener equipo válido`);
+    assert.ok(exercise.secondaryMuscles.every(muscle=>catalog.MUSCLES[muscle]),`${exercise.name} debe tener músculos secundarios válidos`);
+  }
+});
+
+test('el catálogo reconoce alias sin coincidencias parciales y solo completa ejercicios nuevos', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const extract=name=>{
+    const match=source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`));
+    assert.ok(match,`Debe existir ${name}`);
+    return match[0];
+  };
+  const context={
+    Catalog:catalog,
+    EXERCISE_CATALOG:catalog.EXERCISE_CATALOG,
+    LIB:catalog.LIB,
+    S:{profile:{exercises:{}}},
+    Store:{saveProfile(){}},
+    uid:()=> 'exercise-new'
+  };
+  vm.runInNewContext([
+    extract('normalizeExerciseAlias'),
+    extract('catalogExerciseMatch'),
+    extract('catalogExerciseDefaults'),
+    extract('createBase'),
+    'globalThis.catalogMatchForTest=catalogExerciseMatch;',
+    'globalThis.catalogDefaultsForTest=catalogExerciseDefaults;',
+    'globalThis.createBaseForTest=createBase;',
+    extract('pickerList'),
+    'globalThis.pickerListForTest=pickerList;'
+  ].join('\n'),context);
+
+  assert.equal(context.catalogMatchForTest('  BENCH PRESS ').id,'press-banca');
+  assert.equal(context.catalogMatchForTest('press banqueta'),null);
+  const legExtension=context.catalogDefaultsForTest('leg extension');
+  assert.equal(legExtension.muscle,'quads');
+  assert.equal(legExtension.equipment,'machine');
+  assert.deepEqual(Array.from(legExtension.secondaryMuscles),[]);
+  assert.equal(context.catalogDefaultsForTest('movimiento inventado'),null);
+
+  const existing={id:'old',name:'bench press',sets:5,min:3,max:5,inc:1,muscle:'other',secondaryMuscles:['forearms']};
+  context.S.profile.exercises={old:existing};
+  assert.equal(context.createBaseForTest('Press banca'),'old');
+  assert.equal(existing.sets,5);
+  assert.equal(existing.muscle,'other');
+  assert.deepEqual(existing.secondaryMuscles,['forearms']);
+
+  context.S.profile.exercises={};
+  const id=context.createBaseForTest('bench press');
+  const created=context.S.profile.exercises[id];
+  assert.equal(created.name,'bench press');
+  assert.equal(created.catalogId,'press-banca');
+  assert.equal(created.muscle,'chestMid');
+  assert.deepEqual(Array.from(created.secondaryMuscles),['tricepsLateral','tricepsMedial','shoulderAnterior']);
+
+  context.S={profile:{exercises:{}},draft:{entries:[]},redit:null};
+  context.esc=value=>String(value);
+  context.simpleMuscleSummaryName=()=> 'Pecho';
+  const canonicalPicker=context.pickerListForTest('Press banca','day');
+  assert.match(canonicalPicker,/data-lib="Press banca"/);
+  assert.doesNotMatch(canonicalPicker,/data-act="create"/);
+  const aliasPicker=context.pickerListForTest('bench press','day');
+  assert.match(aliasPicker,/data-lib="Press banca"/);
+  assert.match(aliasPicker,/data-act="create"/);
+  assert.match(aliasPicker,/músculos sugeridos/);
+  context.S.profile.exercises={existing:{id:'existing',name:'bench press',sets:4,min:6,max:8,inc:1}};
+  const existingPicker=context.pickerListForTest('bench press','day');
+  assert.match(existingPicker,/data-id="existing"/);
+  assert.doesNotMatch(existingPicker,/data-act="create"/);
 });
 
 test('la UI deja claro para nuevos usuarios qué músculo trabaja cada ejercicio', () => {

@@ -63,6 +63,7 @@ var clientWriterId=clientDeviceId+':'+uid('tab');
 
 /* ---------- catálogo sugerido y metadatos ---------- */
 var LIB = Catalog.LIB;
+var EXERCISE_CATALOG = Catalog.EXERCISE_CATALOG || [];
 var MUSCLES = Catalog.MUSCLES;
 var LEGACY_MUSCLE_IDS = Catalog.LEGACY_MUSCLE_IDS;
 var MUSCLE_GROUPS = Catalog.MUSCLE_GROUPS;
@@ -184,6 +185,35 @@ function mergeBackupData(currentProfile,currentSessions,backupProfile,backupSess
   return {profile:mergedProfile,sessions:mergedSessions};
 }
 function exerciseLoadStep(ex){ return Number(ex.loadStep) > 0 ? Number(ex.loadStep) : (Number(ex.inc) > 0 ? Number(ex.inc) : 2.5); }
+function normalizeExerciseAlias(value){
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+function catalogExerciseMatch(name){
+  var query = normalizeExerciseAlias(name);
+  if(!query) return null;
+  var candidates = EXERCISE_CATALOG.filter(function(entry){
+    if(!entry || !entry.name) return false;
+    var aliases = [entry.name].concat(entry.aliases || []);
+    return aliases.some(function(alias){ return normalizeExerciseAlias(alias) === query; });
+  });
+  return candidates[0] || null;
+}
+function catalogExerciseDefaults(name){
+  var match = catalogExerciseMatch(name);
+  if(!match) return null;
+  var libraryDefaults = LIB.filter(function(item){ return normalizeExerciseAlias(item.name) === normalizeExerciseAlias(match.name); })[0];
+  return {
+    sets: libraryDefaults ? libraryDefaults.sets : 3,
+    min: libraryDefaults ? libraryDefaults.min : 8,
+    max: libraryDefaults ? libraryDefaults.max : 12,
+    inc: libraryDefaults ? libraryDefaults.inc : 2.5,
+    equipment: match.equipment || 'other',
+    muscle: match.primaryMuscle || 'unassigned',
+    secondaryMuscles: Array.isArray(match.secondaryMuscles) ? match.secondaryMuscles.slice() : [],
+    muscleMapping: 'catalog',
+    catalogId: match.id || null
+  };
+}
 function muscleId(ex){
   var id=LEGACY_MUSCLE_IDS[ex.muscle] || ex.muscle;
   return Object.prototype.hasOwnProperty.call(MUSCLES, id) ? id : 'unassigned';
@@ -1963,18 +1993,33 @@ function applyEntryCfg(ei, key, v, k){
 
 /* ---------- selector de ejercicio ---------- */
 function pickerList(raw, mode){
-  var q = raw.trim().toLowerCase();
+  var q = normalizeExerciseAlias(raw);
   var pa = mode === 'routine' ? 'rpick' : 'pick', ca = mode === 'routine' ? 'rcreate' : 'create';
   var inDraft = {};
   if(mode === 'routine') (S.redit ? S.redit.items : []).forEach(function(e){ inDraft[e.exId] = 1; });
   else S.draft.entries.forEach(function(e){ inDraft[e.exId] = 1; });
   var all = Object.keys(S.profile.exercises).map(function(k){ return S.profile.exercises[k]; });
-  var mine = all.filter(function(e){ return !e.archived && !inDraft[e.id]; }).sort(function(a,b){ return a.name.localeCompare(b.name, 'es'); });
-  var own = {}; all.forEach(function(e){ if(!e.archived) own[e.name.toLowerCase()] = 1; });
-  var lib = LIB.filter(function(l){ return !own[l.name.toLowerCase()]; });
-  var m = function(x){ return !q || x.name.toLowerCase().indexOf(q) !== -1; };
+  var matchesQuery = function(value){ return !q || normalizeExerciseAlias(value).indexOf(q) !== -1; };
+  var mine = all.filter(function(e){
+    if(e.archived || inDraft[e.id]) return false;
+    var match = catalogExerciseMatch(e.name);
+    return matchesQuery(e.name) || (match && (matchesQuery(match.name) || (match.aliases || []).some(matchesQuery)));
+  }).sort(function(a,b){ return a.name.localeCompare(b.name, 'es'); });
+  var ownedCatalog = {};
+  all.forEach(function(e){
+    if(e.archived) return;
+    if(e.catalogId) ownedCatalog[e.catalogId] = 1;
+    var match = catalogExerciseMatch(e.name);
+    if(match) ownedCatalog[match.id] = 1;
+  });
+  var lib = EXERCISE_CATALOG.filter(function(entry){ return !ownedCatalog[entry.id]; }).map(function(entry){
+    var defaults = catalogExerciseDefaults(entry.name);
+    return Object.assign({name:entry.name, aliases:entry.aliases || []}, defaults || {});
+  }).filter(function(entry){
+    return matchesQuery(entry.name) || (entry.aliases || []).some(matchesQuery);
+  });
   var out = '';
-  var mm = mine.filter(m), ll = lib.filter(m);
+  var mm = mine, ll = lib;
   if(mm.length){
     out += '<div class="pk-group">Tus ejercicios</div>' + mm.map(function(e){
       return '<button class="pk" data-act="' + pa + '" data-id="' + esc(e.id) + '"><span class="t">' + esc(e.name) + '</span><span class="s">' + e.sets + '×' + e.min + '–' + e.max + '</span></button>';
@@ -1982,12 +2027,16 @@ function pickerList(raw, mode){
   }
   if(ll.length){
     out += '<div class="pk-group">Sugeridos</div>' + ll.map(function(l){
-      return '<button class="pk" data-act="' + pa + '" data-lib="' + esc(l.name) + '"><span class="t">' + esc(l.name) + '</span><span class="s">' + l.sets + '×' + l.min + '–' + l.max + '</span></button>';
+      return '<button class="pk" data-act="' + pa + '" data-lib="' + esc(l.name) + '"><span class="t">' + esc(l.name) + '</span><span class="s">' + l.sets + '×' + l.min + '–' + l.max + ' · ' + esc(simpleMuscleSummaryName(l.muscle)) + '</span></button>';
     }).join('');
   }
-  var exact = all.some(function(e){ return !e.archived && e.name.toLowerCase() === q; }) || LIB.some(function(l){ return l.name.toLowerCase() === q; });
+  var queryCatalogMatch = catalogExerciseMatch(raw);
+  var exact = all.some(function(e){ return !e.archived && normalizeExerciseAlias(e.name) === q; }) ||
+    !!(queryCatalogMatch && (ownedCatalog[queryCatalogMatch.id] || normalizeExerciseAlias(queryCatalogMatch.name) === q));
   if(q && !exact){
-    out = '<button class="pk create" data-act="' + ca + '" data-name="' + esc(raw.trim()) + '"><span class="t">Crear «' + esc(raw.trim()) + '»</span><span class="s">3×8–12</span></button>' + out;
+    var detected = catalogExerciseDefaults(raw);
+    var createDetail = detected ? detected.sets + '×' + detected.min + '–' + detected.max + ' · ' + simpleMuscleSummaryName(detected.muscle) + ' · músculos sugeridos' : '3×8–12 · asigna los músculos después';
+    out = '<button class="pk create" data-act="' + ca + '" data-name="' + esc(raw.trim()) + '"><span class="t">Crear «' + esc(raw.trim()) + '»</span><span class="s">' + esc(createDetail) + '</span></button>' + out;
   }
   return out || '<div class="pk-group">Escribe el nombre del ejercicio</div>';
 }
@@ -3590,22 +3639,37 @@ function ensureExercise(target){
   var id = target.dataset.id;
   if(!id && target.dataset.lib){
     var name = target.dataset.lib;
-    var found = Object.keys(S.profile.exercises).filter(function(k){ return S.profile.exercises[k].name.toLowerCase() === name.toLowerCase(); })[0];
+    var match = catalogExerciseMatch(name);
+    var found = Object.keys(S.profile.exercises).filter(function(k){
+      var existing = S.profile.exercises[k];
+      var existingMatch = catalogExerciseMatch(existing.name);
+      return normalizeExerciseAlias(existing.name) === normalizeExerciseAlias(name) ||
+        (match && (existing.catalogId === match.id || (existingMatch && existingMatch.id === match.id)));
+    })[0];
     if(found){ S.profile.exercises[found].archived = false; id = found; }
-    else {
-      var l = LIB.filter(function(x){ return x.name === name; })[0];
-      id = uid('e_');
-      var profile=SobrecargaEngine.curatedMuscleProfile(l.name);
-      S.profile.exercises[id] = Object.assign({id:id, name:l.name, sets:l.sets, min:l.min, max:l.max, inc:l.inc},
-        profile ? Object.assign({},profile,{muscleMapping:'catalog'}) : {});
-    }
+    else id = createBase(name);
     Store.saveProfile();
   }
   return id;
 }
 function createBase(name){
+  var normalizedName = normalizeExerciseAlias(name);
+  var match = catalogExerciseMatch(name);
+  var existing = Object.keys(S.profile.exercises).map(function(id){ return S.profile.exercises[id]; }).filter(function(ex){
+    var existingMatch = catalogExerciseMatch(ex.name);
+    return normalizeExerciseAlias(ex.name) === normalizedName ||
+      (match && (ex.catalogId === match.id || (existingMatch && existingMatch.id === match.id)));
+  })[0];
+  if(existing){
+    existing.archived = false;
+    Store.saveProfile();
+    return existing.id;
+  }
   var id = uid('e_');
-  S.profile.exercises[id] = {id:id, name:name, sets:3, min:8, max:12, inc:2.5};
+  var defaults = catalogExerciseDefaults(name);
+  var config = {id:id, name:name, sets:3, min:8, max:12, inc:2.5};
+  if(defaults) config = Object.assign(config, defaults, {name:name});
+  S.profile.exercises[id] = config;
   Store.saveProfile();
   return id;
 }
