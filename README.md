@@ -63,6 +63,12 @@ los IDs locales con los de la nube y sube los pendientes. Si el mismo entreno
 existe en ambos lados, conserva la versión con `updatedAt` más reciente; una
 copia local antigua no reemplaza una edición remota posterior. No restaura
 entrenos antiguos que ya se habían sincronizado y luego borrado.
+El perfil, los entrenos, el borrador y los respaldos locales están separados
+por cuenta en este navegador. Los datos locales anteriores al inicio de sesión
+se conservan en el espacio sin cuenta y no se suben automáticamente, para
+evitar mezclar cuentas: cierra sesión, exporta un respaldo desde ese espacio y
+luego impórtalo en la cuenta si quieres trasladarlos. Una duración CSV explícita
+de `0` minutos se conserva; los 60 minutos se asignan solo cuando falta ese dato.
 
 En **Ajustes → Recordatorio de entrenamiento** puedes activar un aviso dentro
 de la app después de 2, 3, 5 o 7 días sin registrar un entreno. Está apagado

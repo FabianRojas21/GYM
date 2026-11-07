@@ -105,11 +105,18 @@ function muscleGroupId(id){
 var MEASUREMENT_FIELDS = Catalog.MEASUREMENT_FIELDS;
 
 /* ---------- estado ---------- */
-var DK = 'sobrecarga:draft:v1';
-var LK = 'sobrecarga:data:v1';
+var DK_BASE = 'sobrecarga:draft:v1';
+var LK_BASE = 'sobrecarga:data:v1';
+var RTK_BASE = 'sobrecarga:rest-timer:v1';
+var AUTO_BACKUP_BASE_KEY='sobrecarga:auto-backup:v1';
+var BACKUP_EXPORT_BASE_KEY='sobrecarga:backup-export:v1';
+var DK = DK_BASE;
+var LK = LK_BASE;
 var TK = 'sobrecarga:tab';
-var RTK = 'sobrecarga:rest-timer:v1';
+var RTK = RTK_BASE;
 var RTOK = RTK + ':owner';
+var AUTO_BACKUP_KEY=AUTO_BACKUP_BASE_KEY;
+var BACKUP_EXPORT_KEY=BACKUP_EXPORT_BASE_KEY;
 var WORKOUT_SIMPLE_KEY='sobrecarga:workout-simple:v1';
 function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', trainingGoal:'hypertrophy', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, activeProgramId:null, activeRoutineId:null, goals:{}, measurements:[], recoveryRatings:{}}; }
 function trainingGoalLabel(goal){
@@ -430,6 +437,45 @@ S.collapsedEntries=new Set(S.draft.collapsedEntryIds || []);
 try { S.simpleWorkoutMode=localStorage.getItem(WORKOUT_SIMPLE_KEY)==='1'; } catch(e){}
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
+var activeStorageUserId=null;
+var storageScopeGeneration=0;
+function setStorageScope(userId){
+  var nextUserId=userId ? String(userId) : null;
+  if(nextUserId===activeStorageUserId) return false;
+  activeStorageUserId=nextUserId;
+  storageScopeGeneration++;
+  var scopedKey=function(baseKey){ return SobrecargaStore.storageKeyForUser(baseKey,nextUserId); };
+  DK=scopedKey(DK_BASE);
+  LK=scopedKey(LK_BASE);
+  RTK=scopedKey(RTK_BASE);
+  RTOK=RTK+':owner';
+  AUTO_BACKUP_KEY=scopedKey(AUTO_BACKUP_BASE_KEY);
+  BACKUP_EXPORT_KEY=scopedKey(BACKUP_EXPORT_BASE_KEY);
+  clearTimeout(profTimer);
+  profTimer=null;
+  profDirty=false;
+  clearTimeout(cloudDraftTimer);
+  cloudDraftTimer=null;
+  S.profile=defaultProfile();
+  S.sessions=[];
+  S.draft=loadDraft();
+  S.collapsedEntries=new Set(S.draft.collapsedEntryIds||[]);
+  S.restEndsAt=loadRestEnd();
+  S.restOwner=loadRestOwner();
+  S.confirm=null;
+  S.redit=null;
+  S.pedit=null;
+  S.sessionEdit=null;
+  S.pendingImport=null;
+  S.pendingRoutine=null;
+  S.loadingCalc=null;
+  S.justSaved=null;
+  S.finishSaving=false;
+  S.cloudSyncing=false;
+  S.anomalySignature='';
+  return true;
+}
+function isCurrentStorageScope(generation){ return generation===storageScopeGeneration; }
 function refreshDraftSaveStatus(){
   var status=$('#draft-save-status');
   if(!status) return;
@@ -685,6 +731,13 @@ var Store = {
     cloudLoadingTimer=null;
     Store.cloudGeneration++;
     var generation=Store.cloudGeneration;
+    var legacyLocalData=activeStorageUserId===null ? Store.readLocalDataSnapshot() : null;
+    var hasLegacyLocalData=!!(legacyLocalData && (
+      (legacyLocalData.sessions||[]).length ||
+      Object.keys(legacyLocalData.profile&&legacyLocalData.profile.exercises||{}).length ||
+      Object.keys(legacyLocalData.profile&&legacyLocalData.profile.routines||{}).length
+    ));
+    setStorageScope(user.uid);
     S.ready=false;
     S.syncUnavailable=false;
     S.cloudUser=user;
@@ -693,6 +746,7 @@ var Store = {
     var localData=Store.readLocalData();
     var localProfile=clone(S.profile), localSessions=clone(S.sessions);
     render();
+    if(hasLegacyLocalData) toast('Tus datos de este navegador se conservaron aparte para no mezclarlos con la cuenta. Cierra sesión para verlos y exportarlos si quieres pasarlos a esta cuenta.');
     var root=Store.firebaseDb.collection('users').doc(user.uid);
     Store.ref=root.collection('app').doc('state');
     Store.col=root.collection('sessions');
@@ -810,6 +864,7 @@ var Store = {
     Store.detachCloudListeners();
     clearTimeout(cloudLoadingTimer);
     cloudLoadingTimer=null;
+    setStorageScope(null);
     S.kind = 'local';
     S.cloudUser=null;
     Store.firebaseUser=null;
@@ -824,15 +879,18 @@ var Store = {
       return Promise.reject(new Error('La cuenta no terminó de cargar. Vuelve a conectar antes de sincronizar; no se subieron datos para proteger los que ya están en la nube.'));
     }
     var user=Store.firebaseUser;
+    var cloudDataStore=Store.cloudDataStore;
+    var profile=clone(S.profile), sessions=clone(S.sessions);
+    var cloudDraftRef=Store.firebaseDb.collection('users').doc(user.uid).collection('app').doc('draft');
     var profileWrite=withTimeout(
       Store.saveProfileNow(),
       15000,
       'Firebase no respondió al guardar el perfil. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
     );
-    var sessionsWrite=S.sessions.reduce(function(queue,session){
+    var sessionsWrite=sessions.reduce(function(queue,session){
       return queue.then(function(){
         return withTimeout(
-          Store.saveSession(session),
+          cloudDataStore.saveSession(session,profile,sessions),
           15000,
           'Firebase no respondió al guardar tus entrenamientos. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
         );
@@ -841,13 +899,14 @@ var Store = {
     var draft=clone(S.draft);
     draft.updatedAt=Date.now(); draft.restEndsAt=S.restEndsAt || null;
     var draftWrite=withTimeout(
-      Store.firebaseDb.collection('users').doc(user.uid).collection('app').doc('draft').set(draft),
+      cloudDraftRef.set(draft),
       15000,
       'Firebase no respondió al guardar el entreno en curso. Tus datos locales se conservaron; revisa la conexión y vuelve a intentar.'
     );
     return Promise.all([profileWrite,sessionsWrite,draftWrite]);
   },
   startDb:function(db, id){
+    setStorageScope(id);
     S.kind = 'db';
     Store.ref = db.doc('data/users/'+id+'/profile');
     Store.col = Store.ref.collection('sessions');
@@ -891,7 +950,8 @@ var Store = {
     });
     if(!profDirty) return Promise.resolve();
     profDirty = false; profBusy = true;
-    return Store.ref.set(clone(S.profile)).then(function(){
+    var ref=Store.ref, profile=clone(S.profile);
+    return ref.set(profile).then(function(){
       profBusy = false;
       if(profDirty) profTimer = setTimeout(function(){ Store.flush().catch(function(){}); }, 200);
     }).catch(function(error){
@@ -969,7 +1029,8 @@ var Store = {
   },
   deleteSessions:function(ids){
     if(!['db','cloud'].includes(S.kind)) return Promise.resolve();
-    return ids.reduce(function(p, id){ return p.then(function(){ return Store.col.doc(id).delete(); }); }, Promise.resolve())
+    var col=Store.col;
+    return ids.reduce(function(p, id){ return p.then(function(){ return col.doc(id).delete(); }); }, Promise.resolve())
       .catch(function(error){ toast('No se pudo borrar el entreno: ' + (error && error.message ? error.message : 'error de sincronización')); throw error; });
   },
   replaceAll:function(profile, sessions){
@@ -984,6 +1045,7 @@ var Store = {
     sessions.forEach(function(session){ incomingIds[session.id] = true; });
     oldIds = oldIds.filter(function(id){ return !incomingIds[id]; });
     profDirty = false; clearTimeout(profTimer);
+    var col=Store.col, ref=Store.ref;
     var withTimeout = function(promise){
       return Promise.race([
         promise,
@@ -991,13 +1053,13 @@ var Store = {
       ]);
     };
     var writes=sessions.reduce(function(p, session){
-      return p.then(function(){ return withTimeout(Store.col.doc(session.id).set(clone(session))); });
+      return p.then(function(){ return withTimeout(col.doc(session.id).set(clone(session))); });
     }, Promise.resolve());
     return writes.then(function(){
-      return withTimeout(Store.ref.set(clone(profile)));
+      return withTimeout(ref.set(clone(profile)));
     }).then(function(){
       return oldIds.reduce(function(p, id){
-        return p.then(function(){ return withTimeout(Store.col.doc(id).delete()); });
+        return p.then(function(){ return withTimeout(col.doc(id).delete()); });
       }, Promise.resolve());
     });
   }
@@ -1188,6 +1250,7 @@ function validBackup(data){
   });
 }
 function downloadBackup(){
+  var exportScope=storageScopeGeneration, exportKey=BACKUP_EXPORT_KEY;
   var payload = SobrecargaBackup.serializeBackup({format:'sobrecarga-backup', version:1, profile:S.profile, sessions:S.sessions}, 2);
   use('downloads').then(function(downloads){
     if(downloads) return downloads.save({filename:'sobrecarga-respaldo-' + iso(new Date()) + '.json', data:payload});
@@ -1197,7 +1260,8 @@ function downloadBackup(){
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
   }).then(function(){
-    try { localStorage.setItem(BACKUP_EXPORT_KEY,JSON.stringify({requestedAt:Date.now(),sessionCount:S.sessions.length})); }
+    if(!isCurrentStorageScope(exportScope)) return;
+    try { localStorage.setItem(exportKey,JSON.stringify({requestedAt:Date.now(),sessionCount:S.sessions.length})); }
     catch(error){ console.warn('No se pudo guardar la fecha de exportación del respaldo',error); }
     render(); toast('Descarga del respaldo iniciada; comprueba que el archivo se haya guardado');
   })
@@ -1210,16 +1274,19 @@ function restoreBackup(){
     return;
   }
   var data = S.pendingImport;
+  var restoreScope=storageScopeGeneration;
   var merged=mergeBackupData(S.profile,S.sessions,normProfile(data.profile),data.sessions);
   var addedSessions=merged.sessions.length-S.sessions.length;
   var pending = Store.replaceAll(merged.profile, merged.sessions);
   S.pendingImport = null; S.confirm = null; S.justSaved = null;
   render(); toast('Restaurando respaldo…');
   pending.then(function(){
+    if(!isCurrentStorageScope(restoreScope)) return;
     createAutoBackup();
     render();
     toast('Respaldo restaurado'+(['db','cloud'].includes(S.kind)?' con tu cuenta':'')+': '+addedSessions+' entreno'+(addedSessions===1?' nuevo':'s nuevos')+' agregado'+(addedSessions===1?'':'s'));
   }).catch(function(error){
+    if(!isCurrentStorageScope(restoreScope)) return;
     toast('Respaldo combinado aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
   });
 }
@@ -1284,6 +1351,7 @@ function importRoutine(payload){
   Store.saveProfile(); S.selectedRoutine=id; S.librarySection='rutinas'; S.tab='rutinas'; render(); toast('Rutina importada');
 }
 function importSessionsCsv(text){
+  var importScope=storageScopeGeneration;
   var previousProfile=clone(S.profile), previousSessions=S.sessions.slice();
   var records=parseCsv(text), grouped={}, durations={};
   records.forEach(function(r){
@@ -1316,7 +1384,7 @@ function importSessionsCsv(text){
       return session.date===date && session.csvImport && SobrecargaBackup.csvSessionSignature(session.entries)===signature;
     });
     if(duplicate) return;
-    var durationMinutes=durations[date] || 60;
+    var durationMinutes=csvDurationMinutes(durations,date);
     var durationMs=durationMinutes*60000;
     var session={id:uid('ses'),date:date,ts:new Date(date+'T12:00:00').getTime(),startedAt:new Date(date+'T12:00:00').getTime(),finishedAt:new Date(date+'T12:00:00').getTime()+durationMs,durationMs:durationMs,entries:entries,csvImport:true};
     importedSessions.push(session); imported++;
@@ -1332,16 +1400,21 @@ function importSessionsCsv(text){
   }
   var persistSessions=function(){
     return importedSessions.reduce(function(queue,session){
-      return queue.then(function(saved){ return Store.saveSession(session).then(function(persisted){ saved.push(persisted); return saved; }); });
+      return queue.then(function(saved){
+        if(!isCurrentStorageScope(importScope)) return Promise.reject(new Error('La cuenta cambió durante la importación'));
+        return Store.saveSession(session).then(function(persisted){ saved.push(persisted); return saved; });
+      });
     },Promise.resolve([]));
   };
   return Store.saveProfileNow().then(persistSessions).then(function(savedSessions){
+    if(!isCurrentStorageScope(importScope)) return false;
     var savedById={};
     S.sessions.concat(savedSessions).forEach(function(session){ savedById[session.id]=session; });
     S.sessions=Object.keys(savedById).map(function(id){ return savedById[id]; });
     render(); toast(imported+' entreno'+(imported===1?'':'s')+' importado'+(imported===1?'':'s')+' desde CSV');
     return true;
   }).catch(function(error){
+    if(!isCurrentStorageScope(importScope)) return false;
     console.error('Falló la importación CSV; se intentará revertir lo escrito',error);
     S.profile=previousProfile;
     return Store.deleteSessions(importedSessions.map(function(session){ return session.id; })).catch(function(rollbackError){
@@ -1355,6 +1428,9 @@ function importSessionsCsv(text){
       return false;
     });
   });
+}
+function csvDurationMinutes(durations,date){
+  return Object.prototype.hasOwnProperty.call(durations,date) ? durations[date] : 60;
 }
 
 /* ---------- presentación de series ---------- */
@@ -2593,12 +2669,15 @@ function saveSessionEdit(){
   }
   updated.ts = updated.finishedAt;
   edit.saving = true; render();
+  var editScope=storageScopeGeneration;
   Store.updateSession(updated, {overwrite:!!edit.overwrite}).then(function(saved){
+    if(!isCurrentStorageScope(editScope)) return;
     saved=saved || updated;
     var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
     if(index >= 0) S.sessions[index] = saved;
     S.sessionEdit = null; render(); toast('Entrenamiento actualizado');
   }).catch(function(error){
+    if(!isCurrentStorageScope(editScope)) return;
     if(S.sessionEdit && S.sessionEdit.id === updated.id){
       S.sessionEdit.saving=false;
       if(error && error.code==='session-conflict'){
@@ -3572,6 +3651,7 @@ function buildDemo(){
   return {ex:ex, sessions:sessions, routines:routines};
 }
 function loadDemo(){
+  var demoScope=storageScopeGeneration;
   var previousProfile=clone(S.profile), previousSessions=clone(S.sessions);
   var previousSessionsById={};
   previousSessions.forEach(function(session){ previousSessionsById[session.id]=session; });
@@ -3582,14 +3662,19 @@ function loadDemo(){
   var persistSessions=function(){
     if(!['db','cloud'].includes(S.kind)) return Promise.resolve();
     return d.sessions.reduce(function(queue,session){
-      return queue.then(function(){ return Store.saveSession(session); });
+      return queue.then(function(){
+        if(!isCurrentStorageScope(demoScope)) return Promise.reject(new Error('La cuenta cambió durante la carga de ejemplos'));
+        return Store.saveSession(session);
+      });
     },Promise.resolve());
   };
   return Store.saveProfileNow().then(persistSessions).then(function(){
+    if(!isCurrentStorageScope(demoScope)) return false;
     S.tab='hoy'; render();
     toast('Datos de ejemplo cargados. Quítalos cuando quieras en Ajustes.');
     return true;
   }).catch(function(error){
+    if(!isCurrentStorageScope(demoScope)) return false;
     console.error('No se pudieron guardar los datos de ejemplo',error);
     S.profile=previousProfile; S.sessions=previousSessions;
     var cleanup=['db','cloud'].includes(S.kind)
@@ -3612,8 +3697,10 @@ function loadDemo(){
   });
 }
 function clearDemo(){
+  var demoScope=storageScopeGeneration;
   var ids = S.sessions.filter(function(s){ return s.demo; }).map(function(s){ return s.id; });
   return Store.deleteSessions(ids).then(function(){
+    if(!isCurrentStorageScope(demoScope)) return false;
     S.sessions = S.sessions.filter(function(s){ return !s.demo; });
     Object.keys(S.profile.exercises).forEach(function(k){
       var e = S.profile.exercises[k];
@@ -3623,14 +3710,18 @@ function clearDemo(){
     S.draft.entries = S.draft.entries.filter(function(en){ return !!exById(en.exId); }); saveDraft();
     return Store.saveProfileNow();
   }).then(function(){
+    if(!isCurrentStorageScope(demoScope)) return false;
     render(); toast('Datos de ejemplo eliminados'); return true;
   }).catch(function(error){
+    if(!isCurrentStorageScope(demoScope)) return false;
     console.error('No se pudieron eliminar todos los datos de ejemplo',error);
     render(); return false;
   });
 }
 function deleteSession(id){
+  var deleteScope=storageScopeGeneration;
   return Store.deleteSessions([id]).then(function(){
+    if(!isCurrentStorageScope(deleteScope)) return false;
     var previous=S.sessions;
     S.sessions=S.sessions.filter(function(session){ return session.id!==id; });
     if(!['db','cloud'].includes(S.kind) && !Store.saveLocal()){
@@ -3890,7 +3981,9 @@ function finish(updateRoutine){
   var rt = S.draft.routineId && S.profile.routines[S.draft.routineId];
   if(rt){ session.routineId = rt.id; session.routineName = rt.name; }
   if(S.draft.programId && S.profile.programs[S.draft.programId]) session.programId=S.draft.programId;
+  var finishScope=storageScopeGeneration;
   Store.saveSession(session).then(function(){
+    if(!isCurrentStorageScope(finishScope)) return;
     S.finishSaving = false;
     S.sessions=S.sessions.filter(function(item){return item.id!==session.id;}).concat([session]);
     S.justSaved = {session:session, next:saved};
@@ -3899,6 +3992,7 @@ function finish(updateRoutine){
     var summaryHeading=$('[data-workout-summary-heading]');
     if(summaryHeading) summaryHeading.focus({preventScroll:true});
   }).catch(function(){
+    if(!isCurrentStorageScope(finishScope)) return;
     S.finishSaving = false;
     render();
     toast('No se guardó el entreno; conserva la pantalla abierta y vuelve a intentarlo');
@@ -4462,13 +4556,17 @@ function onClick(ev){
     case 'wipe': S.confirm = 'wipe'; render(); break;
     case 'wipe-ok':
       var ids = S.sessions.map(function(s){ return s.id; });
+      var wipeScope=storageScopeGeneration;
       Store.deleteSessions(ids).then(function(){
+        if(!isCurrentStorageScope(wipeScope)) return false;
         S.sessions = []; S.profile.exercises = {}; S.profile.routines = {}; S.profile.programs = {}; S.profile.activeProgramId = null; S.profile.activeRoutineId = null; S.profile.goals = {}; S.profile.recoveryRatings = {}; S.redit = null; S.pedit = null; S.draft = blankDraft(); saveDraft();
         S.restEndsAt = null; saveRestEnd();
         return Store.saveProfileNow();
       }).then(function(){
+        if(!isCurrentStorageScope(wipeScope)) return;
         S.confirm = null; S.justSaved = null; render(); toast('Datos borrados');
       }).catch(function(error){
+        if(!isCurrentStorageScope(wipeScope)) return;
         console.error('No se pudieron borrar todos los datos',error);
         S.confirm=null; render(); toast('No se pudo completar el borrado de datos');
       });
@@ -5095,8 +5193,6 @@ function onWorkoutKeydown(ev){
   if(next.select) next.select();
 }
 
-var AUTO_BACKUP_KEY='sobrecarga:auto-backup:v1';
-var BACKUP_EXPORT_KEY='sobrecarga:backup-export:v1';
 function createAutoBackup(){
   if(!S.ready) return;
   try { localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify({savedAt:Date.now(),profile:S.profile,sessions:S.sessions,draft:S.draft})); } catch(e){ toast('No se pudo crear la copia automática'); }
@@ -5160,13 +5256,16 @@ function restoreAutoBackup(){
     }
     var merged=mergeBackupData(S.profile,S.sessions,normProfile(data.profile),data.sessions);
     var addedSessions=merged.sessions.length-S.sessions.length;
+    var restoreScope=storageScopeGeneration;
     Store.replaceAll(merged.profile,merged.sessions).then(function(){
+      if(!isCurrentStorageScope(restoreScope)) return;
       if(!S.cloudUser && !S.draft.entries.length && !S.draft.startedAt && backup.draft && Array.isArray(backup.draft.entries)) {
         S.draft=Object.assign(blankDraft(),backup.draft); saveDraft();
       }
       createAutoBackup();
       render(); toast('Copia automática restaurada: '+addedSessions+' entreno'+(addedSessions===1?' nuevo':'s nuevos')+' agregado'+(addedSessions===1?'':'s'));
     }).catch(function(error){
+      if(!isCurrentStorageScope(restoreScope)) return;
       toast('Copia automática combinada aquí, pero no pudo sincronizarse' + (error && error.message ? ': ' + error.message : ''));
     });
   } catch(e){ toast('No hay una copia automática válida'); }

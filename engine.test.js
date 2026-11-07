@@ -514,6 +514,18 @@ test('normaliza tipos de CSV sin cambiar tipos válidos ni producir tipos invál
   assert.equal(csvSetType('rest-pause'),'restpause');
 });
 
+test('la importación CSV conserva duración explícita de cero y usa 60 solo si falta', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const helper=source.match(/function csvDurationMinutes\(durations,date\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={Object};
+  vm.runInNewContext(helper[0]+';globalThis.durationForCsvTest=csvDurationMinutes;',context);
+  assert.equal(context.durationForCsvTest({'2026-01-01':0},'2026-01-01'),0);
+  assert.equal(context.durationForCsvTest({'2026-01-01':35},'2026-01-01'),35);
+  assert.equal(context.durationForCsvTest({},'2026-01-01'),60);
+  assert.match(source,/var durationMinutes=csvDurationMinutes\(durations,date\)/);
+});
+
 test('parsea números completos con coma decimal y rechaza texto agregado', () => {
   assert.equal(parseNumber('60'),60);
   assert.equal(parseNumber(' 2,5 '),2.5);
@@ -805,6 +817,53 @@ test('la migración local no resucita sesiones borradas al volver a abrir la cue
   values.delete('sobrecarga:migrated:user-1');
   await cloudStore.migrateLocalDataOnce(staleLocalData);
   assert.deepEqual(Object.keys(remote.sessions).sort(),['A','C']);
+});
+
+test('las claves locales de cada cuenta están aisladas de las claves del navegador', () => {
+  const {storageKeyForUser}=require('./store.js');
+  assert.equal(storageKeyForUser('sobrecarga:data:v1',null),'sobrecarga:data:v1');
+  assert.equal(storageKeyForUser('sobrecarga:data:v1','user/a'),'sobrecarga:data:v1:account:user%2Fa');
+  assert.notEqual(storageKeyForUser('sobrecarga:data:v1','user-a'),storageKeyForUser('sobrecarga:data:v1','user-b'));
+
+  const source=fs.readFileSync('./app.js','utf8');
+  const scopeFunction=source.match(/function setStorageScope\(userId\)\{[\s\S]*?\n\}/);
+  assert.ok(scopeFunction);
+  const firebaseStart=source.slice(source.indexOf('startFirebase:function'));
+  assert.ok(firebaseStart.indexOf('setStorageScope(user.uid);')<firebaseStart.indexOf('var localData=Store.readLocalData();'));
+  const localStart=source.slice(source.indexOf('startLocal:function'));
+  assert.ok(localStart.indexOf('setStorageScope(null);')<localStart.indexOf('Store.readLocalData();'));
+
+  const context={
+    SobrecargaStore:require('./store.js'),
+    activeStorageUserId:null,storageScopeGeneration:0,
+    LK_BASE:'sobrecarga:data:v1',DK_BASE:'sobrecarga:draft:v1',RTK_BASE:'sobrecarga:rest-timer:v1',
+    AUTO_BACKUP_BASE_KEY:'sobrecarga:auto-backup:v1',BACKUP_EXPORT_BASE_KEY:'sobrecarga:backup-export:v1',
+    LK:'sobrecarga:data:v1',DK:'sobrecarga:draft:v1',RTK:'sobrecarga:rest-timer:v1',RTOK:'sobrecarga:rest-timer:v1:owner',
+    AUTO_BACKUP_KEY:'sobrecarga:auto-backup:v1',BACKUP_EXPORT_KEY:'sobrecarga:backup-export:v1',
+    profTimer:null,profDirty:true,cloudDraftTimer:null,clearTimeout,
+    defaultProfile:()=>({account:'empty'}),
+    loadDraft:()=>({storageKey:context.DK,collapsedEntryIds:[]}),
+    loadRestEnd:()=>null,loadRestOwner:()=>null,
+    S:{profile:{account:'previous'},sessions:[{id:'previous'}],draft:{},collapsedEntries:new Set()}
+  };
+  vm.runInNewContext(scopeFunction[0]+';globalThis.switchScopeForTest=setStorageScope;',context);
+
+  context.switchScopeForTest('user-a');
+  assert.equal(context.LK,'sobrecarga:data:v1:account:user-a');
+  assert.equal(context.DK,'sobrecarga:draft:v1:account:user-a');
+  assert.equal(context.AUTO_BACKUP_KEY,'sobrecarga:auto-backup:v1:account:user-a');
+  assert.equal(context.S.profile.account,'empty');
+  assert.deepEqual(Array.from(context.S.sessions),[]);
+  assert.equal(context.S.draft.storageKey,context.DK);
+  context.S.sessions.push({id:'user-a-session'});
+
+  context.switchScopeForTest('user-b');
+  assert.equal(context.LK,'sobrecarga:data:v1:account:user-b');
+  assert.deepEqual(Array.from(context.S.sessions),[]);
+  assert.equal(context.S.draft.storageKey,context.DK);
+  context.switchScopeForTest(null);
+  assert.equal(context.LK,'sobrecarga:data:v1');
+  assert.equal(context.DK,'sobrecarga:draft:v1');
 });
 
 test('sube sesiones locales posteriores a la última sincronización sin resucitar las anteriores borradas', async () => {

@@ -112,6 +112,11 @@
     };
   }
 
+  function storageKeyForUser(baseKey, userId){
+    var key=String(baseKey||'');
+    return userId ? key+':account:'+encodeURIComponent(String(userId)) : key;
+  }
+
   function mergeCloudSessions(remoteSessions, pendingSessions){
     var merged=Object.create(null);
     (remoteSessions||[]).forEach(function(session){if(session&&session.id) merged[session.id]=session;});
@@ -127,5 +132,5 @@
     return Object.keys(merged).map(function(id){return merged[id];});
   }
 
-  return {createCloudDataStore:createCloudDataStore,mergeCloudSessions:mergeCloudSessions};
+  return {createCloudDataStore:createCloudDataStore,mergeCloudSessions:mergeCloudSessions,storageKeyForUser:storageKeyForUser};
 });
