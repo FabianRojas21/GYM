@@ -203,19 +203,20 @@ function inferPrimaryMuscle(name){
   if(has(['abduccion','abduction','abductores','glute med','gluteo medio'])) return 'glutesMed';
   if(has(['curl femoral','leg curl','isquiotibiales','hamstring','peso muerto rumano','romanian deadlift','rdl'])) return 'hamstrings';
   if(has(['pantorrilla','pantorrillas','gemelo','gemelos','calf raise','calves','soleo'])) return has(['soleo','seated']) ? 'calvesSoleus' : 'calvesGastro';
+  if(has(['elevacion de piernas','elevaciones de piernas','elevacion piernas','elevaciones piernas','hanging leg raise','hanging knee raise','elevacion de rodillas','elevaciones de rodillas','elevacion rodillas','elevaciones rodillas'])) return 'rectusAbdominis';
   if(has(['crunch','abdominal','abdomen','plancha','plank','oblicuos','oblique'])) return has(['plancha','plank','transverso']) ? 'transverseCore' : 'rectusAbdominis';
   if(has(['triceps','tricep','triceps pressdown','press frances','skull crusher','extension de triceps'])) return 'tricepsLong';
   if(has(['biceps','bicep','curl'])) return 'bicepsShort';
-  if(has(['face pull','rear delt','deltoide posterior','posterior de hombro','pajaro','reverse fly','elevacion posterior'])) return 'shoulderPosterior';
-  if(has(['elevacion lateral','lateral raise','hombro lateral','deltoide lateral'])) return 'shoulderLateral';
-  if(has(['press militar','military press','shoulder press','overhead press','press arnold','arnold press','elevacion frontal','front raise','hombro anterior','deltoide anterior'])) return 'shoulderAnterior';
+  if(has(['face pull','rear delt','deltoide posterior','posterior de hombro','pajaro','pajaros','reverse fly','elevacion posterior','elevaciones posteriores'])) return 'shoulderPosterior';
+  if(has(['elevacion lateral','elevaciones laterales','lateral raise','lateral raises','hombro lateral','deltoide lateral'])) return 'shoulderLateral';
+  if(has(['press militar','military press','shoulder press','press hombro','press hombros','press de hombro','press de hombros','overhead press','press arnold','arnold press','elevacion frontal','elevaciones frontales','front raise','front raises','hombro anterior','deltoide anterior'])) return 'shoulderAnterior';
   if(has(['jalon','pulldown','pull down','dominada','dominadas','pull up','pullup','pullover'])) return 'lats';
   if(has(['remo','row','encogimiento','shrug','trapecio','trapezius'])) return has(['shrug','encogimiento','trapecio','trapezius']) ? 'traps' : 'upperBack';
   if(has(['hip thrust','puente de gluteos','glute bridge','patada de gluteo','kickback','peso muerto','deadlift'])) return 'glutesMax';
-  if(has(['sentadilla','squat','prensa de piernas','leg press','zancada','zancadas','lunge','lunges','extension de cuadriceps','leg extension'])) return 'quads';
+  if(has(['sentadilla','squat','prensa de piernas','press de piernas','press piernas','leg press','zancada','zancadas','lunge','lunges','extension de cuadriceps','extensiones de cuadriceps','leg extension'])) return 'quads';
   if(has(['press inclinado','incline press'])) return 'chestUpper';
   if(has(['press declinado','decline press'])) return 'chestLower';
-  if(has(['press','apertura','aperturas','fly','pecho','push up','pushup','fondos'])) return 'chestMid';
+  if(has(['press banca','press de banca','bench press','press plano','press de pecho','chest press','flexion','flexiones','push up','pushup','fondos','apertura','aperturas','fly'])) return 'chestMid';
   return null;
 }
 function catalogExerciseMatch(name){
