@@ -6,6 +6,8 @@ var History = SobrecargaHistory;
 var Profile = SobrecargaProfile;
 var Settings = SobrecargaSettings;
 var Library = SobrecargaLibrary;
+var RoutineViews = SobrecargaRoutineViews;
+var ExerciseList = SobrecargaExerciseList;
 
 /* ---------- utilidades ---------- */
 var $ = function(s, el){ return (el||document).querySelector(s); };
@@ -696,7 +698,10 @@ var Store = {
         var firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(window.SOBRECARGA_FIREBASE_CONFIG);
         Store.firebaseAuth = firebase.auth(firebaseApp);
         Store.firebaseDb = firebase.firestore(firebaseApp);
-        Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){ });
+        Store.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(error){
+          console.warn('No se pudo mantener la sesión de Firebase entre visitas',error);
+          toast('La sesión podría no mantenerse al cerrar el navegador');
+        });
         var redirectPending=false;
         try{ redirectPending=sessionStorage.getItem('sobrecarga-google-redirect')==='1'; }catch(e){}
         Store.firebaseAuth.getRedirectResult().then(function(result){
@@ -938,17 +943,21 @@ var Store = {
     }
   },
   saveProfile:function(){
-    if(!['db','cloud'].includes(S.kind)){ Store.saveLocal(); return; }
-    Store.saveLocal();
+    var savedLocally=Store.saveLocal();
+    if(!['db','cloud'].includes(S.kind)) return savedLocally;
+    if(!savedLocally) console.warn('El perfil no pudo guardarse localmente; se intentará guardar en la nube');
     profDirty = true; clearTimeout(profTimer); profTimer = setTimeout(function(){ Store.flush().catch(function(){}); }, 350);
+    return true;
   },
   saveProfileNow:function(){
     if(!['db','cloud'].includes(S.kind)){
       return Store.saveLocal() ? Promise.resolve() : Promise.reject(new Error('No se pudo guardar el perfil en este navegador'));
     }
-    Store.saveLocal();
+    var savedLocally=Store.saveLocal();
     profDirty=true; clearTimeout(profTimer);
-    return Store.flush();
+    return Store.flush().then(function(){
+      if(!savedLocally) console.warn('El perfil se guardó en la nube, pero no se pudo guardar localmente');
+    });
   },
   flush:function(){
     if(profBusy) return new Promise(function(resolve,reject){

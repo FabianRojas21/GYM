@@ -119,10 +119,24 @@ test('rechaza formas inválidas, campos inesperados y límites excedidos',async(
 
   const invalidDraft=Object.assign(draft(),{entries:'not-an-array'});
   await assertFails(setDoc(doc(db,'users/owner/app/draft'),invalidDraft));
+  const invalidDraftDate=Object.assign(draft(),{date:'2026-04-31'});
+  await assertFails(setDoc(doc(db,'users/owner/app/draft'),invalidDraftDate));
 
   const invalidSession=session();
   invalidSession.date='not-a-date';
   await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),invalidSession));
+  const impossibleDate=session();
+  impossibleDate.date='2026-02-31';
+  await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),impossibleDate));
+  const nonLeapDay=session();
+  nonLeapDay.date='2025-02-29';
+  await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),nonLeapDay));
+  const leapDay=session();
+  leapDay.date='2024-02-29';
+  await assertSucceeds(setDoc(doc(db,'users/owner/sessions/session-1'),leapDay));
+  const reversedTimestamps=session();
+  reversedTimestamps.finishedAt=reversedTimestamps.startedAt-1;
+  await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),reversedTimestamps));
   await assertFails(setDoc(doc(db,'users/owner/sessions/wrong-id'),session('session-1')));
   const tooManyEntries=session();
   tooManyEntries.entries=Array.from({length:251},()=>({exId:'bench',sets:[]}));

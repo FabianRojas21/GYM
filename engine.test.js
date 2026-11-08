@@ -1146,6 +1146,7 @@ test('la biblioteca resume rutinas y muestra la última actividad de sus ejercic
   assert.match(app,/return RoutineViews\.routineDetail\(S,routine/);
   assert.match(app,/return RoutineViews\.programEditor\(S/);
   assert.match(app,/return RoutineViews\.routineEditor\(S/);
+  assert.match(app,/var RoutineViews = SobrecargaRoutineViews/);
   assert.match(routineViews,/function routineDetail\(state,routine,helpers\)/);
   assert.match(fs.readFileSync('./index.html','utf8'),/routine-views\.js\?v=__BUILD_ID__/);
   assert.match(fs.readFileSync('./sw.js','utf8'),/routine-views\.js/);
@@ -1206,10 +1207,18 @@ test('la lista de progreso de ejercicios se renderiza desde su módulo', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const exerciseList=fs.readFileSync('./exercise-list.js','utf8');
   assert.match(app,/return ExerciseList\.render\(S,/);
+  assert.match(app,/var ExerciseList = SobrecargaExerciseList/);
   assert.match(exerciseList,/class="card exercise-progress-card'\+\(open\?' is-open':''\)/);
   assert.match(exerciseList,/data-act="toggle-ex"/);
   assert.match(fs.readFileSync('./index.html','utf8'),/exercise-list\.js\?v=__BUILD_ID__/);
   assert.match(fs.readFileSync('./sw.js','utf8'),/exercise-list\.js/);
+});
+
+test('los fallos de guardado local y persistencia de sesión no se silencian', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  assert.match(app,/if\(!savedLocally\) console\.warn\('El perfil no pudo guardarse localmente/);
+  assert.match(app,/setPersistence\(firebase\.auth\.Auth\.Persistence\.LOCAL\)\.catch\(function\(error\)/);
+  assert.match(app,/No se pudo mantener la sesión de Firebase entre visitas/);
 });
 
 test('las recomendaciones muestran el motivo y el resultado solo al desplegar el detalle', () => {

@@ -33,8 +33,10 @@ Para ejecutar también las pruebas de Firebase y navegador, instala Node.js 20 o
 posterior y Java 21, ejecuta `npm ci` y después `npm test`. Las pruebas de
 Firestore usan el Emulator en un proyecto de prueba aislado y no acceden a
 cuentas ni datos reales. Las pruebas de navegador abren la app en Chromium con
-sincronización remota desactivada. En la primera ejecución, Playwright puede
-instalar Chromium con `npx playwright install chromium`.
+sincronización remota desactivada e incluyen completar un entreno, recuperar un
+borrador tras recargar, verificar la recomendación y crear/abrir una rutina. En
+la primera ejecución, Playwright puede instalar Chromium con
+`npx playwright install chromium`.
 
 El catálogo sugerido incluye 100 ejercicios con equipo y músculos principales y
 secundarios asignados. Los ejercicios personalizados y sus asignaciones se

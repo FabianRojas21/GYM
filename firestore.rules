@@ -11,6 +11,15 @@ service cloud.firestore {
         data.keys().hasAll(required);
     }
 
+    function validDate(value) {
+      return value is string && (
+        value.matches('^[0-9]{4}-(01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])$') ||
+        value.matches('^[0-9]{4}-(04|06|09|11)-(0[1-9]|[12][0-9]|30)$') ||
+        value.matches('^[0-9]{4}-02-(0[1-9]|1[0-9]|2[0-8])$') ||
+        value.matches('^([0-9]{2}(0[48]|[2468][048]|[13579][26])|([02468][048]|[13579][26])00)-02-29$')
+      );
+    }
+
     function validProfile(data) {
       return hasFields(
           data,
@@ -43,7 +52,7 @@ service cloud.firestore {
           ['date', 'startedAt', 'routineId', 'programId', 'entries', 'collapsedEntryIds',
            'updatedAt', 'restEndsAt', 'restOwner']
         ) &&
-        (data.date == null || data.date is string) &&
+        (data.date == null || validDate(data.date)) &&
         (data.startedAt == null || data.startedAt is int) &&
         (data.routineId == null || data.routineId is string) &&
         (data.programId == null || data.programId is string) &&
@@ -64,8 +73,9 @@ service cloud.firestore {
         ) &&
         data.id == sessionId &&
         sessionId.size() > 0 && sessionId.size() <= 128 &&
-        data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-        data.ts is int && data.startedAt is int && data.finishedAt is int &&
+        validDate(data.date) &&
+        data.ts is int && data.ts >= 0 && data.startedAt is int && data.startedAt >= 0 &&
+        data.finishedAt is int && data.finishedAt >= data.startedAt &&
         data.durationMs is int && data.durationMs >= 0 &&
         data.entries is list && data.entries.size() <= 250 &&
         data.updatedAt is int &&
