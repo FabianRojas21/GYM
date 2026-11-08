@@ -46,7 +46,7 @@ test('routine editor renders the existing exercise controls and actions',()=>{
   const html=routineEditor({
     redit:{
       id:'r1',name:'Día A',programId:'p1',pick:false,
-      items:[{exId:'press',sets:3,min:8,max:12,inc:2.5,loadStep:2.5,warmupSets:1,efforts:[2,2,1],warmupPercents:[50],unilateral:false}]
+      items:[{exId:'press',sets:3,min:8,max:12,inc:2.5,loadStep:2.5,maxProgressIncrease:5,progressionMode:'weight',warmupSets:1,efforts:[2,2,1],warmupPercents:[50],unilateral:false}]
     },
     profile:{settings:{mode:'rir',targetRir:2},programs:{p1:{name:'Fuerza'}}}
   },helpers);
@@ -55,6 +55,10 @@ test('routine editor renders the existing exercise controls and actions',()=>{
   assert.match(html,/data-routine-program/);
   assert.match(html,/data-it="warmupMode"/);
   assert.match(html,/data-it="warmupPercent"/);
+  assert.match(html,/data-it="progressionMode"/);
+  assert.match(html,/data-it="maxProgressIncrease"/);
+  assert.match(html,/Peso primero: subir al cumplir el mínimo de reps/);
+  assert.match(html,/Si el salto supera 5 kg, mantienes el peso actual/);
   assert.match(html,/data-ef="1"/);
   assert.match(html,/data-act="rut-up"/);
   assert.match(html,/data-act="rut-rm-item"/);

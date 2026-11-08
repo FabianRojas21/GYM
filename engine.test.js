@@ -227,6 +227,30 @@ test('redondea el incremento al siguiente salto del equipo', () => {
   assert.equal(result.nextW, 28.5);
 });
 
+test('mantiene el peso cuando el salto del equipo supera el máximo aceptable', () => {
+  const exercise = {...baseExercise, inc:7, loadStep:7, maxProgressIncrease:5};
+  const result = analyze(exercise, [set(10,2,79), set(10,2,79), set(10,2,79)], null, rirSettings);
+  assert.equal(result.status, 'mantener');
+  assert.equal(result.nextW, 79);
+  assert.equal(result.progressTarget, 86);
+  assert.match(result.detail, /supera tu límite configurado/);
+});
+
+test('permite elegir subir el peso al completar el mínimo de repeticiones', () => {
+  const exercise = {...baseExercise, progressionMode:'weight'};
+  const result = analyze(exercise, [set(8), set(8), set(8)], null, rirSettings);
+  assert.equal(result.status, 'sube');
+  assert.equal(result.nextW, 62);
+  const doubleProgression = analyze(baseExercise, [set(8), set(8), set(8)], null, rirSettings);
+  assert.equal(doubleProgression.status, 'reps');
+});
+
+test('sugiere descarga solo ante retroceso repetido en varios ejercicios', () => {
+  assert.equal(Engine.suggestDeload([{status:'bajar'},{status:'bajar'}]), null);
+  assert.deepEqual(Engine.suggestDeload([{status:'bajar'},{status:'bajar'},{status:'bajar'}]), {count:3,trigger:'repeated-low-reps'});
+  assert.equal(Engine.suggestDeload(null), null);
+});
+
 test('las series normales extra se guardan pero no bloquean la subida', () => {
   const result = analyze(baseExercise, [set(10), set(10), set(10), set(6, 0)], null, rirSettings);
   assert.equal(result.status, 'sube');
@@ -475,6 +499,8 @@ test('la sección Tus datos muestra fecha y alcance de respaldos', () => {
   assert.match(status,/Última copia automática en este navegador/);
   assert.match(status,/Última descarga solicitada/);
   assert.match(status,/Comprueba que el archivo esté en tu dispositivo/);
+  assert.match(status,/Para mover tus datos, descarga el JSON/);
+  assert.match(status,/La copia automática solo está en este navegador/);
   assert.match(source,/Respaldo restaurado[\s\S]*addedSessions/);
   assert.match(source,/createAutoBackup\(\);\s*render\(\);\s*toast\('Copia automática restaurada/);
 });
@@ -1246,6 +1272,43 @@ test('las recomendaciones muestran el motivo y el resultado solo al desplegar el
   assert.match(live[0],/<details class="goal-more"><summary>Ver motivo<\/summary>/);
   assert.match(live[0],/Resultado de hoy:/);
   assert.match(live[0],/a\.detail/);
+  assert.match(app,/function progressionMathHtml\(ex, result\)/);
+  assert.match(app,/Salto deseado:/);
+  assert.match(app,/result\.W/);
+  assert.match(app,/result\.progressTarget/);
+  assert.match(app,/data-hc="progressionMode"/);
+  assert.match(app,/f\('maxProgressIncrease'/);
+  assert.match(app,/data-cfg="progressionMode"/);
+  assert.match(app,/f\('maxProgressIncrease'/);
+});
+
+test('la sugerencia de semana liviana es prudente, manual y descarta datos de ejemplo',()=>{
+  const app=fs.readFileSync('./app.js','utf8');
+  const recovery=app.match(/function recoveryWeekSuggestionHtml\(\)\{[\s\S]*?\n\}/);
+  assert.ok(recovery);
+  assert.match(recovery[0],/session\.demo/);
+  assert.match(recovery[0],/cutoffDate/);
+  assert.match(recovery[0],/status==='bajar'/);
+  assert.match(recovery[0],/data-act="deload-dismiss"/);
+  assert.match(recovery[0],/no cambia tus rutinas ni tus datos/);
+  assert.match(app,/case 'deload-dismiss':/);
+});
+
+test('la explicación visible muestra el salto desde la carga actual',()=>{
+  const app=fs.readFileSync('./app.js','utf8');
+  const helper=app.match(/function progressionMathHtml\(ex, result\)\{[\s\S]*?\n\}/);
+  assert.ok(helper);
+  const context={
+    Number,
+    weightText:value=>Number(value)+' kg',
+    exerciseLoadStep:exercise=>Number(exercise.loadStep),
+    esc:String
+  };
+  vm.runInNewContext(helper[0]+';globalThis.progressionMathForTest=progressionMathHtml;',context);
+  const html=context.progressionMathForTest({inc:7,loadStep:7},{W:79,progressIncrease:7,progressTarget:86});
+  assert.match(html,/Salto deseado: 7 kg/);
+  assert.match(html,/disponible en el equipo: cada 7 kg/);
+  assert.match(html,/79 kg \+ 7 kg = 86 kg/);
 });
 
 test('el entrenamiento muestra un resumen y abre la calculadora contextual en una hoja inferior', () => {

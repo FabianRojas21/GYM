@@ -45,7 +45,7 @@
     routine.items.forEach(function(item,index){
       var warmCfg=helpers.warmupSettings(item);
       var field=function(key,label,value){
-        var weightSetting=['inc','loadStep','warmupStep'].includes(key);
+        var weightSetting=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(key);
         return '<div class="field"><label class="lab" for="it-'+key+'-'+index+'">'+label+'</label><input id="it-'+key+'-'+index+'" class="txt" inputmode="decimal" data-it="'+key+'" data-i="'+index+'" value="'+helpers.esc(weightSetting?helpers.weightInput(value):String(value).replace('.',','))+'"></div>';
       };
       var efforts='';
@@ -60,6 +60,8 @@
         '<div class="fields">'+field('sets','Series de trabajo',item.sets)+field('warmupSets','Series de aproximación',Number(item.warmupSets)||0)+field('min','Reps mín.',item.min)+field('max','Reps máx.',item.max)+
         field('inc','Salto de progresión ('+helpers.weightUnitLabel()+')',item.inc)+
         field('loadStep','Peso disponible cada ('+helpers.weightUnitLabel()+')',Number(item.loadStep)>0?item.loadStep:helpers.exerciseLoadStep(helpers.exById(item.exId)||item))+
+        field('maxProgressIncrease','Salto máximo aceptable ('+helpers.weightUnitLabel()+', 0 = sin límite)',Number(item.maxProgressIncrease)||0)+
+        '<div class="field"><label class="lab" for="it-progressionMode-'+index+'">Estrategia de progresión</label><select id="it-progressionMode-'+index+'" class="txt" data-it="progressionMode" data-i="'+index+'"><option value="double"'+(item.progressionMode==='weight'?'':' selected')+'>Doble: sumar reps y luego peso</option><option value="weight"'+(item.progressionMode==='weight'?' selected':'')+'>Peso primero: subir al cumplir el mínimo de reps</option></select></div>'+
         '<div class="field"><label class="lab" for="it-warmupMode-'+index+'">Peso de aproximación</label><select id="it-warmupMode-'+index+'" class="txt" data-it="warmupMode" data-i="'+index+'"><option value="auto"'+(warmCfg.warmupMode==='auto'?' selected':'')+'>Calcular automáticamente</option><option value="manual"'+(warmCfg.warmupMode==='manual'?' selected':'')+'>Anotar manualmente</option></select></div>'+
         field('warmupStep','Incremento para redondear ('+helpers.weightUnitLabel()+')',warmCfg.warmupStep)+
         '<div class="field"><label class="lab" for="it-unilateral-'+index+'">Ejecución</label><select id="it-unilateral-'+index+'" class="txt" data-it="unilateral" data-i="'+index+'"><option value="false"'+(item.unilateral?'':' selected')+'>Bilateral</option><option value="true"'+(item.unilateral?' selected':'')+'>Unilateral · ambos lados</option></select></div></div>'+
@@ -68,7 +70,7 @@
         }).join('')+'</div></div>':'')+
         '<div class="field"><span class="lab">Esfuerzo objetivo por serie ('+lab+')</span><div class="efforts">'+efforts+'</div></div>'+
         '<p class="small muted">'+((Number(item.warmupSets)||0)?item.warmupSets+(item.warmupSets===1?' serie de aproximación + ':' series de aproximación + ')+(warmCfg.warmupMode==='auto'?' calculada desde el peso de trabajo y redondeada hacia abajo en saltos de '+helpers.weightText(warmCfg.warmupStep)+'. ':'con peso manual. '):'')+
-        item.sets+' series de trabajo × '+item.min+'–'+item.max+' reps. Subes '+helpers.weightText(item.inc)+' cuando todas las series de trabajo lleguen a '+item.max+' reps con el esfuerzo pedido.</p></section>';
+        item.sets+' series de trabajo × '+item.min+'–'+item.max+' reps. '+(item.progressionMode==='weight'?'Subes cuando todas las series llegan al mínimo de '+item.min+' reps con esfuerzo razonable. ':'En doble progresión, subes '+helpers.weightText(item.inc)+' cuando todas las series lleguen a '+item.max+' reps con esfuerzo razonable. ')+(Number(item.maxProgressIncrease)>0?'Si el salto supera '+helpers.weightText(item.maxProgressIncrease)+', mantienes el peso actual.':'')+'</p></section>';
     });
     if(routine.pick) output+=helpers.pickerHtml('routine');
     else output+='<button class="btn ghost block" data-act="rut-add">+ Añadir ejercicio</button>';

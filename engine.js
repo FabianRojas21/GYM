@@ -233,6 +233,10 @@
     if(previous===0) return current ? 'Carga nueva' : 'Sin cambios';
     return current>previous*1.15 ? 'Carga al alza' : current<previous*0.85 ? 'Carga a la baja' : 'Carga estable';
   }
+  function suggestDeload(progressions){
+    var declining=Array.isArray(progressions) ? progressions.filter(function(item){ return item && item.status === 'bajar'; }).length : 0;
+    return declining >= 3 ? {count:declining, trigger:'repeated-low-reps'} : null;
+  }
   function effortTarget(ex, index, settings){
     var efforts = ex.efforts;
     return efforts && efforts[index] !== undefined && efforts[index] !== null ? efforts[index] : settings.targetRir;
@@ -291,13 +295,25 @@
     }
     var serFalt = Math.max(0, need - n);
     var progressIncrease = availableWeight(increment, ex.loadStep || increment, 'up');
-    var result = {W:weight, nextW:weight, progressTarget:Math.round((weight + progressIncrease) * 100) / 100, reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[], goal:goalProfile.label};
+    var progressionMode = ex.progressionMode === 'weight' ? 'weight' : 'double';
+    var maxProgressIncrease = Number(ex.maxProgressIncrease) || 0;
+    var weightReady = progressionMode === 'weight'
+      ? n >= need && reps.every(function(value){ return value >= ex.min; }) && okEffort
+      : (allTop && okEffort) || easy;
+    var jumpTooLarge = maxProgressIncrease > 0 && progressIncrease > maxProgressIncrease;
+    var result = {W:weight, nextW:weight, progressTarget:Math.round((weight + progressIncrease) * 100) / 100, progressIncrease:progressIncrease, progressionMode:progressionMode, reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[], goal:goalProfile.label};
     var fill = function(value){ return Array.apply(null, Array(need)).map(function(){ return value; }); };
 
-    if((allTop && okEffort) || easy){
+    if(weightReady && jumpTooLarge){
+      result.status = 'mantener'; result.target = fill(progressionMode === 'weight' ? ex.min : ex.max); result.progress = progressionMode === 'weight' ? progress : 1;
+      result.headline = 'Mantén ' + weightText(weight,settings);
+      result.detail = 'El siguiente salto disponible (' + weightText(progressIncrease,settings) + ') supera tu límite configurado de ' + weightText(maxProgressIncrease,settings) + '. Mantén el peso y ajusta el salto máximo o el peso disponible del equipo si quieres progresar.';
+    } else if(weightReady){
       result.status = 'sube'; result.nextW = result.progressTarget; result.target = fill(ex.min); result.progress = 1;
       result.headline = 'Sube a ' + weightText(result.nextW,settings);
-      result.detail = allTop
+      result.detail = progressionMode === 'weight' && !allTop
+        ? 'Completaste todas las series con al menos ' + ex.min + ' reps y esfuerzo razonable. Próximo entreno: ' + weightText(result.nextW,settings) + ' y vuelve a buscar ' + ex.min + ' reps.'
+        : allTop
         ? 'Cumpliste ' + need + '×' + ex.max + (avgRir !== null ? ' con ' + effTxt(avgRir, settings) : '') + '. Próximo entreno: ' + weightText(result.nextW,settings) + ' y apunta a ' + ex.min + ' reps en cada serie.'
         : 'Te sobraron repeticiones (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '). Sube a ' + weightText(result.nextW,settings) + ' y apunta a ' + ex.min + ' reps en cada serie.';
     } else if(allTop){
@@ -426,6 +442,6 @@
     muscleGroupId:muscleGroupId, effectiveBodyweight:effectiveBodyweight,
     orderedProgramRoutines:orderedProgramRoutines, programRoutineOrderConfigured:programRoutineOrderConfigured,
     programRecommendation:programRecommendation,
-    comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend
+    comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend, suggestDeload:suggestDeload
   };
 });

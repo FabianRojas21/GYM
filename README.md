@@ -175,6 +175,12 @@ hacia el siguiente peso disponible y las de bajada hacia uno disponible menor
 o igual. Por ejemplo, un salto progresivo de 2 kg desde 26 kg con mancuernas
 disponibles cada 2 kg propone 28 kg. Los datos y reglas existentes se
 conservan; si no configuras este valor, se usa el salto de progresión actual.
+La recomendación muestra el salto deseado, el incremento permitido por el
+equipo y la suma desde el peso actual. También puedes elegir entre doble
+progresión (sumar reps antes de subir) o subir el peso al completar el mínimo
+de reps. **Salto máximo aceptable** limita las subidas automáticas; con 0 no
+hay límite y, si un salto supera el valor configurado, la app recomienda
+mantener el peso. Estas reglas se pueden ajustar en cada ejercicio y rutina.
 
 En **Ajustes** puedes elegir si la app muestra y acepta cargas en kg o lb.
 Los pesos se siguen guardando internamente en kg para conservar la
@@ -257,6 +263,14 @@ o un ejercicio por error, usa **Deshacer** en el aviso que aparece. También
 puedes mover ejercicios arriba o abajo durante el entreno; el nuevo orden se
 guarda en el borrador actual. El temporizador de descanso y los controles para
 añadir o copiar series siguen disponibles en ambos modos.
+Los campos de una serie siguen editables después de marcarla como hecha;
+**Hecha · deshacer** vuelve a dejarla pendiente y **×** la quita con una
+opción para deshacer la eliminación.
+
+Si en los últimos 21 días al menos tres ejercicios quedan bajo el mínimo de
+repeticiones durante dos entrenos seguidos con el mismo peso, Hoy puede mostrar
+una sugerencia opcional de semana más liviana. No es un diagnóstico ni cambia
+la rutina: cualquier ajuste de peso o series lo decides tú.
 
 ## Tipos de serie
 
@@ -332,8 +346,11 @@ por serie y mejor serie estimada, con la fecha de cada marca. Solo cuentan las
 series normales.
 
 En **Ajustes → Tus datos**, descarga un respaldo JSON e impórtalo cuando lo
-necesites. La restauración reemplaza los datos existentes y pide confirmación
-antes de hacerlo; usa un respaldo generado por Sobrecarga.
+necesites. La restauración pide confirmación y combina los datos: conserva los
+registros actuales y agrega los elementos del respaldo que no existían. La
+copia automática solo está en el navegador; descarga el JSON y guárdalo fuera
+del dispositivo para tener una copia independiente. La sincronización de cuenta
+no sustituye ese respaldo externo.
 
 ## Ajustes de rutina y aproximación
 
@@ -427,7 +444,9 @@ copia automática local, además de cuándo se solicitó la última descarga JSO
 La copia automática solo existe en ese navegador. La app no puede confirmar que
 el navegador haya guardado el archivo descargado; comprueba que esté en tu
 dispositivo. Al restaurar una copia válida, se informa cuántos entrenos nuevos
-se agregaron y se actualiza la copia automática.
+se agregaron y se actualiza la copia automática. Para trasladar datos, descarga
+el JSON en el dispositivo de origen y usa **Restaurar respaldo** en el destino;
+la importación combina datos sin reemplazar los registros existentes.
 
 ## Sincronización con Firebase
 

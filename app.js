@@ -1771,6 +1771,11 @@ function recommendationStateLine(a){
   var headline = labelMap[a.status] || 'Objetivo';
   return '<div class="goal-state-line"><div class="goal-state-copy"><span>Estado</span>' + chip(a.status) + '</div><strong>' + esc(headline) + ' · ' + esc(a.headline) + '</strong></div>';
 }
+function progressionMathHtml(ex, result){
+  if(!result || !Number.isFinite(Number(result.W)) || !Number.isFinite(Number(result.progressIncrease))) return '';
+  var intended=Number(ex.inc)||0, available=exerciseLoadStep(ex), used=Number(result.progressIncrease);
+  return '<p class="progression-math"><strong>Cómo se calcula la subida</strong><span>Salto deseado: '+esc(weightText(intended))+' · disponible en el equipo: cada '+esc(weightText(available))+'</span><span>Se aplicaría '+esc(weightText(used))+': '+esc(weightText(result.W))+' + '+esc(weightText(used))+' = '+esc(weightText(result.progressTarget))+'.</span></p>';
+}
 function liveHtml(ei){
   var en = S.draft.entries[ei], ex = effEx(en);
   var sets = rowsToSets(en.rows, ex.unilateral);
@@ -1781,7 +1786,7 @@ function liveHtml(ei){
     ? 'Completa peso y repeticiones en ambos lados para ver tu progreso.'
     : 'Anota tus series y verás cuánto te falta para subir de peso.') + '</p>';
   var resultSets = datedSets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && validReps(set.r); });
-  return recommendationStateLine(a) + barHtml(a, ex) +
+  return recommendationStateLine(a) + barHtml(a, ex) + progressionMathHtml(ex,a) +
     '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Resultado de hoy: ' + esc(setsText(resultSets)) + '</p><p class="small">' + esc(a.detail) + '</p></details>';
 }
 function previousWorkSet(exId, workIndex, unilateral){
@@ -1957,7 +1962,7 @@ function goalHtml(ex, planned){
       '<p class="small">Elige un peso con el que llegues a ' + ex.min + '–' + ex.max + ' reps con ' + esc(tgtText(ex, S.profile.settings)) + (ex.unilateral ? ' en cada lado' : '') + '. Con eso te armo el objetivo del próximo entreno.</p>' + plan + '</div>';
   }
   return '<div class="goal"><div class="goal-row">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</span></div>' +
-    barHtml(p, ex) +
+    barHtml(p, ex) + progressionMathHtml(ex,p) +
     '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Último entreno, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div>';
 }
 function previousWorkoutSummaryHtml(plan){
@@ -2102,7 +2107,7 @@ function entryHtml(en, ei){
     '<details class="workout-help"><summary>Ayuda con las series</summary><p class="hint">' + (ex.unilateral
       ? 'Cada ronda registra ambos lados. Cuenta como una serie cuando completaste derecho e izquierdo; la progresión espera que ambos lados cumplan el objetivo. '
       : 'Solo las series normales cuentan para la sobrecarga. ') +
-      'Registra cada tramo de drop set o rest-pause en una fila aparte; todos los tipos quedan en el historial.</p></details>' +
+      'Registra cada tramo de drop set o rest-pause en una fila aparte; todos los tipos quedan en el historial. Puedes corregir los campos después de marcar una serie como hecha; «Hecha · deshacer» la reabre y × la quita con opción de deshacer.</p></details>' +
     '<div class="row"><button class="btn ghost sm" data-act="add-set" data-ei="' + ei + '">+ Serie</button>' +
     '<button class="btn ghost sm" data-act="repeat-set" data-ei="' + ei + '">Copiar última serie</button>' +
     '<button class="btn ghost sm" data-act="toggle-cfg" data-ei="' + ei + '" aria-expanded="' + (S.openCfg === en.exId ? 'true' : 'false') + '">Ajustar series, reps y salto</button></div>' +
@@ -2114,14 +2119,15 @@ function cfgPanel(en, ei){
   var warmCfg = warmupSettings(ex);
   var rt = en.cfg && S.draft.routineId && S.profile.routines[S.draft.routineId];
   var f = function(key, label, val){
-    var weightSetting=['inc','loadStep','warmupStep'].includes(key);
+    var weightSetting=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(key);
     return '<div class="field"><label class="lab" for="hc-' + key + '-' + ei + '">' + label + '</label><input id="hc-' + key + '-' + ei + '" class="txt" inputmode="decimal" data-hc="' + key + '" data-ei="' + ei + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
   };
   var ef = '';
   for(var k=0;k<ex.sets;k++){
     ef += '<div class="field"><label class="lab" for="hef-' + ei + '-' + k + '">Serie ' + (k+1) + '</label><input id="hef-' + ei + '-' + k + '" class="in" inputmode="decimal" data-hef="1" data-ei="' + ei + '" data-k="' + k + '" value="' + esc(effInputVal(effortTarget(ex, k, S.profile.settings))) + '"></div>';
   }
-  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) +
+  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('maxProgressIncrease', 'Salto máximo aceptable (' + weightUnitLabel() + ', 0 = sin límite)', Number(ex.maxProgressIncrease)||0) +
+    '<div class="field"><label class="lab" for="hc-progressionMode-' + ei + '">Estrategia de progresión</label><select id="hc-progressionMode-' + ei + '" class="txt" data-hc="progressionMode" data-ei="' + ei + '"><option value="double"' + (ex.progressionMode === 'weight' ? '' : ' selected') + '>Doble: sumar reps y luego peso</option><option value="weight"' + (ex.progressionMode === 'weight' ? ' selected' : '') + '>Peso primero: subir al cumplir el mínimo de reps</option></select></div>' +
     '<div class="field"><label class="lab" for="hc-warmupMode-' + ei + '">Peso de aproximación</label><select id="hc-warmupMode-' + ei + '" class="txt" data-hc="warmupMode" data-ei="' + ei + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
     f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
     '<div class="field"><label class="lab" for="hc-unilateral-' + ei + '">Ejecución</label><select id="hc-unilateral-' + ei + '" class="txt" data-hc="unilateral" data-ei="' + ei + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
@@ -2135,7 +2141,7 @@ function cfgPanel(en, ei){
 function applyEntryCfg(ei, key, v, k){
   var en = S.draft.entries[ei]; if(!en) return;
   var ex = effEx(en), tr = S.profile.settings.targetRir;
-  var c = Object.assign({sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), efforts:(ex.efforts || []).slice(), unilateral:!!ex.unilateral}, warmupSettings(ex));
+  var c = Object.assign({sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), maxProgressIncrease:Number(ex.maxProgressIncrease)||0, progressionMode:ex.progressionMode==='weight'?'weight':'double', efforts:(ex.efforts || []).slice(), unilateral:!!ex.unilateral}, warmupSettings(ex));
   while(c.efforts.length < c.sets) c.efforts.push(c.efforts.length ? c.efforts[c.efforts.length-1] : tr);
   if(key === 'sets') c.sets = Math.min(10, Math.max(1, Math.round(v)));
   if(key === 'warmupSets') c.warmupSets = Math.min(10, Math.max(0, Math.round(v)));
@@ -2143,6 +2149,8 @@ function applyEntryCfg(ei, key, v, k){
   if(key === 'max'){ c.max = Math.min(60, Math.max(2, Math.round(v))); if(c.min >= c.max) c.min = c.max - 1; }
   if(key === 'inc') c.inc = Math.min(25, Math.max(0.25, v));
   if(key === 'loadStep') c.loadStep = Math.min(100, Math.max(0.05, v));
+  if(key === 'maxProgressIncrease') c.maxProgressIncrease = Math.min(100, Math.max(0, v));
+  if(key === 'progressionMode') c.progressionMode = v === 'weight' ? 'weight' : 'double';
   if(key === 'warmupStep') c.warmupStep = Math.min(100, Math.max(0.05, v));
   if(key === 'warmupMode') c.warmupMode = v;
   if(key === 'unilateral') c.unilateral = !!v;
@@ -2821,6 +2829,7 @@ function homeDashboard(){
     '<div class="weekly-stat"><strong>' + stats.effectiveSets + '</strong><span>series efectivas</span></div>' +
     '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>carga × reps · sin aprox.</span></div></div>' +
     workoutReminderHtml(latest) +
+    recoveryWeekSuggestionHtml() +
     weeklyMuscleSummaryHtml(week);
   if(latest){
     var latestStats = sessionStats(latest);
@@ -2844,6 +2853,41 @@ function homeDashboard(){
   out += routineQuick() + suggestHtml();
   if(S.picker) out += pickerHtml('day');
   return out;
+}
+var DELOAD_DISMISSED_KEY='sobrecarga:deload-dismissed:v1';
+function recoveryWeekSuggestionHtml(){
+  var cutoff=new Date(); cutoff.setDate(cutoff.getDate()-21);
+  var cutoffDate=iso(cutoff);
+  var recentSessions=S.sessions.filter(function(session){return !session.demo&&session.date>=cutoffDate;})
+    .sort(function(a,b){return a.date===b.date?(Number(b.ts)||0)-(Number(a.ts)||0):b.date.localeCompare(a.date);});
+  var sessionsByExercise=Object.create(null);
+  recentSessions.forEach(function(session){
+    var exerciseIds=new Set(session.entries.map(function(entry){return entry.exId;}));
+    exerciseIds.forEach(function(id){
+      var history=sessionsByExercise[id]||(sessionsByExercise[id]=[]);
+      if(history.length<2) history.push(session);
+    });
+  });
+  var declining=[];
+  Object.keys(S.profile.exercises).forEach(function(id){
+    var ex=exById(id);
+    if(!ex||ex.archived) return;
+    var history=sessionsByExercise[id]||[];
+    if(history.length<2) return;
+    var currentEntry=history[0].entries.filter(function(entry){return entry.exId===id;});
+    var previousEntry=history[1].entries.filter(function(entry){return entry.exId===id;});
+    var currentSets=currentEntry.reduce(function(all,entry){return all.concat(entry.sets||[]);},[]);
+    var previousSets=previousEntry.reduce(function(all,entry){return all.concat(entry.sets||[]);},[]);
+    var currentPlan=analyze(ex,effectiveSetsFor(ex,currentSets,history[0].date),effectiveSetsFor(ex,previousSets,history[1].date),S.profile.settings);
+    if(currentPlan&&currentPlan.status==='bajar') declining.push({id:id,name:ex.name,status:'bajar'});
+  });
+  var suggestion=Engine.suggestDeload(declining);
+  if(!suggestion) return '';
+  var today=iso(new Date());
+  try { if(localStorage.getItem(DELOAD_DISMISSED_KEY)===today) return ''; }
+  catch(error){ console.warn('No se pudo leer el estado de la sugerencia de descarga',error); }
+  var names=declining.slice(0,3).map(function(item){return esc(item.name);}).join(', ');
+  return '<aside class="recovery-week-suggestion" aria-live="polite"><div><span class="home-eyebrow">Señal de recuperación</span><strong>Podrías considerar una semana más liviana</strong><p>En '+suggestion.count+' ejercicios el rendimiento quedó bajo el mínimo durante dos entrenos seguidos'+(names?' (por ejemplo: '+names+(suggestion.count>3?' y otros':'')+').':'.')+' Si te sirve, reduce algo el peso o las series por una semana y vuelve gradualmente. Es una sugerencia editable: no cambia tus rutinas ni tus datos.</p></div><button class="btn ghost sm" data-act="deload-dismiss">Entendido</button></aside>';
 }
 var REMINDER_DISMISSED_KEY='sobrecarga:reminder-dismissed:v1';
 function workoutReminderHtml(latest){
@@ -2893,7 +2937,7 @@ function effInputVal(rir){ return fmt(S.profile.settings.mode === 'rpe' ? 10 - r
 function newItem(exId){
   var ex = exById(exId), ef = [];
   for(var i=0;i<ex.sets;i++) ef.push(S.profile.settings.targetRir);
-  return Object.assign({exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), efforts:ef, unilateral:!!ex.unilateral}, warmupSettings(ex));
+  return Object.assign({exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), maxProgressIncrease:Number(ex.maxProgressIncrease)||0, progressionMode:ex.progressionMode==='weight'?'weight':'double', efforts:ef, unilateral:!!ex.unilateral}, warmupSettings(ex));
 }
 function viewRut(){
   if(S.pedit) return programEditor();
@@ -3220,7 +3264,7 @@ function exDetail(ex){
     return '<tr><td class="num">' + esc(dFmt(h.date)) + '</td><td>' + esc(setsText(h.sets, true)) + '</td></tr>';
   }).join('');
   var f = function(key, label, val, step){
-    var weightSetting=['inc','loadStep','warmupStep'].includes(key);
+    var weightSetting=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(key);
     return '<div class="field"><label class="lab" for="cfg-' + key + '">' + label + '</label><input id="cfg-' + key + '" class="txt" inputmode="decimal" data-cfg="' + key + '" data-id="' + esc(ex.id) + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
   };
   var muscleSummaryText = exerciseMuscleSummary(ex);
@@ -3228,7 +3272,8 @@ function exDetail(ex){
     '<p class="muted small">Peso × (1 + (reps + RIR) ÷ 30), ' + (ex.unilateral ? 'mejor estimado del lado más débil por entreno.' : 'mejor serie de cada entreno.') + '</p></div>' +
     (rows ? '<div class="scroll-x"><table class="table"><thead><tr><th>Fecha</th><th>Series</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="field"><span class="lab">Qué activa</span><p class="small muted">' + esc(muscleSummaryText) + '</p></div><div class="fields">' +
-      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
+      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('maxProgressIncrease', 'Salto máximo aceptable (' + weightUnitLabel() + ', 0 = sin límite)', Number(ex.maxProgressIncrease)||0) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
+      '<div class="field"><label class="lab" for="cfg-progressionMode">Estrategia de progresión</label><select id="cfg-progressionMode" class="txt" data-cfg="progressionMode" data-id="' + esc(ex.id) + '"><option value="double"' + (ex.progressionMode === 'weight' ? '' : ' selected') + '>Doble: sumar reps y luego peso</option><option value="weight"' + (ex.progressionMode === 'weight' ? ' selected' : '') + '>Peso primero: subir al cumplir el mínimo de reps</option></select><p class="small muted">El límite de salto deja el peso igual si el siguiente incremento supera el máximo que toleras.</p></div>' +
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
       '</div><div class="fields"><div class="field"><label class="lab" for="cfg-equipment">Equipo</label><select id="cfg-equipment" class="txt" data-cfg="equipment" data-id="' + esc(ex.id) + '">' + Object.keys(EQUIPMENT_TYPES).map(function(id){return '<option value="' + id + '"' + (exerciseEquipment(ex)===id?' selected':'') + '>' + esc(EQUIPMENT_TYPES[id]) + '</option>';}).join('') + '</select></div><div class="field"><label class="lab" for="cfg-muscle-group">Grupo muscular principal</label><select id="cfg-muscle-group" class="txt" data-cfg="muscle-group" data-id="' + esc(ex.id) + '">' + muscleGroupOptions(SobrecargaEngine.muscleGroupId(muscleId(ex))) + '</select><details class="muscle-advanced"><summary>Elegir músculo específico (avanzado)</summary><label class="lab" for="cfg-muscle">Porción o músculo</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></details>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div></div>' +
       '<fieldset class="field"><legend class="lab">Músculos secundarios</legend><p class="small muted">Fuente: ' + esc(muscleAssignmentSourceLabel(ex)) + '. Cada serie efectiva secundaria aporta 0,5 serie equivalente estimada (no se suma a carga × reps). Revisa la sugerencia y edítala según tu técnica.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
@@ -3761,7 +3806,7 @@ function startRoutine(id){
   r.items.forEach(function(it, index){
     if(!exById(it.exId)) return;
     if(exById(it.exId).archived){ skipped = true; return; }
-    var cfg = Object.assign({sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, loadStep:Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId)), efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral}, warmupSettings(it));
+    var cfg = Object.assign({sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, loadStep:Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId)), maxProgressIncrease:Number(it.maxProgressIncrease)||0, progressionMode:it.progressionMode==='weight'?'weight':'double', efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral}, warmupSettings(it));
     while(cfg.efforts.length < cfg.sets) cfg.efforts.push(cfg.efforts.length ? cfg.efforts[cfg.efforts.length-1] : S.profile.settings.targetRir);
     cfg.efforts = cfg.efforts.slice(0, cfg.sets);
     var p = planFor(Object.assign({}, exById(it.exId), cfg)), rows = [];
@@ -3855,6 +3900,8 @@ function draftRoutineItems(){
         exId:entry.exId, sets:Number(base.sets) || 3, min:Number(base.min) || 8,
         max:Number(base.max) || 12, inc:Number(base.inc) || 2.5,
         loadStep:Number(base.loadStep) > 0 ? Number(base.loadStep) : exerciseLoadStep(ex),
+        maxProgressIncrease:Number(base.maxProgressIncrease)||0,
+        progressionMode:base.progressionMode==='weight'?'weight':'double',
         unilateral:!!base.unilateral
       };
       if(Number(base.warmupSets) > 0) item.warmupSets = Number(base.warmupSets);
@@ -4132,6 +4179,10 @@ function onClick(ev){
     case 'reminder-dismiss':
       try { localStorage.setItem(REMINDER_DISMISSED_KEY,String(t.dataset.session)+':'+iso(new Date())); }
       catch(error){ console.warn('No se pudo guardar el estado del recordatorio',error); }
+      render(); break;
+    case 'deload-dismiss':
+      try { localStorage.setItem(DELOAD_DISMISSED_KEY,iso(new Date())); }
+      catch(error){ console.warn('No se pudo guardar el estado de la sugerencia de descarga',error); }
       render(); break;
     case 'profile-open-exercise': S.tab='ejercicios'; S.librarySection='ejercicios'; S.openEx=t.dataset.id; try{localStorage.setItem(TK,S.tab);}catch(e){} render(); window.scrollTo(0,0); break;
     case 'measurement-new': S.measurementForm=true; render(); break;
@@ -5017,7 +5068,12 @@ function onChange(ev){
       if(t.value === 'false' && hasLeftValues) toast('En modo bilateral se usa el lado derecho; el detalle por lado se conserva durante este entreno.');
       return;
     }
-    var hcWeight=['inc','loadStep','warmupStep'].includes(t.dataset.hc);
+    if(t.dataset.hc === 'progressionMode'){
+      if(!['double','weight'].includes(t.value)){ render(); return; }
+      applyEntryCfg(+t.dataset.ei, 'progressionMode', t.value);
+      return;
+    }
+    var hcWeight=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(t.dataset.hc);
     var hv = hcWeight?toKg(t.value):num(t.value);
     if(hv === null){ render(); return; }
     if(t.dataset.hc) applyEntryCfg(+t.dataset.ei, t.dataset.hc, hv);
@@ -5026,7 +5082,11 @@ function onChange(ev){
   }
   if(S.redit && t.dataset.it){
     var it = S.redit.items[+t.dataset.i], k = t.dataset.it;
-    var v0=['inc','loadStep','warmupStep'].includes(k)?toKg(t.value):num(t.value);
+    if(k === 'progressionMode'){
+      if(!it || !['double','weight'].includes(t.value)){ render(); return; }
+      it.progressionMode=t.value; render(); return;
+    }
+    var v0=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(k)?toKg(t.value):num(t.value);
     if(!it || v0 === null){ render(); return; }
     if(k === 'sets'){
       var ns = Math.min(10, Math.max(1, Math.round(v0))), ef = [];
@@ -5042,6 +5102,7 @@ function onChange(ev){
     if(k === 'max'){ it.max = Math.min(60, Math.max(2, Math.round(v0))); if(it.min >= it.max) it.min = it.max - 1; }
     if(k === 'inc') it.inc = Math.min(25, Math.max(0.25, v0));
     if(k === 'loadStep') it.loadStep = Math.min(100, Math.max(0.05, v0));
+    if(k === 'maxProgressIncrease') it.maxProgressIncrease = Math.min(100, Math.max(0, v0));
     render(); return;
   }
   if(S.redit && t.dataset.ef !== undefined){
@@ -5092,6 +5153,10 @@ function onChange(ev){
     if(!['external','bodyweight'].includes(t.value)){ render(); return; }
     ex.loadMode = t.value; Store.saveProfile(); render(); return;
   }
+  if(key === 'progressionMode'){
+    if(!['double','weight'].includes(t.value)){ render(); return; }
+    ex.progressionMode=t.value; Store.saveProfile(); render(); return;
+  }
   if(key === 'bodyweightPercent'){
     var bodyweightPercent=num(t.value);
     if(bodyweightPercent===null || bodyweightPercent<0 || bodyweightPercent>100){ render(); return; }
@@ -5122,7 +5187,7 @@ function onChange(ev){
     }
     Store.saveProfile(); render(); return;
   }
-  var cfgWeight=['inc','loadStep','warmupStep'].includes(key);
+  var cfgWeight=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(key);
   var v = cfgWeight?toKg(t.value):num(t.value);
   if(v === null){ render(); return; }
   if(key === 'sets') ex.sets = Math.min(10, Math.max(1, Math.round(v)));
@@ -5130,6 +5195,7 @@ function onChange(ev){
   if(key === 'max'){ ex.max = Math.min(60, Math.max(2, Math.round(v))); if(ex.min >= ex.max) ex.min = ex.max - 1; }
   if(key === 'inc') ex.inc = Math.min(25, Math.max(0.25, v));
   if(key === 'loadStep') ex.loadStep = Math.min(100, Math.max(0.05, v));
+  if(key === 'maxProgressIncrease') ex.maxProgressIncrease = Math.min(100, Math.max(0, v));
   if(key === 'warmupStep') ex.warmupStep = Math.min(100, Math.max(0.05, v));
   if(key === 'warmupSets'){
     ex.warmupSets = Math.min(10, Math.max(0, Math.round(v)));
@@ -5232,7 +5298,7 @@ function backupStatusHtml(){
   var exportStatus=exported && Number.isFinite(Number(exported.requestedAt))
     ? 'Última descarga solicitada: '+backupTimestamp(exported.requestedAt)+' · '+(Number(exported.sessionCount)||0)+' entrenos. Comprueba que el archivo esté en tu dispositivo.'
     : 'Todavía no has solicitado una descarga de respaldo desde este dispositivo.';
-  return '<div class="backup-status"><p><strong>'+esc(automaticStatus)+'</strong></p><p>'+esc(exportStatus)+'</p><p class="small muted">La copia automática vive solo en este navegador; descarga el respaldo JSON para conservarlo o moverlo a otro dispositivo.</p></div>';
+  return '<div class="backup-status"><p><strong>'+esc(automaticStatus)+'</strong></p><p>'+esc(exportStatus)+'</p><p class="small muted">La copia automática solo está en este navegador; no sustituye un respaldo externo. Para mover tus datos, descarga el JSON y en el otro dispositivo usa «Restaurar respaldo». La importación combina los datos y conserva los registros existentes.</p></div>';
 }
 function restoreAutoBackup(){
   try {
