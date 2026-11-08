@@ -3,6 +3,7 @@
 
 var Catalog = SobrecargaCatalog;
 var History = SobrecargaHistory;
+var Profile = SobrecargaProfile;
 
 /* ---------- utilidades ---------- */
 var $ = function(s, el){ return (el||document).querySelector(s); };
@@ -3538,10 +3539,6 @@ function updateGoalFormFields(){
   if(unitField) unitField.hidden=!custom;
   if(currentField) currentField.hidden=!custom;
 }
-function profileNav(){
-  return '<div class="seg profile-nav" role="group" aria-label="Secciones de tu perfil">'+
-    [['resumen','Resumen'],['ejercicios','Ejercicios'],['medidas','Medidas']].map(function(item){return '<button aria-pressed="'+(S.profileSection===item[0])+'" data-act="profile-section" data-section="'+item[0]+'">'+item[1]+'</button>';}).join('')+'</div>';
-}
 function profileSummary(){
   var totalVolume=0, totalDuration=0;
   S.sessions.forEach(function(session){ var stats=sessionStats(session); totalVolume+=stats.volume; totalDuration+=Number(session.durationMs)||0; });
@@ -3560,45 +3557,27 @@ function profileSummary(){
     '<div class="weekly-stat"><span>Carga × reps</span><strong>'+volumeText(totalVolume)+' '+weightUnitLabel()+'·reps</strong><small>'+humanDuration(totalDuration)+' acumulados</small></div>'+
     '<div class="weekly-stat"><span>Peso corporal</span><strong>'+ (latestWeight?weightText(latestWeight.values.weight):'—')+'</strong><small>'+ (latestWeight?esc(dFmt(latestWeight.date)):'Sin medir')+'</small></div></div></section>'+weeklyMuscleSummaryHtml(week)+recoveryHtml()+goalsHtml();
 }
-function profileExercises(){
-  var counts={}, last={}, volumes={};
-  S.sessions.forEach(function(session){session.entries.forEach(function(entry){
-    counts[entry.exId]=(counts[entry.exId]||0)+1;
-    if(!last[entry.exId]||session.date>last[entry.exId]) last[entry.exId]=session.date;
-    entry.sets.forEach(function(set){if(validWeight(set.w)&&Number(set.r)>0&&countsForProgress(set)){ var ex=exById(entry.exId); volumes[entry.exId]=(volumes[entry.exId]||0)+effectiveWeight(ex||{},set,session.date)*Number(set.r); }});
-  });});
-  var ids=Object.keys(S.profile.exercises).filter(function(id){return !S.profile.exercises[id].archived;});
-  ids.sort(function(a,b){var ea=exById(a), eb=exById(b);
-    if(S.exerciseSort==='name') return ea.name.localeCompare(eb.name,'es');
-    if(S.exerciseSort==='most') return (counts[b]||0)-(counts[a]||0)||(ea.name.localeCompare(eb.name,'es'));
-    if(S.exerciseSort==='volume') return (volumes[b]||0)-(volumes[a]||0)||(ea.name.localeCompare(eb.name,'es'));
-    return (last[b]||'').localeCompare(last[a]||'')||ea.name.localeCompare(eb.name,'es');
-  });
-  var sort='<label class="field"><span class="lab">Ordenar ejercicios</span><select class="txt" data-profile-exercise-sort><option value="recent"'+(S.exerciseSort==='recent'?' selected':'')+'>Reciente</option><option value="most"'+(S.exerciseSort==='most'?' selected':'')+'>Más realizado</option><option value="volume"'+(S.exerciseSort==='volume'?' selected':'')+'>Mayor volumen</option><option value="name"'+(S.exerciseSort==='name'?' selected':'')+'>Alfabético</option></select></label>';
-  var cards=ids.length?ids.map(function(id){var ex=exById(id), lastDateText=last[id]?dFmt(last[id]):'Nunca realizado';
-    return '<button class="card profile-exercise-card" data-act="profile-open-exercise" data-id="'+esc(id)+'"><span><strong>'+esc(ex.name)+'</strong><small>'+ (counts[id]||0)+' entrenos · Último: '+esc(lastDateText)+'</small></span><span class="num">'+esc(volumeText(volumes[id]||0))+' '+weightUnitLabel()+'·reps</span></button>';}).join(''):'<div class="card"><p class="muted">Añade ejercicios desde la biblioteca para verlos aquí.</p></div>';
-  return '<section class="card"><p class="sec-title">Tus ejercicios</p>'+sort+'</section><div class="list">'+cards+'</div>';
-}
-function measurementChart(field){
-  var pts=S.profile.measurements.filter(function(m){return m.values[field]!==undefined&&m.values[field]!==null&&Number.isFinite(Number(m.values[field]));}).sort(function(a,b){return a.date.localeCompare(b.date);}).map(function(m){return {label:dFmt(m.date),y:field==='weight'?fromKg(m.values[field]):Number(m.values[field])};});
-  if(pts.length<2) return '';
-  var unit=field==='weight'?weightUnitLabel():(field==='bodyFat'?'%':'cm');
-  return chartSvg(pts,unit);
-}
-function profileMeasurements(){
-  var latest=S.profile.measurements.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
-  var form=S.measurementForm?'<section class="card"><p class="sec-title">Nueva medición</p><div class="fields"><div class="field"><label class="lab" for="measurement-date">Fecha</label><input id="measurement-date" class="txt" type="date" value="'+esc(iso(new Date()))+'"></div>'+Object.keys(MEASUREMENT_FIELDS).map(function(key){return '<div class="field"><label class="lab" for="measurement-'+key+'">'+esc(MEASUREMENT_FIELDS[key])+' '+((key==='weight'?'('+weightUnitLabel()+')':(key==='bodyFat'?'(%)':'(cm)')))+'</label><input id="measurement-'+key+'" class="txt" inputmode="decimal" data-measurement-field="'+key+'"></div>';}).join('')+'</div><div class="field"><label class="lab" for="measurement-notes">Notas</label><textarea id="measurement-notes" class="txt" rows="3"></textarea></div><div class="row"><button class="btn sm" data-act="measurement-save">Guardar medición</button><button class="btn ghost sm" data-act="measurement-cancel">Cancelar</button></div></section>':'';
-  var rows=latest.map(function(m){var values=Object.keys(m.values).map(function(key){return '<span>'+esc(MEASUREMENT_FIELDS[key]||key)+': <strong>'+(key==='weight'?weightInput(m.values[key]):fmt(m.values[key]))+(key==='bodyFat'?' %':' '+(key==='weight'?weightUnitLabel():'cm'))+'</strong></span>';}).join(' · ');
-    return '<section class="card"><div class="row" style="justify-content:space-between"><p class="sec-title">'+esc(dFmt(m.date))+'</p><button class="icon" data-act="measurement-delete" data-id="'+esc(m.id)+'" aria-label="Eliminar medición">×</button></div><p class="small">'+(values||'Sin datos')+'</p>'+ (m.notes?'<p class="small muted">'+esc(m.notes)+'</p>':'')+'</section>';}).join('');
-  var currentWeight=latest.filter(function(m){return m.values.weight!==undefined;})[0];
-  var chart=currentWeight?measurementChart('weight'):'';
-  return '<div class="head-row"><h2>Medidas corporales</h2><button class="btn sm" data-act="measurement-new">Añadir medida</button></div>'+form+(chart?'<section class="card"><p class="sec-title">Evolución del peso</p>'+chart+'</section>':'')+(rows||'<div class="card"><p class="muted">Todavía no tienes mediciones corporales.</p></div>');
-}
 function viewProfile(){
-  var out='<div class="head-row"><h2>Yo</h2></div>'+profileNav();
-  if(S.profileSection==='ejercicios') return out+profileExercises();
-  if(S.profileSection==='medidas') return out+profileMeasurements();
-  return out+profileSummary();
+  return Profile.render({
+    state:S,
+    measurementFields:MEASUREMENT_FIELDS,
+    helpers:{
+      profileSummary:profileSummary,
+      validWeight:validWeight,
+      countsForProgress:countsForProgress,
+      exById:exById,
+      effectiveWeight:effectiveWeight,
+      dFmt:dFmt,
+      esc:esc,
+      volumeText:volumeText,
+      weightUnitLabel:weightUnitLabel,
+      iso:iso,
+      weightInput:weightInput,
+      fmt:fmt,
+      fromKg:fromKg,
+      chartSvg:chartSvg
+    }
+  });
 }
 function viewSet(){
   var st = S.profile.settings, tr = st.targetRir;

@@ -338,26 +338,30 @@ test('el Service Worker entrega la respuesta aunque falle su copia offline', asy
 
 test('la sección Yo incluye resumen, ejercicios y medidas corporales', () => {
   const app=fs.readFileSync('./app.js','utf8');
+  const profile=fs.readFileSync('./profile.js','utf8');
   const index=fs.readFileSync('./index.html','utf8');
   assert.match(app,/function viewProfile/);
-  assert.match(app,/profileSummary\(\)/);
-  assert.match(app,/profileExercises\(\)/);
-  assert.match(app,/profileMeasurements\(\)/);
+  assert.match(app,/return Profile\.render\(/);
+  assert.match(profile,/helpers\.profileSummary\(\)/);
+  assert.match(profile,/profileExercises\(state,helpers\)/);
+  assert.match(profile,/profileMeasurements\(state,options\.measurementFields,helpers\)/);
   assert.match(app,/measurements:\[\]/);
-  assert.match(app,/measurement-save/);
+  assert.match(profile,/measurement-save/);
   assert.match(index,/data-tab="yo"/);
+  assert.match(index,/profile\.js\?v=__BUILD_ID__/);
 });
 
 test('fatiga, anomalías y accesibilidad están integradas en la interfaz', () => {
   const app=fs.readFileSync('./app.js','utf8');
+  const profile=fs.readFileSync('./profile.js','utf8');
   const index=fs.readFileSync('./index.html','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/function recoveryHtml\(\)/);
   assert.match(app,/no mide la recuperación fisiológica/i);
   assert.match(app,/esfuerzo registrado/);
   assert.match(app,/peso más de 50 % sobre tu récord/);
-  assert.match(app,/class="seg profile-nav" role="group"/);
-  assert.match(app,/aria-pressed="\x27\+\(S\.profileSection===item\[0\]\)\+\x27"/);
+  assert.match(profile,/class="seg profile-nav" role="group"/);
+  assert.match(profile,/aria-pressed="\x27\+\(section===item\[0\]\)\+\x27"/);
   assert.match(index,/aria-controls="view"/);
   assert.match(index,/<nav class="tabs" aria-label="Secciones de la aplicación"><div class="in">/);
   assert.doesNotMatch(index,/role="tablist"|role="tab"/);
