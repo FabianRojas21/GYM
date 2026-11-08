@@ -438,7 +438,7 @@ var S = {
   draftSaveState:'saved', historyQuery:'', historyRange:'all',
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
-  librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(), substitutionFilters:{},
+  librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', settingsSection:'home', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(), substitutionFilters:{},
   restEndsAt:loadRestEnd(), restOwner:loadRestOwner(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:'', pendingSubstitution:null, simpleWorkoutMode:false, loadingCalc:null
 };
 S.collapsedEntries=new Set(S.draft.collapsedEntryIds || []);
@@ -4047,9 +4047,21 @@ function onClick(ev){
       render();window.scrollTo(0,0);
       if($('#load-tool-settings')) $('#load-tool-settings').scrollIntoView({block:'start'});
       break;
-    case 'tab': if(t.dataset.tab!=='hoy'&&S.loadingCalc) S.loadingCalc.open=false; S.tab = t.dataset.tab; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
+    case 'tab': if(t.dataset.tab!=='hoy'&&S.loadingCalc) S.loadingCalc.open=false; S.tab = t.dataset.tab; if(S.tab==='ajustes') S.settingsSection='home'; if(S.tab === 'ejercicios') S.librarySection = 'ejercicios'; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); window.scrollTo(0, 0); if($('#view')) $('#view').focus({preventScroll:true}); break;
     case 'history-reset': S.historyQuery=''; S.historyRange='all'; render(); break;
     case 'profile-section': S.profileSection=t.dataset.section; render(); break;
+    case 'settings-section':
+      S.settingsSection=t.dataset.section;
+      render();
+      window.scrollTo(0,0);
+      $('#view').focus({preventScroll:true});
+      break;
+    case 'settings-home':
+      S.settingsSection='home';
+      render();
+      window.scrollTo(0,0);
+      $('#view').focus({preventScroll:true});
+      break;
     case 'reminder-dismiss':
       try { localStorage.setItem(REMINDER_DISMISSED_KEY,String(t.dataset.session)+':'+iso(new Date())); }
       catch(error){ console.warn('No se pudo guardar el estado del recordatorio',error); }

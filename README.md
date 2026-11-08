@@ -88,9 +88,16 @@ luego impórtalo en la cuenta si quieres trasladarlos. Una duración CSV explíc
 de `0` minutos se conserva; los 60 minutos se asignan solo cuando falta ese dato.
 
 En **Ajustes → Recordatorio de entrenamiento** puedes activar un aviso dentro
-de la app después de 2, 3, 5 o 7 días sin registrar un entreno. Está apagado
-por defecto y se muestra al abrir **Hoy**; no es una notificación del sistema
-y no llega mientras la app está cerrada. Puedes posponerlo por el día.
+de **Descanso y recordatorios** después de 2, 3, 5 o 7 días sin registrar un
+entreno. Está apagado por defecto y se muestra al abrir **Hoy**; no es una
+notificación del sistema y no llega mientras la app está cerrada. Puedes
+posponerlo por el día.
+
+**Ajustes** está organizado por categorías para encontrar cada control sin
+mostrar todas las opciones a la vez: Entrenamiento, Descanso y recordatorios,
+Calculadora de discos, Progresión, Objetivos, Cuenta y sincronización (cuando
+Firebase está configurado) y Datos y respaldos. Dentro de cada categoría, usa
+**‹ Ajustes** para volver al menú.
 
 Durante un entreno puedes copiar una serie ya completada a la siguiente serie
 vacía y avanzar entre todos los campos de los ejercicios con **Enter**; al

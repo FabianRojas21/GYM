@@ -92,3 +92,24 @@ test('crea y abre una rutina desde la biblioteca',async({page})=>{
   await page.locator('[data-act="rut-edit"]').click();
   await expect(page.getByRole('heading',{name:'Editar rutina'})).toBeVisible();
 });
+
+test('navega por las categorías de Ajustes y vuelve al menú',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('.tab[data-tab="ajustes"]').click();
+
+  await expect(page.getByRole('heading',{name:'Ajustes'})).toBeVisible();
+  await page.locator('[data-act="settings-section"][data-section="training"]').click();
+  await expect(page.getByRole('heading',{name:'Entrenamiento'})).toBeVisible();
+  await expect(page.locator('[data-setting="weightUnit"]')).toBeVisible();
+  await page.locator('[data-act="settings-home"]').click();
+
+  await expect(page.getByRole('heading',{name:'Ajustes'})).toBeVisible();
+  await page.locator('[data-act="settings-section"][data-section="rest"]').click();
+  await expect(page.getByRole('heading',{name:'Descanso y recordatorios'})).toBeVisible();
+  await expect(page.locator('[data-setting="reminderEnabled"]')).toBeVisible();
+  await page.locator('[data-act="settings-home"]').click();
+  await expect(page.locator('.settings-category-card')).toHaveCount(6);
+});
