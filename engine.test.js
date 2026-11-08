@@ -413,6 +413,7 @@ test('la recuperación separa carga objetiva reciente y autoevaluación opcional
 
 test('el recordatorio configurable es interno, opcional y respeta intervalo y descarte diario', () => {
   const source=fs.readFileSync('./app.js','utf8');
+  const settings=fs.readFileSync('./settings.js','utf8');
   const helper=source.match(/function workoutReminderHtml\(latest\)\{[\s\S]*?\n\}/);
   assert.ok(helper);
   const dismissed=new Map();
@@ -437,7 +438,7 @@ test('el recordatorio configurable es interno, opcional y respeta intervalo y de
   assert.equal(context.reminderForTest(latest),'');
   context.S.profile.settings.reminderEnabled=false;
   assert.equal(context.reminderForTest(latest),'');
-  assert.match(source,/data-setting="reminderEnabled"/);
+  assert.match(settings,/data-setting="reminderEnabled"/);
 });
 
 test('la sección Tus datos muestra fecha y alcance de respaldos', () => {
@@ -997,6 +998,7 @@ test('la migración fallida no se marca como completada y puede reintentarse', a
 
 test('restaurar un respaldo combina datos y conserva los actuales ante IDs duplicados', () => {
   const source=fs.readFileSync('./app.js','utf8');
+  const settings=fs.readFileSync('./settings.js','utf8');
   const cloudStoreSource=fs.readFileSync('./store.js','utf8');
   const helper=source.match(/function mergeBackupData\([\s\S]*?\n\}/);
   assert.ok(helper);
@@ -1045,7 +1047,7 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   assert.deepEqual(Array.from(fresh.sessions,m=>m.id),['same','new']);
   assert.match(source,/function restoreBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
   assert.match(source,/function restoreAutoBackup\(\)[\s\S]*?mergeBackupData\(S\.profile,S\.sessions/);
-  assert.match(source,/var syncLabel=S\.cloudSyncing \? 'Sincronizando…' : S\.syncUnavailable \? 'Reintentar conexión'/);
+  assert.match(settings,/var syncLabel=state\.cloudSyncing\?'Sincronizando…':state\.syncUnavailable\?'Reintentar conexión'/);
   assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!==?'cloud'\)\{[\s\S]*?no se subieron datos/);
   assert.match(source,/if\(!S\.ready \|\| S\.syncUnavailable \|\| S\.kind!=='cloud'\)\{\s*return Promise\.reject/);
   assert.match(source,/gotProfile && gotSessions && gotDraft/);
@@ -1059,12 +1061,13 @@ test('restaurar un respaldo combina datos y conserva los actuales ante IDs dupli
   assert.match(source,/readLocalDataSnapshot\(\)\|\|localData/);
   assert.match(source,/SobrecargaStore\.mergeCloudSessions/);
   assert.match(source,/S\.kind==='cloud' && S\.ready && !S\.syncUnavailable/);
-  assert.match(source,/Cargando y verificando los datos de la cuenta/);
+  assert.match(settings,/Cargando y verificando los datos de la cuenta/);
   assert.doesNotMatch(source.match(/function restoreBackup\(\)[\s\S]*?\n\}/)[0],/blankDraft\(\)/);
 });
 
 test('la interfaz configura equipo cargable y diferencia peso por brazo del total', () => {
   const source=fs.readFileSync('./app.js','utf8');
+  const settings=fs.readFileSync('./settings.js','utf8');
   assert.match(source,/function loadToolSettingsHtml\(\)/);
   assert.match(source,/Barras y máquinas cargables/);
   assert.match(source,/function plateProfileSettingsHtml\(\)/);
@@ -1078,6 +1081,8 @@ test('la interfaz configura equipo cargable y diferencia peso por brazo del tota
   assert.match(source,/data-load-tool="category"/);
   assert.match(source,/Categoría \(opcional\)/);
   assert.match(source,/Mecánica de carga/);
+  assert.match(source,/return Settings\.render\(/);
+  assert.match(settings,/helpers\.loadToolSettingsHtml\(\)/);
   assert.match(source,/baseWeight:null,plates:\[\]/);
   assert.match(source,/typeof tool\.baseWeight==='number'&&Number\.isFinite\(tool\.baseWeight\)&&tool\.plates\.length>0/);
   assert.match(source,/No se asumirá un peso estándar/);
@@ -1244,6 +1249,7 @@ test('la duración humana no muestra cero minutos en entrenos de menos de un min
 
 test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros', () => {
   const app=fs.readFileSync('./app.js','utf8');
+  const settings=fs.readFileSync('./settings.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/data-act="repeat-set"/);
   assert.match(app,/data-act="finish-set"/);
@@ -1269,7 +1275,7 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(app,/function historyEmptyHtml\(\)[\s\S]*?data-act="history-reset"/);
   assert.match(app,/case 'history-reset': S\.historyQuery=''; S\.historyRange='all'; render\(\); break;/);
   assert.match(styles,/\.history-empty\{[^}]*text-align:center/);
-  assert.match(app,/class="row settings-data-actions"/);
+  assert.match(settings,/class="row settings-data-actions"/);
   assert.match(styles,/\.profile-nav\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(app,/class="card exercise-progress-card' \+ \(open \? ' is-open' : ''\)/);
   assert.match(app,/aria-expanded="' \+ \(open \? 'true' : 'false'\) \+ '"[\s\S]*?Ver progreso y ajustes/);
@@ -1390,6 +1396,7 @@ test('los gráficos limitan marcas y filtran valores no finitos', () => {
 
 test('el selector de unidad convierte valores de entrada a kg sin reescribir datos', () => {
   const source=fs.readFileSync('./app.js','utf8');
+  const settings=fs.readFileSync('./settings.js','utf8');
   const helpers=source.match(/var KG_PER_LB = [\s\S]*?function volumeInCurrentUnit\(value\)\{[^\n]*\}/);
   assert.ok(helpers);
   const context={
@@ -1402,7 +1409,7 @@ test('el selector de unidad convierte valores de entrada a kg sin reescribir dat
   assert.equal(context.fromKgForTest(60),132.27735731092652);
   assert.equal(context.weightTextForTest(60),'132,28 lb');
   assert.ok(Math.abs(context.volumeInCurrentUnitForTest(100)-220.462262185)<1e-9);
-  assert.match(source,/data-setting="weightUnit"/);
+  assert.match(settings,/data-setting="weightUnit"/);
   assert.match(source,/peso_lb\|\|r\.weight_lb/);
 });
 
@@ -1554,10 +1561,11 @@ test('copia solo pesos no editados y respeta cada lado en ejercicios unilaterale
 
 test('alternativas, modo simple y borrado reversible están conectados al entrenamiento', () => {
   const source=fs.readFileSync('./app.js','utf8');
+  const settings=fs.readFileSync('./settings.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   const readme=fs.readFileSync('./README.md','utf8');
   assert.match(source,/previousExerciseScope:'any'/);
-  assert.match(source,/data-setting="previousExerciseScope"/);
+  assert.match(settings,/data-setting="previousExerciseScope"/);
   assert.match(source,/function applyPreviousValues\(/);
   assert.match(source,/data-cfg="substitution"/);
   assert.match(source,/data-workout-substitution/);
