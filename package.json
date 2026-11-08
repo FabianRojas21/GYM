@@ -2,7 +2,7 @@
   "name": "sobrecarga",
   "private": true,
   "scripts": {
-    "test:unit": "node --test engine.test.js demo.test.js history.test.js profile.test.js settings.test.js library.test.js routine-views.test.js",
+    "test:unit": "node --test engine.test.js demo.test.js history.test.js profile.test.js settings.test.js library.test.js routine-views.test.js exercise-list.test.js",
     "test:rules": "firebase emulators:exec --project demo-sobrecarga-tests --only firestore \"node --test firestore.rules.test.js\"",
     "test:e2e": "playwright test",
     "test": "npm run test:unit && npm run test:rules && npm run test:e2e"

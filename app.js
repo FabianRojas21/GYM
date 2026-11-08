@@ -3227,22 +3227,16 @@ function exDetail(ex){
       : '<button class="btn ghost sm" data-act="archive" data-id="' + esc(ex.id) + '">Archivar ejercicio</button>') + '</div>';
 }
 function viewEj(){
-  var ids = Object.keys(S.profile.exercises).filter(function(k){ return !S.profile.exercises[k].archived; })
-    .sort(function(a,b){ var da = lastDate(a), db = lastDate(b); return da === db ? exById(a).name.localeCompare(exById(b).name, 'es') : (da < db ? 1 : -1); });
-  var out = '<div class="head-row"><h2>Ejercicios</h2><span class="num muted">' + ids.length + '</span></div>';
-  if(!ids.length){
-    return out + '<div class="card"><p>Aquí verás cada ejercicio con su estado de progresión. Registra un entreno en Hoy para empezar.</p><button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button></div>';
-  }
-  return out + '<div class="list">' + ids.map(function(id){
-    var ex = exById(id), p = planFor(ex), open = S.openEx === id;
-    var goal = p.status === 'nuevo' ? 'Sin registros todavía' : 'Próximo: ' + (p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · ')));
-    return '<section class="card exercise-progress-card' + (open ? ' is-open' : '') + '"><button class="exrow" data-act="toggle-ex" data-id="' + esc(id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
-      '<div class="top2"><h3>' + esc(ex.name) + '</h3>' + chip(p.status) + '</div>' +
-      '<span class="small muted">' + esc(goal) + ' · ' + ex.sets + '×' + ex.min + '–' + ex.max + ' reps' + (ex.unilateral ? ' por lado' : '') + '</span>' +
-      (p.status !== 'nuevo' ? barHtml(p, ex) : '') +
-      '<span class="exercise-expand-hint"><span>' + (open ? 'Ocultar detalles' : 'Ver progreso y ajustes') + '</span><span class="exercise-expand-icon" aria-hidden="true">⌄</span></span>' +
-      '</button>' + (open ? exDetail(ex) : '') + '</section>';
-  }).join('') + '</div>';
+  return ExerciseList.render(S,{
+    lastDate:lastDate,
+    exById:exById,
+    planFor:planFor,
+    weightText:weightText,
+    esc:esc,
+    chip:chip,
+    barHtml:barHtml,
+    exDetail:exDetail
+  });
 }
 function viewHist(){
   var total=S.sessions.length;

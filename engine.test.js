@@ -1202,6 +1202,16 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
   assert.deepEqual(routines.map(routine=>routine.id),['a','b','c','other']);
 });
 
+test('la lista de progreso de ejercicios se renderiza desde su módulo', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const exerciseList=fs.readFileSync('./exercise-list.js','utf8');
+  assert.match(app,/return ExerciseList\.render\(S,/);
+  assert.match(exerciseList,/class="card exercise-progress-card'\+\(open\?' is-open':''\)/);
+  assert.match(exerciseList,/data-act="toggle-ex"/);
+  assert.match(fs.readFileSync('./index.html','utf8'),/exercise-list\.js\?v=__BUILD_ID__/);
+  assert.match(fs.readFileSync('./sw.js','utf8'),/exercise-list\.js/);
+});
+
 test('las recomendaciones muestran el motivo y el resultado solo al desplegar el detalle', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const goal=app.match(/function goalHtml\(ex(?:, planned)?\)\{[\s\S]*?\n\}/);
@@ -1261,6 +1271,7 @@ test('la duración humana no muestra cero minutos en entrenos de menos de un min
 
 test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros', () => {
   const app=fs.readFileSync('./app.js','utf8');
+  const exerciseList=fs.readFileSync('./exercise-list.js','utf8');
   const settings=fs.readFileSync('./settings.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/data-act="repeat-set"/);
@@ -1289,8 +1300,9 @@ test('la interfaz de entrenamiento e historial expone ayudas rápidas y filtros'
   assert.match(styles,/\.history-empty\{[^}]*text-align:center/);
   assert.match(settings,/class="row settings-data-actions"/);
   assert.match(styles,/\.profile-nav\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-  assert.match(app,/class="card exercise-progress-card' \+ \(open \? ' is-open' : ''\)/);
-  assert.match(app,/aria-expanded="' \+ \(open \? 'true' : 'false'\) \+ '"[\s\S]*?Ver progreso y ajustes/);
+  assert.match(app,/return ExerciseList\.render\(S,/);
+  assert.match(exerciseList,/aria-expanded=/);
+  assert.match(exerciseList,/Ver progreso y ajustes/);
   assert.match(styles,/\.exercise-expand-icon\{[^}]*transition:transform/);
   assert.match(styles,/@media \(max-width:520px\)[\s\S]*?\.history-actions\{display:grid/);
   assert.match(app,/case 'finish-set':[\s\S]*?startRest\(finishRestSeconds, finishRow\.restToken\)/);

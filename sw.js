@@ -1,5 +1,5 @@
 const CACHE='sobrecarga-__BUILD_ID__';
-const ASSETS=['./','./index.html','./index.html?v=__BUILD_ID__','./styles.css?v=__BUILD_ID__','./app.js?v=__BUILD_ID__','./catalog.js?v=__BUILD_ID__','./engine.js?v=__BUILD_ID__','./backup.js?v=__BUILD_ID__','./store.js?v=__BUILD_ID__','./demo.js?v=__BUILD_ID__','./history.js?v=__BUILD_ID__','./profile.js?v=__BUILD_ID__','./settings.js?v=__BUILD_ID__','./library.js?v=__BUILD_ID__','./routine-views.js?v=__BUILD_ID__','./firebase-config.js?v=__BUILD_ID__','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
+const ASSETS=['./','./index.html','./index.html?v=__BUILD_ID__','./styles.css?v=__BUILD_ID__','./app.js?v=__BUILD_ID__','./catalog.js?v=__BUILD_ID__','./engine.js?v=__BUILD_ID__','./backup.js?v=__BUILD_ID__','./store.js?v=__BUILD_ID__','./demo.js?v=__BUILD_ID__','./history.js?v=__BUILD_ID__','./profile.js?v=__BUILD_ID__','./settings.js?v=__BUILD_ID__','./library.js?v=__BUILD_ID__','./routine-views.js?v=__BUILD_ID__','./exercise-list.js?v=__BUILD_ID__','./firebase-config.js?v=__BUILD_ID__','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 function cacheResponse(request,response){
   let copy;
   try{
@@ -17,7 +17,7 @@ self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=
 self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET') return;
   const requestUrl=new URL(event.request.url);
-  if(requestUrl.origin===self.location.origin && (event.request.mode==='navigate' || ['app.js','demo.js','history.js','profile.js','settings.js','library.js','routine-views.js','styles.css','sw.js','index.html'].some(name=>requestUrl.pathname.endsWith(name)))){
+  if(requestUrl.origin===self.location.origin && (event.request.mode==='navigate' || ['app.js','demo.js','history.js','profile.js','settings.js','library.js','routine-views.js','exercise-list.js','styles.css','sw.js','index.html'].some(name=>requestUrl.pathname.endsWith(name)))){
     event.respondWith(fetch(event.request).then(response=>{if(response.ok)event.waitUntil(cacheResponse(event.request,response));return response;}).catch(()=>caches.match(event.request).then(cached=>cached||caches.match('./index.html'))));
     return;
   }

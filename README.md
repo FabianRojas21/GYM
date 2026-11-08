@@ -13,12 +13,13 @@ App de gimnasio para PC y móvil.
 - `settings.js`: vista y acciones de configuración, cuenta y datos.
 - `library.js`: navegación y tarjetas de rutinas y programas.
 - `routine-views.js`: editores de programas y rutinas, y detalle de rutina.
+- `exercise-list.js`: lista de ejercicios con estado de progresión y acceso a sus detalles.
 - `catalog.js`: catálogo sugerido y etiquetas de ejercicios, músculos, equipo y medidas.
 - `engine.js`: reglas de progresión, músculos y secuencia de programas.
 - `backup.js`: migración y serialización de respaldos.
 - `store.js`: operaciones de persistencia y reconciliación de datos de Firebase.
 - `sw.js` y los iconos PNG: instalación offline como PWA.
-- `engine.test.js`, `demo.test.js`, `history.test.js`, `profile.test.js`, `settings.test.js`, `library.test.js` y `routine-views.test.js`: pruebas del motor y módulos de interfaz.
+- `engine.test.js`, `demo.test.js`, `history.test.js`, `profile.test.js`, `settings.test.js`, `library.test.js`, `routine-views.test.js` y `exercise-list.test.js`: pruebas del motor y módulos de interfaz.
 - `firestore.rules.test.js` y `e2e/`: pruebas de reglas y del flujo en navegador.
 
 Los archivos deben permanecer en la misma carpeta. Para probar la app,
