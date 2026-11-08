@@ -438,10 +438,11 @@ var S = {
   draftSaveState:'saved', historyQuery:'', historyRange:'all',
   profile:defaultProfile(), sessions:[], draft:loadDraft(),
   tab:'hoy', picker:false, pkMode:'day', openEx:null, openCfg:null, confirm:null, justSaved:null, redit:null,
-  librarySection:'programas', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', settingsSection:'home', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(), substitutionFilters:{},
+  librarySection:'programas', libraryQuery:'', selectedProgram:null, selectedRoutine:null, pedit:null, profileSection:'resumen', settingsSection:'home', exerciseSort:'recent', measurementForm:false, collapsedEntries:new Set(), substitutionFilters:{},screenAwake:false,
   restEndsAt:loadRestEnd(), restOwner:loadRestOwner(), pendingImport:null, pendingRoutine:null, sessionEdit:null, finishSaving:false, goalNew:false, progressMetric:'estimated', anomalySignature:'', pendingSubstitution:null, simpleWorkoutMode:false, loadingCalc:null
 };
 S.collapsedEntries=new Set(S.draft.collapsedEntryIds || []);
+var screenWakeLock=null;
 try { S.simpleWorkoutMode=localStorage.getItem(WORKOUT_SIMPLE_KEY)==='1'; } catch(e){}
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -2023,6 +2024,7 @@ function entryHtml(en, ei){
   var calculatorHint=calculatorTarget===null?'Calcula el peso de una serie':'Serie '+(calculatorRowIndex+1)+' · '+weightText(calculatorTarget)+(calculatorTool&&calculatorTool.type==='independent'?' por brazo':' total');
   var targetSets = Math.max(1, Number(ex.sets) || 1);
   var completedSets = completedWorkSets(en, ex);
+  var currentSetIndex=en.rows.findIndex(function(row){return setType(row)==='normal'&&!row.restTriggered;});
   var collapsed = S.collapsedEntries.has(en.uiId);
   var baseExId=en.baseExId||en.exId, alternatives=exerciseSubstitutions(baseExId);
   var substitutionHtml=alternatives.length
@@ -2072,7 +2074,7 @@ function entryHtml(en, ei){
     }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"></label>' +
       '<label class="set-input"><span>Reps</span><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"></label>' +
       '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '"></label></div>';
-    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + '" data-ri="' + ri + '">' +
+    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + (ri===currentSetIndex?' is-current':'') + '" data-ri="' + ri + '" data-current-set="' + (ri===currentSetIndex?'true':'false') + '"' + (ri===currentSetIndex?' role="group" aria-label="Siguiente serie pendiente, serie '+(ri+1)+'" tabindex="-1"':'') + '>' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
       '<label class="set-type-label"><span>Tipo de serie</span><select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select></label>' +
@@ -2333,13 +2335,13 @@ function activePlanControlsHtml(program){
 function activeTrainingPlanHtml(){
   var next=nextProgramRoutine(),activeRoutine=S.profile.activeRoutineId&&S.profile.routines[S.profile.activeRoutineId];
   if(next) return '<section class="home-active-plan"><div class="home-next-routine"><div><span class="home-eyebrow">Programa activo · '+esc(next.program.name)+'</span><strong>'+esc(next.routine.name)+'</strong><small>'+(next.current?'Siguiente después de '+esc(next.current.routineName||next.current.routineId):'Primera rutina del programa')+'</small></div>'+
-    '<button class="btn sm" data-act="rut-start" data-id="'+esc(next.routine.id)+'">Empezar</button></div>'+activePlanControlsHtml(next.program)+'</section>';
+    '<button class="btn ghost sm" data-act="rut-detail" data-id="'+esc(next.routine.id)+'">Ver rutina</button></div>'+activePlanControlsHtml(next.program)+'</section>';
   if(S.profile.activeProgramId){
     var activeProgram=S.profile.programs[S.profile.activeProgramId];
     return '<section class="home-active-plan"><div class="home-next-routine"><div><span class="home-eyebrow">Programa activo</span><strong>'+esc((activeProgram||{}).name||'Programa')+'</strong><small>Añade una rutina y define su secuencia en Biblioteca.</small></div><button class="btn ghost sm" data-act="program-open" data-id="'+esc(S.profile.activeProgramId)+'">Ver programa</button></div>'+activePlanControlsHtml(activeProgram)+'</section>';
   }
   if(activeRoutine) return '<section class="home-active-plan"><div class="home-next-routine"><div><span class="home-eyebrow">Rutina activa</span><strong>'+esc(activeRoutine.name)+'</strong><small>Repite esta rutina cuando quieras; el progreso se calcula por ejercicio.</small></div>'+
-    '<button class="btn sm" data-act="rut-start" data-id="'+esc(activeRoutine.id)+'">Empezar</button></div>'+activePlanControlsHtml(null)+'</section>';
+    '<button class="btn ghost sm" data-act="rut-detail" data-id="'+esc(activeRoutine.id)+'">Ver rutina</button></div>'+activePlanControlsHtml(null)+'</section>';
   return '<section class="home-active-plan"><div class="home-plan-empty"><span>No hay un plan activo</span></div>'+activePlanControlsHtml(null)+'</section>';
 }
 function moveProgramRoutine(programId,routineId,direction){
@@ -2788,12 +2790,19 @@ function homeDashboard(){
   var trend = weeklyProgressStatus(stats, previousStats);
   var sorted = S.sessions.slice().sort(function(a,b){ return a.date === b.date ? (b.ts || 0) - (a.ts || 0) : (a.date < b.date ? 1 : -1); });
   var avgVolumePerSession = week.length ? stats.volume / week.length : 0;
-  var latest = sorted[0], out = '<section class="home-dashboard"><div class="home-heading"><div><span class="home-eyebrow">Tu semana de entrenamiento</span><h2>Resumen semanal</h2></div>' +
+  var latest = sorted[0], suggestedRoutine=nextProgramRoutine(), activeRoutine=S.profile.activeRoutineId&&S.profile.routines[S.profile.activeRoutineId];
+  var primaryAction='start',primaryLabel=latest||routineList().length?'Nuevo entrenamiento':'Empezar primer entreno',primaryId='';
+  if(suggestedRoutine){
+    primaryAction='rut-start';primaryLabel='Empezar · '+suggestedRoutine.routine.name;primaryId=suggestedRoutine.routine.id;
+  }else if(activeRoutine){
+    primaryAction='rut-start';primaryLabel='Empezar · '+activeRoutine.name;primaryId=activeRoutine.id;
+  }
+  var out = '<section class="home-dashboard"><div class="home-heading"><div><span class="home-eyebrow">Tu semana de entrenamiento</span><h2>Resumen semanal</h2></div>' +
     '<div class="home-heading-side"><span class="home-state-badge ' + esc(trend.status) + '">' + esc(trend.label) + '</span><span class="home-week">' + esc(dFmt(from, {day:'numeric', month:'short'})) + ' — hoy</span></div></div>' +
     '<p class="home-message">' + (week.length
       ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Media por sesión: ' + volumeText(avgVolumePerSession) + ' ' + weightUnitLabel() + '·reps.'
       : 'Cada progreso empieza con una sesión. Hoy puedes dar ese primer paso.') + '</p>' +
-    '<button class="btn home-start" data-act="start" data-home-start><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
+    '<button class="btn home-start" data-act="'+primaryAction+'"'+(primaryId?' data-id="'+esc(primaryId)+'"':'')+' data-home-start><span aria-hidden="true">▶</span> '+esc(primaryLabel)+'</button>' +
     activeTrainingPlanHtml() +
     '<div class="home-focus-card">' +
       '<div class="home-focus-copy">' +
@@ -2854,7 +2863,7 @@ function viewHoy(){
   if(!S.draft.entries.length) return out + homeDashboard();
   var done = workingDone();
   var rt = S.draft.routineId && S.profile.routines[S.draft.routineId];
-  out += '<div class="workout-screen"><div class="head-row workout-heading"><div><span class="workout-eyebrow">Sesión en curso</span><h2>' + esc(rt?rt.name:'Entrenamiento') + '</h2></div><div class="workout-heading-actions"><button class="btn ghost sm" data-act="workout-simple-toggle" aria-pressed="' + S.simpleWorkoutMode + '">' + (S.simpleWorkoutMode?'Vista completa':'Modo simple') + '</button></div></div>';
+  out += '<div class="workout-screen"><div class="head-row workout-heading"><div><span class="workout-eyebrow">Sesión en curso</span><h2>' + esc(rt?rt.name:'Entrenamiento') + '</h2></div><div class="workout-heading-actions"><button class="btn ghost sm" data-act="focus-next-set">Siguiente serie</button><button class="btn ghost sm" data-act="screen-awake-toggle" aria-pressed="' + S.screenAwake + '">' + (S.screenAwake?'Pantalla activa ✓':'Mantener pantalla activa') + '</button><button class="btn ghost sm" data-act="workout-simple-toggle" aria-pressed="' + S.simpleWorkoutMode + '">' + (S.simpleWorkoutMode?'Vista completa':'Modo simple') + '</button></div></div>';
   out += workoutOverviewHtml();
   out += '<p class="draft-save-status" id="draft-save-status" data-state="' + esc(S.draftSaveState) + '">' +
     (S.draftSaveState==='synced'?'Guardado y sincronizado':S.draftSaveState==='localOnly'?'Guardado local · sincronización pendiente':S.draftSaveState==='saving'?'Guardando…':S.draftSaveState==='error'?'No se pudo guardar':'Guardado en este dispositivo') + '</p>';
@@ -3240,6 +3249,7 @@ function viewEj(){
   return ExerciseList.render(S,{
     lastDate:lastDate,
     exById:exById,
+    searchText:function(id){var exercise=exById(id);return [exercise.name,equipmentLabel(exercise),exerciseMuscleSummary(exercise)].join(' ');},
     planFor:planFor,
     weightText:weightText,
     esc:esc,
@@ -3256,7 +3266,7 @@ function viewHist(){
   return out + '<section class="card history-tools"><label class="field"><span class="lab">Buscar entreno, ejercicio o rutina</span><input class="txt" data-history-search type="search" autocomplete="off" placeholder="Ej. Press banca" value="' + esc(S.historyQuery) + '"></label>' +
     '<label class="field"><span class="lab">Periodo</span><select class="txt" data-history-range><option value="all"' + (S.historyRange==='all'?' selected':'') + '>Todo el historial</option><option value="90"' + (S.historyRange==='90'?' selected':'') + '>Últimos 90 días</option><option value="30"' + (S.historyRange==='30'?' selected':'') + '>Últimos 30 días</option><option value="7"' + (S.historyRange==='7'?' selected':'') + '>Últimos 7 días</option></select></label></section>' +
     '<div id="history-summary">' + historySummaryHtml(ss) + '</div>' +
-    '<div class="list" id="history-list">' + (ss.length ? ss.map(historyCardHtml).join('') : historyEmptyHtml()) + '</div>';
+    '<div id="history-list">' + historyListHtml(ss) + '</div>';
 }
 function historyWindowBounds(days,today){
   return History.windowBounds(days,today);
@@ -3387,14 +3397,27 @@ function historyCardHtml(s){
     }).join('');
     var editing = S.sessionEdit && S.sessionEdit.id === s.id;
     var duration = Number(s.durationMs) > 0 ? humanDuration(s.durationMs) : 'Sin duración';
-    return '<section class="card history-session-card"><div class="card-head history-session-head"><div><h3>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</h3>' +
-      '<p class="small muted history-session-meta">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</p></div></div>' +
+    return '<details class="card history-session-card" data-history-session="'+esc(s.id)+'"'+(editing||S.confirm==='sess:'+s.id?' open':'')+'><summary class="history-session-summary"><span><strong>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</strong>' +
+      '<small class="history-session-meta">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</small></span><span class="history-session-chevron" aria-hidden="true">⌄</span></summary><div class="history-session-content">' +
       '<div class="list history-exercises">' + body + '</div>' +
       (editing ? sessionEditorHtml(s) : '<div class="row history-actions"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar entrenamiento</button>' +
         (!s.demo ? '<button class="btn ghost sm" data-act="session-make-routine" data-id="' + esc(s.id) + '">Guardar como rutina</button>' : '') +
         (S.confirm === 'sess:' + s.id
           ? '<button class="btn danger sm" data-act="del-sess-ok" data-id="' + esc(s.id) + '">Confirmar: borrar entreno</button>'
-          : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</div>') + '</section>';
+          : '<button class="btn ghost sm" data-act="del-sess" data-id="' + esc(s.id) + '">Borrar</button>') + '</div>') + '</div></details>';
+}
+function historyListHtml(matches){
+  if(!matches.length) return historyEmptyHtml();
+  var groups={},order=[];
+  matches.forEach(function(session){
+    var month=session.date.slice(0,7);
+    if(!groups[month]){groups[month]=[];order.push(month);}
+    groups[month].push(session);
+  });
+  return order.map(function(month){
+    var sessions=groups[month],label=dFmt(month+'-01',{month:'long',year:'numeric'});
+    return '<section class="history-month"><div class="history-month-heading"><h3>'+esc(label.charAt(0).toLocaleUpperCase('es')+label.slice(1))+'</h3><span>'+sessions.length+' entreno'+(sessions.length===1?'':'s')+'</span></div><div class="list history-month-list">'+sessions.map(historyCardHtml).join('')+'</div></section>';
+  }).join('');
 }
 function historyEmptyHtml(){
   var hasQuery=!!S.historyQuery.trim(), hasRange=S.historyRange!=='all';
@@ -3406,7 +3429,7 @@ function refreshHistoryResults(){
   var list=$('#history-list');
   if(!list) return;
   var matches=filteredHistorySessions();
-  list.innerHTML=matches.length ? matches.map(historyCardHtml).join('') : historyEmptyHtml();
+  list.innerHTML=historyListHtml(matches);
   var summary=$('#history-summary');
   if(summary) summary.innerHTML=historySummaryHtml(matches);
   var count=$('#history-count');
@@ -3623,6 +3646,47 @@ function render(){
 function focusSetControl(ei,ri){
   var control=$('.set-finish[data-ei="'+ei+'"][data-ri="'+ri+'"]');
   if(control) control.focus();
+}
+function focusNextWorkoutSet(){
+  var current=$('.set[data-current-set="true"]');
+  if(current){current.focus({preventScroll:true});current.scrollIntoView({block:'center'});return;}
+  for(var ei=0;ei<S.draft.entries.length;ei++){
+    var entry=S.draft.entries[ei];
+    for(var ri=0;ri<entry.rows.length;ri++){
+      var row=entry.rows[ri];
+      if(setType(row)!=='normal'||row.restTriggered) continue;
+      var input=$('input[data-f="w"][data-ei="'+ei+'"][data-ri="'+ri+'"]')||$('input[data-f="r"][data-ei="'+ei+'"][data-ri="'+ri+'"]');
+      if(input){input.focus({preventScroll:true});input.scrollIntoView({block:'center'});return;}
+    }
+  }
+  var finish=$('#finish');
+  if(finish) finish.focus({preventScroll:true});
+}
+function requestScreenWakeLock(){
+  if(!navigator.wakeLock) return Promise.reject(new Error('Este navegador no permite mantener la pantalla activa'));
+  return navigator.wakeLock.request('screen').then(function(lock){
+    screenWakeLock=lock;
+    lock.addEventListener('release',function(){
+      if(screenWakeLock!==lock) return;
+      screenWakeLock=null;
+      if(!S.screenAwake) return;
+      if(document.visibilityState==='visible'){
+        S.screenAwake=false;
+        render();
+        toast('El dispositivo liberó el bloqueo de pantalla');
+      }
+    });
+    return lock;
+  });
+}
+function releaseScreenWakeLock(){
+  var lock=screenWakeLock;
+  screenWakeLock=null;
+  if(!lock) return Promise.resolve();
+  return lock.release().catch(function(error){
+    console.warn('No se pudo liberar el bloqueo de pantalla',error);
+    toast('No se pudo liberar el bloqueo de pantalla');
+  });
 }
 function refreshLive(ei){
   var el = $('#live-' + ei); if(el) el.innerHTML = liveHtml(ei);
@@ -3854,6 +3918,8 @@ function finish(updateRoutine){
     S.sessions=S.sessions.filter(function(item){return item.id!==session.id;}).concat([session]);
     S.justSaved = {session:session, next:saved};
     S.draft = blankDraft(); S.loadingCalc=null; saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
+    S.screenAwake=false;
+    releaseScreenWakeLock();
     render(); window.scrollTo(0, 0);
     var summaryHeading=$('[data-workout-summary-heading]');
     if(summaryHeading) summaryHeading.focus({preventScroll:true});
@@ -4097,7 +4163,7 @@ function onClick(ev){
       S.selectedRoutine=null; S.pedit=null; S.tab='rutinas'; S.librarySection='rutinas'; S.confirm=null;
       render(); window.scrollTo(0,0); break;
     case 'library-open-section': S.tab = 'rutinas'; S.librarySection = t.dataset.section; S.selectedProgram = null; S.selectedRoutine = null; S.confirm = null; try { localStorage.setItem(TK, S.tab); } catch(e){} render(); break;
-    case 'library-section': S.librarySection = t.dataset.section; S.selectedProgram = null; S.selectedRoutine = null; S.confirm = null; render(); break;
+    case 'library-section': S.librarySection = t.dataset.section; S.libraryQuery=''; S.selectedProgram = null; S.selectedRoutine = null; S.confirm = null; render(); break;
     case 'program-new': S.pedit = {id:null, name:''}; S.selectedProgram = null; render(); break;
     case 'program-edit':
       var programEdit = S.profile.programs[t.dataset.id];
@@ -4131,6 +4197,25 @@ function onClick(ev){
       try { localStorage.setItem(WORKOUT_SIMPLE_KEY,S.simpleWorkoutMode?'1':'0'); }
       catch(error){ console.warn('No se pudo guardar la preferencia del modo simple',error); }
       render(); break;
+    case 'screen-awake-toggle':
+      if(S.screenAwake){
+        S.screenAwake=false;
+        releaseScreenWakeLock().then(render);
+      }else{
+        S.screenAwake=true;
+        requestScreenWakeLock().then(function(){
+          if(!S.screenAwake){releaseScreenWakeLock();return;}
+          render();toast('La pantalla permanecerá activa durante el entreno');
+        }).catch(function(error){
+          S.screenAwake=false;
+          render();
+          toast(error&&error.message?error.message:'No se pudo mantener la pantalla activa');
+        });
+      }
+      break;
+    case 'focus-next-set':
+      focusNextWorkoutSet();
+      break;
     case 'substitution-cancel': S.pendingSubstitution=null; render(); break;
     case 'substitution-confirm':
       var pendingSubstitution=S.pendingSubstitution;
@@ -4245,13 +4330,18 @@ function onClick(ev){
       finishRow.restTriggered = true;
       finishRow.restCompletedAt = finishedAt;
       finishRow.restToken = uid('rest_');
+      var remainingEntrySets=finishEntry.rows.filter(function(row){return setType(row)==='normal';});
+      if(remainingEntrySets.length&&remainingEntrySets.every(function(row){return row.restTriggered;})){
+        S.collapsedEntries.add(finishEntry.uiId);
+        S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
+      }
       var finishRestSeconds = restSecondsFor(finishRow);
       if(autoRestEligible(finishRow) && finishRestSeconds > 0){
         startRest(finishRestSeconds, finishRow.restToken);
       }
       saveDraft();
       render();
-      focusSetControl(ei,ri);
+      focusNextWorkoutSet();
       break;
     case 'undo-finish-set':
       var undoEntry=S.draft.entries[ei], undoRow=undoEntry&&undoEntry.rows[ri];
@@ -4475,6 +4565,14 @@ function onClick(ev){
 }
 function onInput(ev){
   var t = ev.target;
+  if(t.dataset.librarySearch!==undefined){
+    S.libraryQuery=t.value;
+    var cursor=t.selectionStart;
+    render();
+    var search=$('[data-library-search]');
+    if(search){search.focus({preventScroll:true});search.setSelectionRange(cursor,cursor);}
+    return;
+  }
   if(t.dataset.plateProfile!==undefined){
     var inputProfile=plateProfiles().filter(function(profile){return profile.id===t.dataset.id;})[0];
     if(!inputProfile) return;
@@ -5192,6 +5290,15 @@ document.addEventListener('click', onClick);
 document.addEventListener('input', onInput);
 document.addEventListener('change', onChange);
 document.addEventListener('keydown', onWorkoutKeydown);
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState!=='visible'||!S.screenAwake||screenWakeLock) return;
+  requestScreenWakeLock().catch(function(error){
+    S.screenAwake=false;
+    render();
+    console.warn('No se pudo reactivar la pantalla durante el entreno',error);
+    toast('La pantalla ya no se mantendrá activa');
+  });
+});
 setInterval(updateWorkoutClock, 1000);
 setInterval(updateRestTimer, 250);
 setInterval(createAutoBackup, 6*60*60*1000);

@@ -6,7 +6,9 @@
   'use strict';
 
   function render(state,helpers){
+    var query=String(state.libraryQuery||'').trim().toLocaleLowerCase('es');
     var ids=Object.keys(state.profile.exercises).filter(function(id){return !state.profile.exercises[id].archived;})
+      .filter(function(id){var exercise=helpers.exById(id);var searchable=helpers.searchText?helpers.searchText(id):exercise.name;return !query||searchable.toLocaleLowerCase('es').includes(query);})
       .sort(function(a,b){
         var dateA=helpers.lastDate(a),dateB=helpers.lastDate(b);
         return dateA===dateB
@@ -15,7 +17,9 @@
       });
     var output='<div class="head-row"><h2>Ejercicios</h2><span class="num muted">'+ids.length+'</span></div>';
     if(!ids.length){
-      return output+'<div class="card"><p>Aquí verás cada ejercicio con su estado de progresión. Registra un entreno en Hoy para empezar.</p><button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button></div>';
+      return output+(query
+        ? '<div class="card"><p>No encontramos ejercicios con esa búsqueda. Prueba otro nombre, equipo o grupo muscular.</p></div>'
+        : '<div class="card"><p>Aquí verás cada ejercicio con su estado de progresión. Registra un entreno en Hoy para empezar.</p><button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button></div>');
     }
     return output+'<div class="list">'+ids.map(function(id){
       var exercise=helpers.exById(id),plan=helpers.planFor(exercise),open=state.openEx===id;

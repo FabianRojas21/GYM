@@ -46,3 +46,14 @@ test('expanded exercise delegates detail rendering and exposes accessible toggle
   assert.match(html,/<div class="details">press<\/div>/);
   assert.match(html,/<div class="progress"><\/div>/);
 });
+
+test('exercise search filters by name or helper-provided catalog metadata',()=>{
+  const html=render({profile:{exercises:helpers.exercises},openEx:null,libraryQuery:'pecho'},{
+    ...helpers,
+    searchText:id=>id==='press'?'Press banca Pecho Barra':'Remo Espalda'
+  });
+  assert.match(html,/Press banca/);
+  assert.doesNotMatch(html,/>Remo</);
+  const noResults=render({profile:{exercises:helpers.exercises},openEx:null,libraryQuery:'pierna'},helpers);
+  assert.match(noResults,/No encontramos ejercicios con esa búsqueda/);
+});

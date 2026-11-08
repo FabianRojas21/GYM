@@ -28,11 +28,21 @@ test('library renders routine cards and routine creation actions',()=>{
   const html=render(baseState,helpers);
   assert.match(html,/Tu biblioteca/);
   assert.match(html,/data-act="library-section" data-section="rutinas"/);
+  assert.match(html,/data-section="rutinas" aria-pressed="true"/);
   assert.match(html,/Cuerpo completo/);
   assert.match(html,/3 series/);
   assert.match(html,/data-act="rut-start"/);
   assert.match(html,/data-act="rut-edit"/);
   assert.match(html,/data-act="rut-duplicate"/);
+  assert.match(html,/data-library-search/);
+});
+
+test('library search filters routine cards and gives a useful empty state',()=>{
+  const matched=render({...baseState,libraryQuery:'cuerpo'},helpers);
+  assert.match(matched,/Cuerpo completo/);
+  const empty=render({...baseState,libraryQuery:'pierna'},helpers);
+  assert.match(empty,/No hay rutinas con ese nombre/);
+  assert.match(empty,/data-library-search/);
 });
 
 test('library renders ordered program routines with movement controls',()=>{

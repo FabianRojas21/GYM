@@ -10,6 +10,7 @@ test('registra y termina un entrenamiento desde el flujo móvil',async({page})=>
 
   const start=page.locator('[data-home-start]');
   await expect(start).toBeVisible();
+  await expect(start).toContainText('Empezar primer entreno');
   const startPosition=await start.evaluate(element=>element.getBoundingClientRect().top);
   const statsPosition=await page.locator('.weekly-stats').evaluate(element=>element.getBoundingClientRect().top);
   expect(startPosition).toBeLessThan(statsPosition);
@@ -20,9 +21,12 @@ test('registra y termina un entrenamiento desde el flujo móvil',async({page})=>
   const weight=page.locator('[data-f="w"][data-ei="0"][data-ri="0"]');
   const reps=page.locator('[data-f="r"][data-ei="0"][data-ri="0"]');
   await expect(weight).toBeVisible();
+  await expect(page.locator('[data-act="screen-awake-toggle"]')).toBeVisible();
   await weight.fill('40');
   await reps.fill('8');
   await page.getByRole('button',{name:'Terminar serie'}).first().click();
+  await expect(page.locator('.set[data-ri="1"]')).toHaveAttribute('data-current-set','true');
+  await expect(page.locator('.set[data-ri="0"]')).toHaveClass(/is-complete/);
   await expect(page.locator('.set-finish-done')).toBeVisible();
   await expect(page.getByRole('button',{name:'Terminar entreno'})).toBeEnabled();
   await page.getByRole('button',{name:'Terminar entreno'}).click();
@@ -30,6 +34,12 @@ test('registra y termina un entrenamiento desde el flujo móvil',async({page})=>
   await expect(page.getByRole('heading',{name:'Resumen del entreno'})).toBeVisible();
   await expect(page.locator('.workout-summary .suggest .nm').first()).toHaveText('Press banca');
   await expect(page.locator('.workout-summary')).toContainText('1 serie efectiva');
+  await page.locator('.tab[data-tab="historial"]').click();
+  const savedWorkout=page.locator('[data-history-session]').first();
+  await expect(page.locator('.history-month-heading')).toBeVisible();
+  await expect(savedWorkout).not.toHaveAttribute('open','');
+  await savedWorkout.locator('summary').click();
+  await expect(savedWorkout).toContainText('Press banca');
   const viewport=await page.evaluate(()=>({width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth}));
   expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width);
 });
@@ -52,6 +62,51 @@ test('recupera el borrador de entrenamiento después de recargar',async({page})=
 
   await expect(page.locator('[data-f="w"][data-ei="0"][data-ri="0"]')).toHaveValue('42,5');
   await expect(page.locator('[data-f="r"][data-ei="0"][data-ri="0"]')).toHaveValue('9');
+});
+
+test('resalta la siguiente serie y pliega el ejercicio al completarlo',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('[data-home-start]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
+
+  for(let ri=0;ri<3;ri++){
+    await page.locator(`[data-f="w"][data-ei="0"][data-ri="${ri}"]`).fill('40');
+    await page.locator(`[data-f="r"][data-ei="0"][data-ri="${ri}"]`).fill('8');
+  }
+  for(let ri=0;ri<3;ri++){
+    await page.locator(`.set[data-ri="${ri}"] [data-act="finish-set"]`).click();
+    if(ri<2) await expect(page.locator(`.set[data-ri="${ri+1}"]`)).toHaveAttribute('data-current-set','true');
+  }
+  const exerciseCard=page.locator('.workout-card[data-ei="0"]');
+  await expect(exerciseCard).toHaveClass(/is-collapsed/);
+  await expect(exerciseCard.locator('.workout-progress')).toHaveText('3/3 series');
+  await page.locator('[data-act="focus-next-set"]').click();
+  await expect(page.locator('[data-act="finish"]')).toBeFocused();
+});
+
+test('mantiene la pantalla activa o comunica la limitación del navegador',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('[data-home-start]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
+  test.skip(!(await page.evaluate(()=>Boolean(navigator.wakeLock))),'Wake Lock no está disponible en este navegador');
+
+  const toggle=page.locator('[data-act="screen-awake-toggle"]');
+  await toggle.click();
+  await expect.poll(async()=>await toggle.getAttribute('aria-pressed')==='true'||await page.locator('#toast').isVisible()).toBe(true);
+  if(await toggle.getAttribute('aria-pressed')==='true'){
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed','false');
+  }else{
+    await expect(page.locator('#toast')).not.toBeEmpty();
+  }
 });
 
 test('muestra la recomendación de progresión del ejercicio guardado',async({page})=>{
@@ -94,6 +149,11 @@ test('crea y abre una rutina desde la biblioteca',async({page})=>{
   await expect(page.locator('.library-exercise-row')).toContainText('Press banca');
   await page.locator('[data-act="rut-edit"]').click();
   await expect(page.getByRole('heading',{name:'Editar rutina'})).toBeVisible();
+  await page.locator('[data-act="rut-cancel"]').click();
+  const search=page.locator('[data-library-search]');
+  await expect(search).toBeVisible();
+  await search.fill('Rutina E2E');
+  await expect(page.locator('.library-card').filter({hasText:'Rutina E2E'})).toBeVisible();
 });
 
 test('navega por las categorías de Ajustes y vuelve al menú',async({page})=>{

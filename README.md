@@ -107,6 +107,13 @@ estado de guardado aparece debajo del título. En **Historial** puedes buscar
 por ejercicio, rutina o fecha y filtrar por 7, 30 o 90 días. El resumen del
 periodo muestra entrenos, duración, volumen y series efectivas, comparados con
 el intervalo anterior equivalente; la búsqueda se aplica a ambos intervalos.
+La serie pendiente se resalta y, al terminarla, la app lleva el foco a la
+siguiente; al completar todas las series de un ejercicio, lo pliega. Durante
+la sesión puedes usar **Siguiente serie** para volver al bloque pendiente y
+activar **Mantener pantalla activa** si el navegador y el dispositivo lo
+permiten. La Biblioteca permite buscar rutinas y ejercicios por nombre, equipo
+o grupo muscular. El Historial agrupa los entrenos por mes y permite desplegar
+cada sesión para consultar sus series y acciones.
 Desde un entrenamiento guardado puedes elegir **Guardar como rutina** para
 crear una plantilla reutilizable con sus ejercicios, series normales,
 aproximaciones y ajustes de progresión. Las series especiales no se convierten
