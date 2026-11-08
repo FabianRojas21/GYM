@@ -290,7 +290,8 @@
       if(reps[j] !== undefined) repsFalt += Math.max(0, ex.max - reps[j]);
     }
     var serFalt = Math.max(0, need - n);
-    var result = {W:weight, nextW:weight, progressTarget:availableWeight(weight + increment, ex.loadStep || increment, 'up'), reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[], goal:goalProfile.label};
+    var progressIncrease = availableWeight(increment, ex.loadStep || increment, 'up');
+    var result = {W:weight, nextW:weight, progressTarget:Math.round((weight + progressIncrease) * 100) / 100, reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[], goal:goalProfile.label};
     var fill = function(value){ return Array.apply(null, Array(need)).map(function(){ return value; }); };
 
     if((allTop && okEffort) || easy){

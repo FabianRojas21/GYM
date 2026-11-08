@@ -213,6 +213,20 @@ test('ajusta la recomendación al incremento disponible del equipo', () => {
   assert.equal(result.nextW, 28);
 });
 
+test('aplica el incremento disponible desde el peso actual, no desde cero', () => {
+  const exercise = {...baseExercise, inc:7, loadStep:7};
+  const result = analyze(exercise, [set(10,2,79), set(10,2,79), set(10,2,79)], null, rirSettings);
+  assert.equal(result.progressTarget, 86);
+  assert.equal(result.nextW, 86);
+});
+
+test('redondea el incremento al siguiente salto del equipo', () => {
+  const exercise = {...baseExercise, inc:2, loadStep:2.5};
+  const result = analyze(exercise, [set(10,2,26), set(10,2,26), set(10,2,26)], null, rirSettings);
+  assert.equal(result.progressTarget, 28.5);
+  assert.equal(result.nextW, 28.5);
+});
+
 test('las series normales extra se guardan pero no bloquean la subida', () => {
   const result = analyze(baseExercise, [set(10), set(10), set(10), set(6, 0)], null, rirSettings);
   assert.equal(result.status, 'sube');
