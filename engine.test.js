@@ -671,26 +671,19 @@ test('compara días equivalentes y detecta tendencias sin semanas falsas', () =>
 
 test('el resumen del historial compara ventanas exactas y métricas acumuladas', () => {
   const source=fs.readFileSync('./app.js','utf8');
-  const bounds=source.match(/function historyWindowBounds\(days,today\)\{[\s\S]*?\n\}/);
-  const aggregate=source.match(/function historyAggregate\(sessions\)\{[\s\S]*?\n\}/);
-  const trend=source.match(/function historyTrend\(current,previous\)\{[\s\S]*?\n\}/);
-  assert.ok(bounds && aggregate && trend);
-  const context={
-    parseISO:value=>{const [year,month,day]=value.split('-').map(Number);return new Date(year,month-1,day);},
-    iso:value=>value.getFullYear()+'-'+String(value.getMonth()+1).padStart(2,'0')+'-'+String(value.getDate()).padStart(2,'0'),
-    sessionStats:session=>session.stats
-  };
-  vm.runInNewContext(bounds[0]+';'+aggregate[0]+';'+trend[0]+
-    ';globalThis.boundsForTest=historyWindowBounds;globalThis.aggregateForTest=historyAggregate;globalThis.trendForTest=historyTrend;',context);
-  assert.deepEqual(JSON.parse(JSON.stringify(context.boundsForTest(7,'2026-10-31'))),{
+  const {windowBounds,aggregate,trend}=require('./history.js');
+  assert.deepEqual(windowBounds(7,'2026-10-31'),{
     start:'2026-10-25',end:'2026-10-31',previousStart:'2026-10-18',previousEnd:'2026-10-24'
   });
-  assert.deepEqual(JSON.parse(JSON.stringify(context.aggregateForTest([
+  assert.deepEqual(aggregate([
     {durationMs:60000,stats:{volume:120,effectiveSets:3}},
     {durationMs:120000,stats:{volume:80,effectiveSets:2}}
-  ]))),{sessions:2,volume:200,effectiveSets:5,duration:180000});
-  assert.equal(context.trendForTest(6,4),'↑ 50% vs periodo anterior');
-  assert.equal(context.trendForTest(0,0),'Sin cambios previos');
+  ],session=>session.stats),{sessions:2,volume:200,effectiveSets:5,duration:180000});
+  assert.equal(trend(6,4),'↑ 50% vs periodo anterior');
+  assert.equal(trend(0,0),'Sin cambios previos');
+  assert.match(source,/History\.windowBounds\(days,today\)/);
+  assert.match(source,/History\.aggregate\(sessions,sessionStats\)/);
+  assert.match(source,/History\.trend\(current,previous\)/);
   assert.match(source,/value="90"[\s\S]*Últimos 90 días/);
   assert.match(source,/id="history-summary"/);
   assert.match(source,/Comparación con los '\+S\.historyRange\+' días anteriores/);
@@ -772,6 +765,7 @@ test('el objetivo semanal cuenta hoy y los seis días anteriores', () => {
     Date:FixedDate,
     parseISO:value=>new RealDate(Number(value.slice(0,4)),Number(value.slice(5,7))-1,Number(value.slice(8,10))),
     iso,
+    History:require('./history.js'),
     S:{sessions:['2026-01-10','2026-01-09','2026-01-07','2026-01-04','2026-01-03'].map(date=>({date}))},
     personalRecords:()=>({}),
     exById:()=>null

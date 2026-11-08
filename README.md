@@ -8,12 +8,13 @@ App de gimnasio para PC y móvil.
 - `styles.css`: estilos y diseño.
 - `app.js`: interfaz, almacenamiento y flujo de la aplicación.
 - `demo.js`: datos de ejemplo para probar el flujo de entrenamiento.
+- `history.js`: cálculos de periodos, métricas y tendencias del historial.
 - `catalog.js`: catálogo sugerido y etiquetas de ejercicios, músculos, equipo y medidas.
 - `engine.js`: reglas de progresión, músculos y secuencia de programas.
 - `backup.js`: migración y serialización de respaldos.
 - `store.js`: operaciones de persistencia y reconciliación de datos de Firebase.
 - `sw.js` y los iconos PNG: instalación offline como PWA.
-- `engine.test.js` y `demo.test.js`: pruebas del motor y los datos de ejemplo.
+- `engine.test.js`, `demo.test.js` y `history.test.js`: pruebas del motor y módulos auxiliares.
 - `firestore.rules.test.js` y `e2e/`: pruebas de reglas y del flujo en navegador.
 
 Los archivos deben permanecer en la misma carpeta. Para probar la app,

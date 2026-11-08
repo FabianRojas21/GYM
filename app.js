@@ -2,6 +2,7 @@
 'use strict';
 
 var Catalog = SobrecargaCatalog;
+var History = SobrecargaHistory;
 
 /* ---------- utilidades ---------- */
 var $ = function(s, el){ return (el||document).querySelector(s); };
@@ -3339,11 +3340,7 @@ function viewHist(){
     '<div class="list" id="history-list">' + (ss.length ? ss.map(historyCardHtml).join('') : historyEmptyHtml()) + '</div>';
 }
 function historyWindowBounds(days,today){
-  var currentEnd=parseISO(today); currentEnd.setHours(0,0,0,0);
-  var currentStart=new Date(currentEnd); currentStart.setDate(currentStart.getDate()-days+1);
-  var previousEnd=new Date(currentStart); previousEnd.setDate(previousEnd.getDate()-1);
-  var previousStart=new Date(previousEnd); previousStart.setDate(previousStart.getDate()-days+1);
-  return {start:iso(currentStart),end:iso(currentEnd),previousStart:iso(previousStart),previousEnd:iso(previousEnd)};
+  return History.windowBounds(days,today);
 }
 function historyQueryMatches(session,query){
   if(!query) return true;
@@ -3367,19 +3364,10 @@ function filteredHistorySessions(){
   return matches.sort(function(a,b){ return a.date===b.date ? (b.ts||0)-(a.ts||0) : (a.date<b.date?1:-1); });
 }
 function historyAggregate(sessions){
-  return sessions.reduce(function(total,session){
-    var stats=sessionStats(session);
-    total.volume+=stats.volume;
-    total.effectiveSets+=stats.effectiveSets;
-    total.duration+=Number(session.durationMs)||0;
-    return total;
-  },{sessions:sessions.length,volume:0,effectiveSets:0,duration:0});
+  return History.aggregate(sessions,sessionStats);
 }
 function historyTrend(current,previous){
-  if(previous===0) return current===0?'Sin cambios previos':'Nuevo periodo';
-  var difference=current-previous;
-  if(!difference) return 'Sin cambios';
-  return (difference>0?'↑ ':'↓ ')+Math.round(Math.abs(difference)/previous*100)+'% vs periodo anterior';
+  return History.trend(current,previous);
 }
 function weeklyProgressStatus(current,previous){
   function metricDelta(currentValue, previousValue, label, formatter){
