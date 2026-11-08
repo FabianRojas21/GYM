@@ -5,6 +5,7 @@ var Catalog = SobrecargaCatalog;
 var History = SobrecargaHistory;
 var Profile = SobrecargaProfile;
 var Settings = SobrecargaSettings;
+var Library = SobrecargaLibrary;
 
 /* ---------- utilidades ---------- */
 var $ = function(s, el){ return (el||document).querySelector(s); };
@@ -2879,69 +2880,15 @@ function viewRut(){
   if(S.pedit) return programEditor();
   if(S.redit) return routineEditor();
   if(S.selectedRoutine && S.profile.routines[S.selectedRoutine]) return routineLibraryDetail(S.profile.routines[S.selectedRoutine]);
-  var rs = routineList(), programs = Object.keys(S.profile.programs || {}).map(function(id){ return S.profile.programs[id]; })
-    .sort(function(a,b){ return a.name.localeCompare(b.name, 'es'); });
-  var activeProgram = S.selectedProgram && S.profile.programs[S.selectedProgram];
-  var title = activeProgram ? activeProgram.name : 'Tu biblioteca';
-  var out = '<div class="library-heading"><div>' +
-    (activeProgram ? '<button class="text-button library-back" data-act="program-back">‹ Biblioteca</button>' : '') +
-    '<h2>' + esc(title) + '</h2></div>' +
-    (S.librarySection === 'programas' && !activeProgram
-      ? '<button class="library-add" data-act="program-new" aria-label="Crear programa">＋</button>'
-      : S.librarySection === 'rutinas' || activeProgram
-        ? '<button class="library-add" data-act="rut-new" aria-label="Crear rutina">＋</button>'
-        : '') + '</div>';
-  out += '<div class="library-filters" role="group" aria-label="Secciones de biblioteca">' +
-    ['programas','rutinas','ejercicios'].map(function(section){
-      var label = section.charAt(0).toUpperCase() + section.slice(1);
-      return '<button class="library-filter' + (S.librarySection === section ? ' active' : '') + '"' +
-        ' data-act="library-section" data-section="' + section + '">' + label + '</button>';
-    }).join('') + '</div>';
-  if(activeProgram || S.librarySection === 'programas'){
-    if(activeProgram){
-      var programRoutines = Engine.orderedProgramRoutines(activeProgram,rs);
-      var hasRoutineOrder=Engine.programRoutineOrderConfigured(activeProgram,rs);
-      out += '<div class="library-sort"><span>Secuencia del programa</span><button class="text-button" data-act="program-edit" data-id="' + esc(activeProgram.id) + '">Editar programa</button></div>' +
-        '<p class="small muted program-sequence-hint">'+(hasRoutineOrder?'Usa las flechas para definir qué rutina sigue.':'Orden inicial alfabético. Confirma o ajusta la secuencia para sugerir el próximo día.')+'</p>' +
-        '<button class="btn '+(S.profile.activeProgramId===activeProgram.id?'ghost':'')+' sm program-activate" data-act="program-activate" data-id="'+esc(activeProgram.id)+'"'+(S.profile.activeProgramId===activeProgram.id?' disabled':'')+'>' +
-        (S.profile.activeProgramId===activeProgram.id?'Programa activo':hasRoutineOrder?'Usar como programa activo':'Confirmar orden y activar')+'</button>';
-      out += programRoutines.length
-        ? '<div class="library-list">' + programRoutines.map(function(routine,index){return libraryRoutineCard(routine,{programId:activeProgram.id,index:index,count:programRoutines.length});}).join('') +
-          (!hasRoutineOrder?'<button class="btn ghost sm program-order-save" data-act="program-order-save" data-id="'+esc(activeProgram.id)+'">Usar este orden</button>':'') + '</div>'
-        : '<section class="library-empty"><span>▤</span><h3>Este programa todavía no tiene rutinas</h3><p>Añade una rutina nueva y asígnala a este programa.</p><button class="btn" data-act="rut-new">Crear rutina</button></section>';
-      if(S.confirm === 'delp:' + activeProgram.id) out += '<section class="card"><p>¿Borrar el programa? Las rutinas se conservarán sin asignación.</p><div class="row"><button class="btn danger sm" data-act="program-del-ok" data-id="' + esc(activeProgram.id) + '">Confirmar: borrar programa</button><button class="btn ghost sm" data-act="program-cancel-delete">Cancelar</button></div></section>';
-    } else {
-      out += '<div class="library-sort"><span>A-Z · Orden alfabético</span><span class="muted">' + programs.length + ' programa' + (programs.length === 1 ? '' : 's') + '</span></div>';
-      out += '<div class="library-list"><button class="library-card create-card" data-act="program-new"><span class="library-cover">＋</span><span><strong>Crear programa</strong><small>Organiza tus rutinas en un programa</small></span></button>' +
-        (programs.length ? programs.map(function(program){
-          var count = rs.filter(function(r){ return r.programId === program.id; }).length;
-          return '<div class="library-card"><button class="library-open" data-act="program-open" data-id="' + esc(program.id) + '"><span class="library-cover program-cover">' + esc(program.name.slice(0,1).toUpperCase()) + '</span><span><strong>' + esc(program.name) + '</strong><small>' + (S.profile.activeProgramId===program.id?'Programa activo · ':'') + count + ' rutina' + (count === 1 ? '' : 's') + '</small></span></button>' +
-            '<button class="mini" data-act="program-del" data-id="' + esc(program.id) + '" aria-label="Borrar programa ' + esc(program.name) + '">⋮</button></div>';
-        }).join('') : '<section class="library-empty"><span>▤</span><h3>Aún no tienes programas</h3><p>Crea un programa para agrupar rutinas, por ejemplo: Torso/Pierna o Full Body.</p></section>') + '</div>';
-      if(S.confirm && S.confirm.indexOf('delp:') === 0){
-        var deleteId = S.confirm.slice(5), deleteProgram = S.profile.programs[deleteId];
-        if(deleteProgram) out += '<section class="card"><p>¿Borrar «' + esc(deleteProgram.name) + '»? Sus rutinas se conservarán en la biblioteca.</p><button class="btn danger sm" data-act="program-del-ok" data-id="' + esc(deleteId) + '">Confirmar: borrar programa</button><button class="btn ghost sm" data-act="program-cancel-delete">Cancelar</button></section>';
-      }
-    }
-  } else if(S.librarySection === 'rutinas'){
-    out += '<div class="library-sort"><span>A-Z · Orden alfabético</span><span class="muted">' + rs.length + ' rutinas</span></div>';
-    out += rs.length
-      ? '<div class="library-list"><button class="library-card create-card" data-act="rut-new"><span class="library-cover">＋</span><span><strong>Crear rutina</strong><small>Diseña una sesión de entrenamiento</small></span></button>' + rs.map(libraryRoutineCard).join('') + '</div>'
-      : '<section class="library-empty"><span>▤</span><h3>Aún no tienes rutinas</h3><p>Crea una rutina desde cero o abre un programa para añadirla ahí.</p><button class="btn" data-act="rut-new">Crear rutina</button></section>';
-  } else {
-    out += viewEj();
-  }
-  return out;
-}
-function libraryRoutineCard(routine,programOrder){
-  var count = routine.items.length, replacing = S.confirm === 'start:' + routine.id, summary=routineSummary(routine);
-  return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="' + esc(routine.id) + '"><span class="library-cover routine-cover">' + esc(routine.name.trim().charAt(0).toUpperCase() || 'R') + '</span><span><strong>' + esc(routine.name) + '</strong><small class="routine-card-volume">' + count + ' ejercicio' + (count === 1 ? '' : 's') + ' · '+summary.workingSets+' series</small><small class="routine-card-meta">'+esc(routineMuscleLabel(summary))+' · '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</small></span></button>' +
-    '<div class="library-card-actions">' +
-    (programOrder?'<button class="mini program-routine-move" data-act="program-routine-move" data-program="'+esc(programOrder.programId)+'" data-id="'+esc(routine.id)+'" data-direction="-1"'+(programOrder.index===0?' disabled':'')+' aria-label="Mover '+esc(routine.name)+' antes">↑</button><button class="mini program-routine-move" data-act="program-routine-move" data-program="'+esc(programOrder.programId)+'" data-id="'+esc(routine.id)+'" data-direction="1"'+(programOrder.index===programOrder.count-1?' disabled':'')+' aria-label="Mover '+esc(routine.name)+' después">↓</button>':'') +
-    '<button class="btn sm" data-act="rut-start" data-id="' + esc(routine.id) + '">' + (replacing ? 'Reemplazar' : 'Entrenar') + '</button><button class="mini" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar ' + esc(routine.name) + '">✎</button><button class="mini" data-act="rut-duplicate" data-id="' + esc(routine.id) + '" aria-label="Duplicar ' + esc(routine.name) + '">⧉</button>' +
-    (S.confirm === 'delr:' + routine.id
-      ? '<button class="mini danger" data-act="rut-del-ok" data-id="' + esc(routine.id) + '" aria-label="Confirmar borrar rutina">✓</button>'
-      : '<button class="mini" data-act="rut-del" data-id="' + esc(routine.id) + '" aria-label="Borrar ' + esc(routine.name) + '">×</button>') + '</div></div>';
+  return Library.render(S,{
+    routineList:routineList,
+    routineSummary:routineSummary,
+    routineMuscleLabel:routineMuscleLabel,
+    esc:esc,
+    dFmt:dFmt,
+    engine:Engine,
+    viewExercises:viewEj
+  });
 }
 function routineSummary(routine){
   var workingSets=0,warmupSets=0,muscles=[];

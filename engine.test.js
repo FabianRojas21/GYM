@@ -1131,11 +1131,14 @@ test('los perfiles compartidos alimentan las calculadoras vinculadas y se conser
 
 test('la biblioteca resume rutinas y muestra la última actividad de sus ejercicios', () => {
   const app=fs.readFileSync('./app.js','utf8');
+  const library=fs.readFileSync('./library.js','utf8');
   const readme=fs.readFileSync('./README.md','utf8');
   assert.match(app,/function routineSummary\(routine\)/);
-  assert.match(app,/summary\.workingSets\+' series<\/small>/);
-  assert.match(app,/A-Z · Orden alfabético/);
-  assert.match(app,/class="routine-card-volume"/);
+  assert.match(app,/return Library\.render\(S,/);
+  assert.match(library,/summary\.workingSets\+' series/);
+  assert.match(library,/A-Z · Orden alfabético/);
+  assert.match(library,/class="routine-card-volume"/);
+  assert.match(fs.readFileSync('./index.html','utf8'),/library\.js\?v=__BUILD_ID__/);
   assert.match(fs.readFileSync('./styles.css','utf8'),/\.routine-card-volume\{[^}]*border-radius:999px/);
   assert.match(app,/function routineExerciseHistory\(exId\)/);
   assert.match(app,/Último registro: '\+dFmt\(latest\.date\)/);
@@ -1144,19 +1147,20 @@ test('la biblioteca resume rutinas y muestra la última actividad de sus ejercic
 
 test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activo', () => {
   const app=fs.readFileSync('./app.js','utf8');
+  const library=fs.readFileSync('./library.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/function recentSessionDetailsHtml\(session\)[\s\S]*?setsText\(entry\.sets,true\)[\s\S]*?Próximo objetivo/);
   assert.match(app,/function activeTrainingPlanHtml\(\)[\s\S]*?Programa activo/);
   assert.match(app,/recentSessionDetailsHtml\(latest\)/);
-  assert.match(app,/data-act="program-order-save"/);
-  assert.match(app,/data-act="program-routine-move"/);
-  assert.match(app,/data-act="program-activate"/);
+  assert.match(library,/data-act="program-order-save"/);
+  assert.match(library,/data-act="program-routine-move"/);
+  assert.match(library,/data-act="program-activate"/);
   assert.match(app,/data-act="routine-activate"/);
   assert.match(app,/session\.programId=S\.draft\.programId/);
   assert.match(app,/programId:r\.programId && S\.profile\.programs\[r\.programId\] \? r\.programId : null/);
   assert.match(app,/Engine\.orderedProgramRoutines\(program,routines\)/);
   assert.match(app,/Engine\.programRecommendation\(program,routines,S\.sessions\)/);
-  assert.match(app,/Engine\.programRoutineOrderConfigured\(activeProgram,rs\)/);
+  assert.match(library,/helpers\.engine\.programRoutineOrderConfigured\(activeProgram,routines\)/);
   assert.match(app,/activeProgramId/);
   assert.match(app,/data-active-plan/);
   assert.match(app,/data-act="plan-deactivate"/);
