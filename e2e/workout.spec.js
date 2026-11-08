@@ -156,6 +156,59 @@ test('crea y abre una rutina desde la biblioteca',async({page})=>{
   await expect(page.locator('.library-card').filter({hasText:'Rutina E2E'})).toBeVisible();
 });
 
+test('guarda las series adicionales en una rutina y las carga al entrenar',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('.tab[data-tab="rutinas"]').click();
+  await page.locator('[data-act="library-section"][data-section="rutinas"]').click();
+  await page.locator('[data-act="rut-new"]').first().click();
+  await page.locator('[data-rf="name"]').fill('Rutina con back-off');
+  await page.locator('[data-act="rut-add"]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="rpick"][data-lib="Press banca"]').click();
+
+  await page.locator('[data-act="rut-special-add"][data-i="0"]').click();
+  await page.locator('[data-it="specialSetType"][data-i="0"][data-k="0"]').selectOption('backoff');
+  await page.locator('[data-act="rut-save"]').click();
+  await expect(page.getByRole('heading',{name:'Rutina con back-off'})).toBeVisible();
+  await expect(page.locator('.library-exercise-row')).toContainText('Back-off');
+  await page.locator('[data-act="rut-start"]').click();
+
+  const setTypes=page.locator('.workout-card[data-ei="0"] .set-type');
+  await expect(setTypes).toHaveCount(4);
+  await expect(setTypes.nth(0)).toHaveValue('normal');
+  await expect(setTypes.nth(1)).toHaveValue('normal');
+  await expect(setTypes.nth(2)).toHaveValue('normal');
+  await expect(setTypes.nth(3)).toHaveValue('backoff');
+});
+
+test('guarda series especiales en las reglas del ejercicio',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('[data-home-start]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
+  await page.locator('.tab[data-tab="rutinas"]').click();
+  await page.locator('[data-act="library-section"][data-section="ejercicios"]').click();
+  await page.locator('[data-act="toggle-ex"]').filter({hasText:'Press banca'}).click();
+
+  await page.locator('[data-act="ex-special-add"]').click();
+  await page.locator('[data-cfg="specialSetType"]').selectOption('dropset');
+  await page.locator('.tab[data-tab="hoy"]').click();
+  await page.locator('.workout-card[data-ei="0"] [data-act="rm-ex"]').click();
+  await page.locator('[data-act="start"]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"]').filter({hasText:'Press banca'}).first().click();
+
+  const setTypes=page.locator('.workout-card[data-ei="0"] .set-type');
+  await expect(setTypes).toHaveCount(4);
+  await expect(setTypes.nth(3)).toHaveValue('dropset');
+});
+
 test('navega por las categorías de Ajustes y vuelve al menú',async({page})=>{
   await page.route('https://www.gstatic.com/**',route=>route.abort());
   await page.route('https://fonts.googleapis.com/**',route=>route.abort());

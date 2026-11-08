@@ -18,6 +18,7 @@ const helpers={
   weightUnitLabel:()=>'kg',
   exerciseLoadStep:()=>2.5,
   weightText:value=>String(value)+' kg',
+  setTypeLabel:type=>({backoff:'Back-off',dropset:'Drop set',restpause:'Rest-pause'}[type]||type),
   pickerHtml:()=>'<div class="picker">Selector</div>'
 };
 
@@ -32,7 +33,7 @@ test('routine detail shows exercise configuration and actions',()=>{
     profile:{programs:{p1:{id:'p1',name:'Fuerza'}},activeRoutineId:'r1'}
   },{
     id:'r1',name:'Día A',programId:'p1',
-    items:[{exId:'press',sets:3,min:8,max:12,warmupSets:1},{exId:'archived',sets:2,min:6,max:10}]
+    items:[{exId:'press',sets:3,min:8,max:12,warmupSets:1,specialSets:['backoff']},{exId:'archived',sets:2,min:6,max:10}]
   },helpers);
   assert.match(html,/Día A/);
   assert.match(html,/Fuerza/);
@@ -40,13 +41,14 @@ test('routine detail shows exercise configuration and actions',()=>{
   assert.match(html,/ejercicio archivado/);
   assert.match(html,/Rutina activa/);
   assert.match(html,/data-act="rut-export"/);
+  assert.match(html,/Back-off/);
 });
 
 test('routine editor renders the existing exercise controls and actions',()=>{
   const html=routineEditor({
     redit:{
       id:'r1',name:'Día A',programId:'p1',pick:false,
-      items:[{exId:'press',sets:3,min:8,max:12,inc:2.5,loadStep:2.5,maxProgressIncrease:5,progressionMode:'weight',warmupSets:1,efforts:[2,2,1],warmupPercents:[50],unilateral:false}]
+      items:[{exId:'press',sets:3,min:8,max:12,inc:2.5,loadStep:2.5,maxProgressIncrease:5,progressionMode:'weight',warmupSets:1,specialSets:['backoff','dropset'],efforts:[2,2,1],warmupPercents:[50],unilateral:false}]
     },
     profile:{settings:{mode:'rir',targetRir:2},programs:{p1:{name:'Fuerza'}}}
   },helpers);
@@ -57,6 +59,9 @@ test('routine editor renders the existing exercise controls and actions',()=>{
   assert.match(html,/data-it="warmupPercent"/);
   assert.match(html,/data-it="progressionMode"/);
   assert.match(html,/data-it="maxProgressIncrease"/);
+  assert.match(html,/data-it="specialSetType"/);
+  assert.match(html,/data-act="rut-special-add"/);
+  assert.match(html,/data-act="rut-special-remove"/);
   assert.match(html,/Peso primero: subir al cumplir el mínimo de reps/);
   assert.match(html,/Si el salto supera 5 kg, mantienes el peso actual/);
   assert.match(html,/data-ef="1"/);

@@ -116,8 +116,12 @@ o grupo muscular. El Historial agrupa los entrenos por mes y permite desplegar
 cada sesión para consultar sus series y acciones.
 Desde un entrenamiento guardado puedes elegir **Guardar como rutina** para
 crear una plantilla reutilizable con sus ejercicios, series normales,
-aproximaciones y ajustes de progresión. Las series especiales no se convierten
-en series de trabajo de la plantilla.
+aproximaciones, series adicionales (back-off, drop set o rest-pause) y ajustes
+de progresión. También puedes dejar esas series configuradas en las reglas del
+ejercicio; al agregarlo a una rutina se copian como valores iniciales y luego
+puedes personalizarlas para esa rutina. Las series adicionales aparecen al
+final del bloque y no cuentan para la progresión; cada tramo de un drop set o
+rest-pause se registra en una fila aparte.
 
 Para evitar registros accidentales extremos, las series aceptan hasta 1000 kg
 (o su equivalente en lb) y 500 repeticiones. Los gráficos descartan valores no

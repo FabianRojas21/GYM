@@ -21,6 +21,7 @@
       var exercise=helpers.exById(item.exId);
       return '<div class="library-exercise-row"><span class="exercise-mark" aria-hidden="true">'+helpers.esc(helpers.exName(item.exId).trim().charAt(0).toUpperCase())+'</span><span><strong>'+helpers.esc(helpers.exName(item.exId))+'</strong><small>'+
         (warmups?warmups+' aprox. + ':'')+item.sets+' series · '+item.min+'–'+item.max+' reps'+(item.unilateral?' · por lado':'')+
+        ((item.specialSets||[]).length?' + '+item.specialSets.map(function(type){return helpers.setTypeLabel(type);}).join(', '):'')+
         (exercise&&exercise.archived?' · ejercicio archivado (se omitirá al entrenar)':'')+'</small><small class="routine-exercise-history">'+helpers.esc(helpers.routineExerciseHistory(item.exId))+'</small></span></div>';
     }).join('');
     return '<div class="library-heading"><div><button class="text-button library-back" data-act="routine-back">‹ '+(program?helpers.esc(program.name):'Biblioteca')+'</button><h2>'+helpers.esc(routine.name)+'</h2></div>'+
@@ -65,7 +66,12 @@
         '<div class="field"><label class="lab" for="it-warmupMode-'+index+'">Peso de aproximación</label><select id="it-warmupMode-'+index+'" class="txt" data-it="warmupMode" data-i="'+index+'"><option value="auto"'+(warmCfg.warmupMode==='auto'?' selected':'')+'>Calcular automáticamente</option><option value="manual"'+(warmCfg.warmupMode==='manual'?' selected':'')+'>Anotar manualmente</option></select></div>'+
         field('warmupStep','Incremento para redondear ('+helpers.weightUnitLabel()+')',warmCfg.warmupStep)+
         '<div class="field"><label class="lab" for="it-unilateral-'+index+'">Ejecución</label><select id="it-unilateral-'+index+'" class="txt" data-it="unilateral" data-i="'+index+'"><option value="false"'+(item.unilateral?'':' selected')+'>Bilateral</option><option value="true"'+(item.unilateral?' selected':'')+'>Unilateral · ambos lados</option></select></div></div>'+
-        ((Number(item.warmupSets)||0)?'<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">'+warmCfg.warmupPercents.map(function(percent,percentIndex){
+          '<fieldset class="field"><legend class="lab">Series adicionales</legend><p class="small muted">Se agregan después de las series normales y no cuentan para la progresión. Los tramos de drop set se anotan en filas aparte al entrenar.</p>'+
+          (item.specialSets||[]).map(function(type,specialIndex){
+            return '<div class="row"><label class="field"><span class="lab">Serie adicional '+(specialIndex+1)+'</span><select class="txt" data-it="specialSetType" data-i="'+index+'" data-k="'+specialIndex+'">'+['backoff','dropset','restpause'].map(function(option){return '<option value="'+option+'"'+(option===type?' selected':'')+'>'+helpers.setTypeLabel(option)+'</option>';}).join('')+'</select></label><button class="mini" data-act="rut-special-remove" data-i="'+index+'" data-k="'+specialIndex+'" aria-label="Quitar serie adicional '+(specialIndex+1)+'">×</button></div>';
+          }).join('')+
+          '<button class="btn ghost sm" data-act="rut-special-add" data-i="'+index+'"'+((item.specialSets||[]).length>=10?' disabled':'')+'>+ Serie adicional</button></fieldset>'+
+          ((Number(item.warmupSets)||0)?'<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">'+warmCfg.warmupPercents.map(function(percent,percentIndex){
           return '<label class="field"><span class="lab">Serie '+(percentIndex+1)+' · %</span><input class="in" inputmode="decimal" data-it="warmupPercent" data-i="'+index+'" data-k="'+percentIndex+'" value="'+helpers.esc(String(percent).replace('.',','))+'"></label>';
         }).join('')+'</div></div>':'')+
         '<div class="field"><span class="lab">Esfuerzo objetivo por serie ('+lab+')</span><div class="efforts">'+efforts+'</div></div>'+

@@ -739,6 +739,7 @@ test('crear una rutina desde historial conserva configuración y cuenta rondas u
   const helper=source.match(/function routineItemsFromSession\(session,exerciseMap\)\{[\s\S]*?\n\}/);
   assert.ok(helper);
   const context={
+    SPECIAL_SET_TYPES:['backoff','dropset','restpause'],
     setType:set=>set.type||'normal',
     exerciseLoadStep:()=>2.5,
     warmupSettings:()=>({warmupMode:'auto',warmupStep:2.5,warmupPercents:[50]})
@@ -746,7 +747,7 @@ test('crear una rutina desde historial conserva configuración y cuenta rondas u
   vm.runInNewContext(helper[0]+';globalThis.routineItemsForTest=routineItemsFromSession;',context);
   const session={entries:[
     {exId:'press',cfg:{min:6,max:10,inc:2,sets:3,efforts:[2,1,1]},sets:[
-      {type:'warmup',w:20,r:8},{type:'normal',w:40,r:8},{type:'normal',w:40,r:8},{type:'normal',w:40,r:7},{type:'drop',w:30,r:5}
+      {type:'warmup',w:20,r:8},{type:'normal',w:40,r:8},{type:'normal',w:40,r:8},{type:'normal',w:40,r:7},{type:'dropset',w:30,r:5}
     ]},
     {exId:'split',sets:[
       {type:'normal',pair:0,side:'left'},{type:'normal',pair:0,side:'right'},
@@ -763,6 +764,7 @@ test('crear una rutina desde historial conserva configuración y cuenta rondas u
   assert.equal(items[0].warmupSets,1);
   assert.equal(items[0].min,6);
   assert.equal(items[0].inc,2);
+  assert.deepEqual(items[0].specialSets,['dropset']);
   assert.equal(items[1].unilateral,true);
   assert.match(source,/data-act="session-make-routine"/);
   assert.match(source,/case 'session-make-routine':[\s\S]*?routineItemsFromSession/);
@@ -1280,6 +1282,10 @@ test('las recomendaciones muestran el motivo y el resultado solo al desplegar el
   assert.match(app,/f\('maxProgressIncrease'/);
   assert.match(app,/data-cfg="progressionMode"/);
   assert.match(app,/f\('maxProgressIncrease'/);
+  assert.match(app,/data-cfg="specialSetType"/);
+  assert.match(app,/data-act="ex-special-add"/);
+  assert.match(app,/function appendSpecialRows/);
+  assert.match(app,/cfg\.specialSets=Array\.isArray\(it\.specialSets\)/);
 });
 
 test('la sugerencia de semana liviana es prudente, manual y descarta datos de ejemplo',()=>{
