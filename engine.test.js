@@ -1132,6 +1132,7 @@ test('los perfiles compartidos alimentan las calculadoras vinculadas y se conser
 test('la biblioteca resume rutinas y muestra la última actividad de sus ejercicios', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const library=fs.readFileSync('./library.js','utf8');
+  const routineViews=fs.readFileSync('./routine-views.js','utf8');
   const readme=fs.readFileSync('./README.md','utf8');
   assert.match(app,/function routineSummary\(routine\)/);
   assert.match(app,/return Library\.render\(S,/);
@@ -1142,12 +1143,19 @@ test('la biblioteca resume rutinas y muestra la última actividad de sus ejercic
   assert.match(fs.readFileSync('./styles.css','utf8'),/\.routine-card-volume\{[^}]*border-radius:999px/);
   assert.match(app,/function routineExerciseHistory\(exId\)/);
   assert.match(app,/Último registro: '\+dFmt\(latest\.date\)/);
+  assert.match(app,/return RoutineViews\.routineDetail\(S,routine/);
+  assert.match(app,/return RoutineViews\.programEditor\(S/);
+  assert.match(app,/return RoutineViews\.routineEditor\(S/);
+  assert.match(routineViews,/function routineDetail\(state,routine,helpers\)/);
+  assert.match(fs.readFileSync('./index.html','utf8'),/routine-views\.js\?v=__BUILD_ID__/);
+  assert.match(fs.readFileSync('./sw.js','utf8'),/routine-views\.js/);
   assert.match(readme,/Las tarjetas de \*\*Rutinas\*\* resumen sus series planificadas/);
 });
 
 test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activo', () => {
   const app=fs.readFileSync('./app.js','utf8');
   const library=fs.readFileSync('./library.js','utf8');
+  const routineViews=fs.readFileSync('./routine-views.js','utf8');
   const styles=fs.readFileSync('./styles.css','utf8');
   assert.match(app,/function recentSessionDetailsHtml\(session\)[\s\S]*?setsText\(entry\.sets,true\)[\s\S]*?Próximo objetivo/);
   assert.match(app,/function activeTrainingPlanHtml\(\)[\s\S]*?Programa activo/);
@@ -1155,7 +1163,7 @@ test('Hoy mantiene el detalle reciente y recomienda la rutina del programa activ
   assert.match(library,/data-act="program-order-save"/);
   assert.match(library,/data-act="program-routine-move"/);
   assert.match(library,/data-act="program-activate"/);
-  assert.match(app,/data-act="routine-activate"/);
+  assert.match(routineViews,/data-act="routine-activate"/);
   assert.match(app,/session\.programId=S\.draft\.programId/);
   assert.match(app,/programId:r\.programId && S\.profile\.programs\[r\.programId\] \? r\.programId : null/);
   assert.match(app,/Engine\.orderedProgramRoutines\(program,routines\)/);

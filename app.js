@@ -2917,27 +2917,18 @@ function routineExerciseHistory(exId){
   return 'Último registro: '+dFmt(latest.date)+' · '+effective+' series efectivas';
 }
 function programEditor(){
-  var program = S.pedit, isNew = !program.id;
-  return '<div class="library-heading"><button class="text-button" data-act="program-cancel">‹ Biblioteca</button></div><section class="card"><h2>' + (isNew ? 'Crear programa' : 'Editar programa') + '</h2>' +
-    '<div class="field"><label class="lab" for="program-name">Nombre del programa</label><input id="program-name" class="txt" data-pf="name" value="' + esc(program.name) + '" placeholder="Ej. Torso/Pierna"></div>' +
-    '<p class="small muted">Agrupa rutinas relacionadas para encontrarlas fácilmente en tu biblioteca.</p><div class="row"><button class="btn" data-act="program-save">Guardar programa</button><button class="btn ghost" data-act="program-cancel">Cancelar</button></div></section>';
+  return RoutineViews.programEditor(S,{esc:esc});
 }
 function routineLibraryDetail(routine){
-  var program = routine.programId && S.profile.programs[routine.programId];
-  var active=S.profile.activeRoutineId===routine.id;
-  var summary=routineSummary(routine);
-  var exercises = routine.items.map(function(item){
-    var warmups = Number(item.warmupSets) || 0;
-    return '<div class="library-exercise-row"><span class="exercise-mark" aria-hidden="true">' + esc(exName(item.exId).trim().charAt(0).toUpperCase()) + '</span><span><strong>' + esc(exName(item.exId)) + '</strong><small>' +
-      (warmups ? warmups + ' aprox. + ' : '') + item.sets + ' series · ' + item.min + '–' + item.max + ' reps' + (item.unilateral ? ' · por lado' : '') +
-      (exById(item.exId) && exById(item.exId).archived ? ' · ejercicio archivado (se omitirá al entrenar)' : '') + '</small><small class="routine-exercise-history">'+esc(routineExerciseHistory(item.exId))+'</small></span></div>';
-  }).join('');
-  return '<div class="library-heading"><div><button class="text-button library-back" data-act="routine-back">‹ ' + (program ? esc(program.name) : 'Biblioteca') + '</button><h2>' + esc(routine.name) + '</h2></div>' +
-    '<button class="library-add" data-act="rut-edit" data-id="' + esc(routine.id) + '" aria-label="Editar rutina">✎</button></div>' +
-    '<div class="library-routine-summary"><span>' + routine.items.length + ' ejercicio' + (routine.items.length === 1 ? '' : 's') + '</span><span>'+summary.workingSets+' series de trabajo'+(summary.warmupSets?' · '+summary.warmupSets+' aproximaciones':'')+'</span><span>'+esc(routineMuscleLabel(summary))+'</span><span>Último entreno: '+esc(summary.lastSession?dFmt(summary.lastSession.date):'Aún no entrenada')+'</span>' +
-    (program ? '<span>' + esc(program.name) + '</span>' : '') + '</div>' +
-    '<div class="library-exercises">' + (exercises || '<p class="muted">Añade ejercicios a esta rutina desde Editar.</p>') + '</div>' +
-    '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="' + esc(routine.id) + '"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn '+(active?'ghost':'')+'" data-act="routine-activate" data-id="'+esc(routine.id)+'"'+(active?' disabled':'')+'>'+(active?'Rutina activa':'Usar como rutina activa')+'</button><button class="btn ghost" data-act="rut-duplicate" data-id="' + esc(routine.id) + '">Duplicar rutina</button><button class="btn ghost" data-act="rut-export" data-id="' + esc(routine.id) + '">Compartir rutina</button></div>';
+  return RoutineViews.routineDetail(S,routine,{
+    routineSummary:routineSummary,
+    routineMuscleLabel:routineMuscleLabel,
+    routineExerciseHistory:routineExerciseHistory,
+    exById:exById,
+    exName:exName,
+    esc:esc,
+    dFmt:dFmt
+  });
 }
 function routineItemsForEdit(routine){
   return clone(routine.items).map(function(item){
@@ -2956,43 +2947,18 @@ function duplicateRoutine(id){
   S.selectedRoutine = null; S.tab = 'rutinas'; S.librarySection = 'rutinas'; S.confirm = null; render(); window.scrollTo(0, 0);
 }
 function routineEditor(){
-  var r = S.redit, lab = S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR';
-  var out = '<div class="head-row"><h2>' + (r.id ? 'Editar rutina' : 'Nueva rutina') + '</h2></div>';
-  out += '<section class="card"><div class="field"><label class="lab" for="r-name">Nombre de la rutina</label>' +
-    '<input id="r-name" class="txt" type="text" data-rf="name" autocomplete="off" placeholder="Por ejemplo Empuje A" value="' + esc(r.name) + '"></div>' +
-    '<div class="field"><label class="lab" for="r-program">Programa</label><select id="r-program" class="txt" data-routine-program><option value="">Sin programa</option>' +
-    Object.keys(S.profile.programs || {}).map(function(id){ var program = S.profile.programs[id]; return '<option value="' + esc(id) + '"' + (r.programId === id ? ' selected' : '') + '>' + esc(program.name) + '</option>'; }).join('') +
-    '</select></div>' +
-    '<p class="hint">Los ajustes de cada ejercicio valen solo en esta rutina. Con mancuernas, el salto es por mancuerna. Los datos se guardan internamente en kg y se convierten según la unidad elegida.</p></section>';
-  r.items.forEach(function(it, i){
-    var warmCfg = warmupSettings(it);
-    var f = function(key, label, val){
-      var weightSetting=['inc','loadStep','warmupStep'].includes(key);
-      return '<div class="field"><label class="lab" for="it-' + key + '-' + i + '">' + label + '</label><input id="it-' + key + '-' + i + '" class="txt" inputmode="decimal" data-it="' + key + '" data-i="' + i + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
-    };
-    var ef = '';
-    for(var k=0;k<it.sets;k++){
-      var effort = it.efforts && it.efforts[k] !== undefined ? it.efforts[k] : S.profile.settings.targetRir;
-      ef += '<div class="field"><label class="lab" for="ef-' + i + '-' + k + '">Serie ' + (k+1) + '</label><input id="ef-' + i + '-' + k + '" class="in" inputmode="decimal" data-ef="1" data-i="' + i + '" data-k="' + k + '" value="' + esc(effInputVal(effort)) + '"></div>';
-    }
-    out += '<section class="card"><div class="card-head"><h3>' + esc(exName(it.exId)) + '</h3><div class="it-tools">' +
-      '<button class="mini" data-act="rut-up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Subir ejercicio">↑</button>' +
-      '<button class="mini" data-act="rut-down" data-i="' + i + '"' + (i === r.items.length-1 ? ' disabled' : '') + ' aria-label="Bajar ejercicio">↓</button>' +
-      '<button class="mini" data-act="rut-rm-item" data-i="' + i + '" aria-label="Quitar ejercicio">×</button></div></div>' +
-      '<div class="fields">' + f('sets', 'Series de trabajo', it.sets) + f('warmupSets', 'Series de aproximación', Number(it.warmupSets) || 0) + f('min', 'Reps mín.', it.min) + f('max', 'Reps máx.', it.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', it.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId) || it)) +
-      '<div class="field"><label class="lab" for="it-warmupMode-' + i + '">Peso de aproximación</label><select id="it-warmupMode-' + i + '" class="txt" data-it="warmupMode" data-i="' + i + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
-      f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
-      '<div class="field"><label class="lab" for="it-unilateral-' + i + '">Ejecución</label><select id="it-unilateral-' + i + '" class="txt" data-it="unilateral" data-i="' + i + '"><option value="false"' + (it.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (it.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
-      ((Number(it.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
-        return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-it="warmupPercent" data-i="' + i + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
-      }).join('') + '</div></div>' : '') +
-      '<div class="field"><span class="lab">Esfuerzo objetivo por serie (' + lab + ')</span><div class="efforts">' + ef + '</div></div>' +
-      '<p class="small muted">' + ((Number(it.warmupSets) || 0) ? it.warmupSets + (it.warmupSets === 1 ? ' serie de aproximación + ' : ' series de aproximación + ') + (warmCfg.warmupMode === 'auto' ? ' calculada desde el peso de trabajo y redondeada hacia abajo en saltos de ' + weightText(warmCfg.warmupStep) + '. ' : 'con peso manual. ') : '') + it.sets + ' series de trabajo × ' + it.min + '–' + it.max + ' reps. Subes ' + weightText(it.inc) + ' cuando todas las series de trabajo lleguen a ' + it.max + ' reps con el esfuerzo pedido.</p></section>';
+  return RoutineViews.routineEditor(S,{
+    esc:esc,
+    warmupSettings:warmupSettings,
+    weightInput:weightInput,
+    effInputVal:effInputVal,
+    exName:exName,
+    weightUnitLabel:weightUnitLabel,
+    exerciseLoadStep:exerciseLoadStep,
+    exById:exById,
+    weightText:weightText,
+    pickerHtml:pickerHtml
   });
-  if(r.pick) out += pickerHtml('routine');
-  else out += '<button class="btn ghost block" data-act="rut-add">+ Añadir ejercicio</button>';
-  out += '<div class="row"><button class="btn" data-act="rut-save">Guardar rutina</button><button class="btn ghost" data-act="rut-cancel">Cancelar</button></div>';
-  return out;
 }
 
 function niceStep(raw){
