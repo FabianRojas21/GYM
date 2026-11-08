@@ -479,7 +479,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .program-routine-move[disabled]{opacity:.35}
 .empty-latest p{color:#969BA3;font-size:14px}
 .home-start{width:100%;min-height:54px;border:0;border-radius:999px;background:#E7E7E8;color:#111318;font:600 19px/1 var(--font-display);letter-spacing:0;text-transform:none}
-.home-dashboard>.home-start{position:sticky;top:64px;z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.home-dashboard>.home-start{box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .home-start span{font-size:15px}
 .workout-reminder{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;background:color-mix(in srgb,var(--accent) 8%,#101114)}
 .workout-reminder p{margin-top:4px;color:#B5B8BE;font-size:13px}
@@ -906,4 +906,70 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
   .workout-screen .set-unilateral .side-inputs{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
   .workout-screen .set-unilateral .side-inputs>.side-label{grid-column:1/-1}
   .workout-screen .set-unilateral .side-inputs>.set-input:first-of-type{grid-column:1/-1}
+}
+
+/* Navegación y lectura rápida en las pantallas de uso frecuente */
+.home-dashboard>.home-start{order:2;min-height:58px}
+.home-dashboard>.home-active-plan{order:3}
+.home-dashboard>.home-focus-card{order:4}
+.home-dashboard>.home-week-trend{order:5}
+.home-dashboard>.weekly-stats{order:6}
+.home-dashboard>.workout-reminder{order:7}
+.home-dashboard>.weekly-muscles{order:8}
+.home-dashboard>.latest-workout{order:9}
+.home-dashboard>.home-message{order:1}
+.home-dashboard>.home-heading{order:0}
+.home-active-plan{min-width:0}
+.home-next-routine{min-width:0}
+.home-next-routine>div{overflow-wrap:anywhere}
+.home-start:focus-visible,.library-add:focus-visible,.library-filter:focus-visible,.profile-nav button:focus-visible{
+  outline:3px solid color-mix(in srgb,var(--accent) 72%,white);outline-offset:3px
+}
+.workout-heading{gap:12px}
+.workout-heading-actions .btn{min-height:44px}
+.workout-overview-stats>div{padding:3px 4px}
+.workout-overview-stats>div+div{border-left:1px solid color-mix(in srgb,var(--line) 75%,transparent)}
+.workout-card-toggle{min-height:56px}
+.workout-card-name{line-height:1.08;overflow-wrap:anywhere}
+.goal{gap:8px}
+.goal-row{align-items:center;gap:8px;flex-wrap:wrap}
+.goal-h{line-height:1.05;overflow-wrap:anywhere}
+.workout-screen .set{scroll-margin-bottom:150px}
+.workout-screen .set-input>span{line-height:1.25}
+.workout-screen .set-finish{min-height:44px}
+.workout-screen .workout-card .row>.btn{min-height:44px}
+.library-heading{padding:2px 0}
+.library-heading h2{line-height:1}
+.library-add{flex:0 0 44px;border:1px solid var(--line);background:var(--surface);transition:background .15s ease,border-color .15s ease}
+.library-add:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.library-filters{gap:8px;padding:4px 0 12px}
+.library-filter{min-height:44px;border:1px solid transparent;transition:background .15s ease,color .15s ease,border-color .15s ease}
+.library-filter:not(.active){border-color:var(--line)}
+.library-card{gap:12px}
+.library-card strong,.library-open strong{line-height:1.2}
+.library-open:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+.library-card-actions .mini{min-width:40px;min-height:40px}
+.history-tools{gap:12px}
+.history-tools .field{margin:0}
+.history-summary .summary-stats>div{min-height:72px;justify-content:center}
+.history-session-head h3{font-size:clamp(20px,5vw,25px);text-wrap:balance}
+.history-session-meta{color:var(--muted)}
+.history-exercise{line-height:1.4}
+.history-actions .btn{overflow-wrap:anywhere}
+.profile-nav button{min-height:48px;transition:background .15s ease,color .15s ease}
+.profile-nav button[aria-pressed="true"]{font-weight:700}
+.profile-exercise-card{min-height:76px;padding:14px;text-align:left}
+@media (max-width:520px){
+  .home-dashboard>.home-active-plan{width:100%}
+  .home-next-routine{flex-wrap:wrap}
+  .home-next-routine .btn{width:100%}
+  .workout-overview-stats{gap:4px}
+  .workout-overview-stats>div{padding:3px 2px}
+  .workout-overview-stats strong{overflow-wrap:anywhere}
+  .library-card-actions .mini{width:44px;height:44px}
+  .library-filters{margin-right:-4px;margin-left:-4px;padding-right:4px;padding-left:4px}
+  .history-summary .summary-stats>div{min-height:68px}
+}
+@media (prefers-reduced-motion:reduce){
+  .library-add,.library-filter,.profile-nav button{transition:none}
 }

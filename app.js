@@ -2793,6 +2793,8 @@ function homeDashboard(){
     '<p class="home-message">' + (week.length
       ? 'Ya sumaste ' + week.length + ' entreno' + (week.length===1?'':'s') + ' esta semana. Media por sesión: ' + volumeText(avgVolumePerSession) + ' ' + weightUnitLabel() + '·reps.'
       : 'Cada progreso empieza con una sesión. Hoy puedes dar ese primer paso.') + '</p>' +
+    '<button class="btn home-start" data-act="start" data-home-start><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
+    activeTrainingPlanHtml() +
     '<div class="home-focus-card">' +
       '<div class="home-focus-copy">' +
         '<span class="home-eyebrow">Qué te está diciendo la app</span>' +
@@ -2809,8 +2811,7 @@ function homeDashboard(){
     '<div class="weekly-stat"><strong>' + (stats.hasDuration ? humanDuration(stats.duration) : '—') + '</strong><span>duración</span></div>' +
     '<div class="weekly-stat"><strong>' + stats.effectiveSets + '</strong><span>series efectivas</span></div>' +
     '<div class="weekly-stat"><strong>' + volumeText(stats.volume) + ' ' + weightUnitLabel() + '·reps</strong><span>carga × reps · sin aprox.</span></div></div>' +
-    workoutReminderHtml(latest) + activeTrainingPlanHtml() +
-    '<button class="btn home-start" data-act="start" data-home-start><span aria-hidden="true">▶</span> Nuevo entrenamiento</button>' +
+    workoutReminderHtml(latest) +
     weeklyMuscleSummaryHtml(week);
   if(latest){
     var latestStats = sessionStats(latest);

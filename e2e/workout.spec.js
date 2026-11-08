@@ -10,6 +10,9 @@ test('registra y termina un entrenamiento desde el flujo móvil',async({page})=>
 
   const start=page.locator('[data-home-start]');
   await expect(start).toBeVisible();
+  const startPosition=await start.evaluate(element=>element.getBoundingClientRect().top);
+  const statsPosition=await page.locator('.weekly-stats').evaluate(element=>element.getBoundingClientRect().top);
+  expect(startPosition).toBeLessThan(statsPosition);
   await start.click();
   await page.getByLabel('Añadir ejercicio').fill('Press banca');
   await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
