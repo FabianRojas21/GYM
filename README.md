@@ -7,12 +7,14 @@ App de gimnasio para PC y móvil.
 - `index.html`: estructura de la aplicación.
 - `styles.css`: estilos y diseño.
 - `app.js`: interfaz, almacenamiento y flujo de la aplicación.
+- `demo.js`: datos de ejemplo para probar el flujo de entrenamiento.
 - `catalog.js`: catálogo sugerido y etiquetas de ejercicios, músculos, equipo y medidas.
 - `engine.js`: reglas de progresión, músculos y secuencia de programas.
 - `backup.js`: migración y serialización de respaldos.
 - `store.js`: operaciones de persistencia y reconciliación de datos de Firebase.
 - `sw.js` y los iconos PNG: instalación offline como PWA.
-- `engine.test.js`: pruebas ejecutables con `node --test`.
+- `engine.test.js` y `demo.test.js`: pruebas del motor y los datos de ejemplo.
+- `firestore.rules.test.js` y `e2e/`: pruebas de reglas y del flujo en navegador.
 
 Los archivos deben permanecer en la misma carpeta. Para probar la app,
 abre esta carpeta en VS Code, instala la extensión Live Server y elige
@@ -20,6 +22,13 @@ abre esta carpeta en VS Code, instala la extensión Live Server y elige
 
 Antes de guardar cambios en el motor, ejecuta `node --test` para comprobar sus
 reglas de progresión.
+
+Para ejecutar también las pruebas de Firebase y navegador, instala Node.js 20 o
+posterior y Java 21, ejecuta `npm ci` y después `npm test`. Las pruebas de
+Firestore usan el Emulator en un proyecto de prueba aislado y no acceden a
+cuentas ni datos reales. Las pruebas de navegador abren la app en Chromium con
+sincronización remota desactivada. En la primera ejecución, Playwright puede
+instalar Chromium con `npx playwright install chromium`.
 
 El catálogo sugerido incluye 100 ejercicios con equipo y músculos principales y
 secundarios asignados. Los ejercicios personalizados y sus asignaciones se
@@ -409,18 +418,23 @@ configuración pública ya está en `firebase-config.js`.
 2. En **Authentication → Settings → Authorized domains** añade `localhost` y
    el dominio de GitHub Pages (por ejemplo, `usuario.github.io`).
 3. Crea Firestore Database en modo producción.
-4. Publica `firestore.rules` desde Firebase CLI con `firebase deploy --rules
-   firestore.rules`, o pega su contenido en Reglas de Firestore.
+4. Publica `firestore.rules` desde Firebase CLI con
+   `firebase deploy --only firestore:rules`, o pega su contenido en Reglas de
+   Firestore.
 5. Abre Ajustes, pulsa **Continuar con Google** y autoriza la cuenta. Los datos
    locales se migran una sola vez cuando la cuenta remota está vacía. Los datos
    locales antiguos no se vuelven a mezclar automáticamente en una cuenta que
    ya tiene información; para agregar un respaldo, usa la restauración aditiva
    desde Ajustes.
 
-Las reglas restringen cada documento bajo `/users/{uid}` al usuario autenticado
-con ese UID. Firebase Hosting no es obligatorio; GitHub Pages puede usar los
-SDK web compatibles con la app estática. La configuración Firebase es pública;
-no se deben incluir claves privadas ni credenciales de cuenta de servicio.
+Las reglas restringen el acceso al usuario autenticado dueño del UID y validan
+los tipos de documento usados por la app (perfil, borrador y entrenamientos),
+con límites para mapas y listas principales. Las pruebas automatizadas corren
+contra el Emulator antes de desplegar; si cambias la estructura persistida,
+actualiza las reglas y sus pruebas antes de publicar. Firebase Hosting no es
+obligatorio; GitHub Pages puede usar los SDK web compatibles con la app estática.
+La configuración Firebase es pública; no se deben incluir claves privadas ni
+credenciales de cuenta de servicio.
 
 En un dispositivo nuevo, espera a que la cuenta termine de cargar el perfil,
 los entrenamientos y el entreno en curso antes de sincronizar. Si la nube no

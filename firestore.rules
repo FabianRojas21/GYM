@@ -1,8 +1,92 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function hasFields(data, allowed, required) {
+      return data is map &&
+        data.keys().hasOnly(allowed) &&
+        data.keys().hasAll(required);
+    }
+
+    function validProfile(data) {
+      return hasFields(
+          data,
+          ['v', 'settings', 'exercises', 'routines', 'programs', 'activeProgramId',
+           'activeRoutineId', 'goals', 'measurements', 'recoveryRatings'],
+          ['v', 'settings', 'exercises', 'routines', 'programs', 'activeProgramId',
+           'activeRoutineId', 'goals', 'measurements', 'recoveryRatings']
+        ) &&
+        data.v == 2 &&
+        data.settings is map && data.settings.size() <= 100 &&
+        data.exercises is map && data.exercises.size() <= 300 &&
+        data.routines is map && data.routines.size() <= 100 &&
+        data.programs is map && data.programs.size() <= 50 &&
+        data.goals is map && data.goals.size() <= 200 &&
+        data.measurements is list && data.measurements.size() <= 2000 &&
+        data.recoveryRatings is map && data.recoveryRatings.size() <= 50 &&
+        (data.activeProgramId == null || data.activeProgramId is string) &&
+        (data.activeRoutineId == null || data.activeRoutineId is string) &&
+        (!('loadingTools' in data.settings) ||
+          (data.settings.loadingTools is list && data.settings.loadingTools.size() <= 10)) &&
+        (!('plateProfiles' in data.settings) ||
+          (data.settings.plateProfiles is list && data.settings.plateProfiles.size() <= 20));
+    }
+
+    function validDraft(data) {
+      return hasFields(
+          data,
+          ['date', 'startedAt', 'routineId', 'programId', 'entries', 'collapsedEntryIds',
+           'updatedAt', 'restEndsAt', 'restOwner'],
+          ['date', 'startedAt', 'routineId', 'programId', 'entries', 'collapsedEntryIds',
+           'updatedAt', 'restEndsAt', 'restOwner']
+        ) &&
+        (data.date == null || data.date is string) &&
+        (data.startedAt == null || data.startedAt is int) &&
+        (data.routineId == null || data.routineId is string) &&
+        (data.programId == null || data.programId is string) &&
+        data.entries is list && data.entries.size() <= 250 &&
+        data.collapsedEntryIds is list && data.collapsedEntryIds.size() <= 250 &&
+        data.updatedAt is int &&
+        (data.restEndsAt == null || data.restEndsAt is int) &&
+        (data.restOwner == null || data.restOwner is string);
+    }
+
+    function validSession(sessionId, data) {
+      return hasFields(
+          data,
+          ['id', 'date', 'ts', 'startedAt', 'finishedAt', 'durationMs', 'entries',
+           'routineId', 'routineName', 'programId', 'csvImport', 'updatedAt', 'updatedBy'],
+          ['id', 'date', 'ts', 'startedAt', 'finishedAt', 'durationMs', 'entries',
+           'updatedAt', 'updatedBy']
+        ) &&
+        data.id == sessionId &&
+        sessionId.size() > 0 && sessionId.size() <= 128 &&
+        data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        data.ts is int && data.startedAt is int && data.finishedAt is int &&
+        data.durationMs is int && data.durationMs >= 0 &&
+        data.entries is list && data.entries.size() <= 250 &&
+        data.updatedAt is int &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        (!('routineId' in data) || data.routineId is string) &&
+        (!('routineName' in data) ||
+          (data.routineName is string && data.routineName.size() <= 200)) &&
+        (!('programId' in data) || data.programId is string) &&
+        (!('csvImport' in data) || data.csvImport is bool);
+    }
+
+    match /users/{uid}/app/{documentId} {
+      allow read, delete: if owns(uid) && documentId in ['state', 'draft'];
+      allow create, update: if owns(uid) &&
+        ((documentId == 'state' && validProfile(request.resource.data)) ||
+         (documentId == 'draft' && validDraft(request.resource.data)));
+    }
+
+    match /users/{uid}/sessions/{sessionId} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid) && validSession(sessionId, request.resource.data);
     }
   }
 }
