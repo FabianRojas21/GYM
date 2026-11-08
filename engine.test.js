@@ -1456,6 +1456,57 @@ test('precarga los valores de la última sesión y respeta el alcance de rutina 
   assert.deepEqual(noRoutineRows[0],{type:'normal',w:'',r:'',rir:''});
 });
 
+test('reutiliza pesos anteriores por pareja en ejercicios unilaterales', () => {
+  const source=fs.readFileSync('./app.js','utf8');
+  const names=['weightCanBeFilled','previousExerciseSessions','previousExerciseEntry','quickFillPreviousWeight'];
+  const helpers=names.map(name=>{
+    const match=source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`));
+    assert.ok(match,`missing ${name}`);
+    return match[0];
+  }).join('\n');
+  const context={
+    S:{
+      profile:{settings:{previousExerciseScope:'any'}},
+      draft:{routineId:null},
+      sessions:[{
+        id:'previous',date:'2026-10-30',ts:1,
+        entries:[{exId:'split-squat',unilateral:true,sets:[
+          {w:20,r:10,type:'normal',side:'right',pair:0},
+          {w:18,r:10,type:'normal',side:'left',pair:0},
+          {w:22,r:9,type:'normal',side:'right',pair:1},
+          {w:20,r:9,type:'normal',side:'left',pair:1},
+          {w:24,r:8,type:'normal',side:'right',pair:2},
+          {w:22,r:8,type:'normal',side:'left',pair:2},
+          {w:99,r:10,type:'normal',side:'right'}
+        ]}]
+      }]
+    },
+    setType:row=>row.type||'normal',
+    validWeight:value=>Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=1000,
+    validReps:value=>Number.isFinite(Number(value))&&Number(value)>0&&Number(value)<=500
+  };
+  vm.runInNewContext(helpers+';globalThis.quickFillPreviousWeightForTest=quickFillPreviousWeight;',context);
+  const entry={exId:'split-squat',rows:[
+    {type:'normal',right:{w:'',r:'',rir:''},left:{w:'',r:'',rir:''}},
+    {type:'normal',right:{w:'25',r:'',rir:'',weightTouched:true},left:{w:'',r:'',rir:''}},
+    {type:'normal',right:{w:'',r:'',rir:''},left:{w:'',r:'',rir:''}}
+  ]};
+  assert.equal(context.quickFillPreviousWeightForTest(entry,{unilateral:true}),true);
+  assert.equal(entry.rows[0].right.w,'20');
+  assert.equal(entry.rows[0].left.w,'18');
+  assert.equal(entry.rows[1].right.w,'25');
+  assert.equal(entry.rows[1].left.w,'20');
+  assert.equal(entry.rows[2].right.w,'24');
+  assert.equal(entry.rows[2].left.w,'22');
+  assert.equal(entry.rows[1].right.r,'');
+  assert.equal(entry.rows[1].left.r,'');
+
+  context.S.sessions[0].entries[0].sets.forEach(set=>{delete set.pair;});
+  const emptyEntry={exId:'split-squat',rows:[{type:'normal',right:{w:'',r:'',rir:''},left:{w:'',r:'',rir:''}}]};
+  assert.equal(context.quickFillPreviousWeightForTest(emptyEntry,{unilateral:true}),false);
+  assert.equal(emptyEntry.rows[0].right.w,'');
+});
+
 test('copia solo pesos no editados y respeta cada lado en ejercicios unilaterales', () => {
   const source=fs.readFileSync('./app.js','utf8');
   const names=['weightCanBeFilled','copyFirstWeightToUntouched'];

@@ -1614,6 +1614,19 @@ function quickFillPreviousWeight(entry, ex){
   var previous=previousExerciseEntry(entry.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
   if(!previous || !!previous.entry.unilateral !== !!ex.unilateral) return false;
   var source=previous.sets.filter(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
+  if(ex.unilateral){
+    var pairs={};
+    source.forEach(function(set){
+      if(set.pair===undefined || (set.side!=='right' && set.side!=='left')) return;
+      var key=String(set.pair);
+      if(!pairs[key]) pairs[key]={};
+      pairs[key][set.side]=set;
+    });
+    source=Object.keys(pairs).sort(function(a,b){return Number(a)-Number(b);}).map(function(key){
+      var pair=pairs[key];
+      return pair.right && pair.left ? pair : null;
+    }).filter(Boolean);
+  }
   if(!source.length) return false;
   var changed=false, workIndex=0;
   entry.rows.forEach(function(row){
@@ -1623,7 +1636,10 @@ function quickFillPreviousWeight(entry, ex){
     if(ex.unilateral){
       ['right','left'].forEach(function(side){
         if(!row[side]) row[side]={w:'',r:'',rir:''};
-        if(weightCanBeFilled(row[side])){ row[side].w = String(candidate[side].w); changed = true; }
+        var previousSide=candidate[side];
+        if(previousSide && validWeight(previousSide.w) && validReps(previousSide.r) && weightCanBeFilled(row[side])){
+          row[side].w = String(previousSide.w); changed = true;
+        }
       });
     } else if(weightCanBeFilled(row)){ row.w = String(candidate.w); changed = true; }
     workIndex++;

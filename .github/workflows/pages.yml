@@ -1,6 +1,7 @@
 name: Deploy Sobrecarga
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
@@ -15,15 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run automated tests
+        run: node --test engine.test.js
+
   deploy:
+    needs: test
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run automated tests
-        run: node --test engine.test.js
       - name: Version deployed assets
         env:
           BUILD_ID: ${{ github.sha }}
