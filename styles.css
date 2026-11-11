@@ -567,6 +567,19 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .library-empty p{color:var(--muted);font-size:14px}
 .library-routine-summary{display:flex;flex-wrap:wrap;gap:8px 12px;color:var(--muted);font-size:14px}
 .library-exercises{display:flex;flex-direction:column;gap:8px}
+.routine-detail-summary{margin:12px 0 16px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);line-height:1.35}
+.routine-detail-summary span{display:inline-flex;align-items:center;min-height:26px;padding-right:12px;margin-right:10px;border-right:1px solid var(--line)}
+.routine-detail-summary span:last-child{padding-right:0;margin-right:0;border-right:0}
+.routine-editor{display:flex;flex-direction:column;gap:12px}
+.routine-editor-settings{background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 7%,var(--surface)),var(--surface))}
+.routine-editor-item{display:flex;flex-direction:column;gap:14px;padding:14px}
+.routine-editor-item .card-head{margin-bottom:0}
+.routine-editor-title{display:flex;align-items:center;gap:10px;min-width:0}
+.routine-editor-title h3{min-width:0;overflow-wrap:anywhere}
+.routine-item-index{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--accent) 16%,var(--surface));color:var(--accent);font:700 13px/1 var(--font-display)}
+.routine-editor-item .fields{padding:12px;border:1px solid var(--line);border-radius:11px;background:color-mix(in srgb,var(--surface-2) 55%,var(--surface))}
+.routine-editor-item [data-plan-field]{border-radius:11px}
+.routine-editor-item>.small{margin:0;padding:0 2px;line-height:1.45}
 .library-exercise-row{display:flex;align-items:center;gap:12px;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
 .library-exercise-row>span:last-child{display:flex;flex-direction:column;gap:4px}
 .library-exercise-row small{color:var(--muted);font-size:13px}
@@ -661,6 +674,11 @@ nav.tabs .in{min-height:66px}
   .library-card-actions{width:100%;justify-content:flex-end}
   .library-card-actions .mini,.it-tools .mini{width:44px;height:44px}
   .library-card-actions .btn{min-height:44px}
+  .routine-detail-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 10px}
+  .routine-detail-summary span{display:block;min-height:0;padding:0 0 7px;margin:0;border-right:0;border-bottom:1px solid var(--line)}
+  .routine-detail-summary span:nth-last-child(-n+2){padding-bottom:0;border-bottom:0}
+  .routine-editor-item{padding:12px}
+  .routine-editor-item .fields{padding:10px}
   .workout-card-tools .mini{width:44px;height:44px}
   .field:has(select[data-it="warmupMode"]),.field:has(select[data-it="unilateral"]){grid-column:1/-1}
   .weekly-stats{grid-template-columns:repeat(2,minmax(0,1fr))}

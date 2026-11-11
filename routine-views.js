@@ -24,7 +24,7 @@
     }).join('');
     return '<div class="library-heading"><div><button class="text-button library-back" data-act="routine-back">‹ '+(program?helpers.esc(program.name):'Biblioteca')+'</button><h2>'+helpers.esc(routine.name)+'</h2></div>'+
       '<button class="library-add" data-act="rut-edit" data-id="'+helpers.esc(routine.id)+'" aria-label="Editar rutina">✎</button></div>'+
-      '<div class="library-routine-summary"><span>'+routine.items.length+' ejercicio'+(routine.items.length===1?'':'s')+'</span><span>'+summary.workingSets+' series de trabajo'+(summary.warmupSets?' · '+summary.warmupSets+' aproximaciones':'')+'</span><span>'+helpers.esc(helpers.routineMuscleLabel(summary))+'</span><span>Último entreno: '+helpers.esc(summary.lastSession?helpers.dFmt(summary.lastSession.date):'Aún no entrenada')+'</span>'+
+      '<div class="library-routine-summary routine-detail-summary"><span>'+routine.items.length+' ejercicio'+(routine.items.length===1?'':'s')+'</span><span>'+summary.workingSets+' series de trabajo'+(summary.warmupSets?' · '+summary.warmupSets+' aproximaciones':'')+'</span><span>'+helpers.esc(helpers.routineMuscleLabel(summary))+'</span><span>Último entreno: '+helpers.esc(summary.lastSession?helpers.dFmt(summary.lastSession.date):'Aún no entrenada')+'</span>'+
       (program?'<span>'+helpers.esc(program.name)+'</span>':'')+'</div>'+
       '<div class="library-exercises">'+(exercises||'<p class="muted">Añade ejercicios a esta rutina desde Editar.</p>')+'</div>'+
       '<div class="row"><button class="btn home-start" data-act="rut-start" data-id="'+helpers.esc(routine.id)+'"><span aria-hidden="true">▶</span> Entrenar rutina</button><button class="btn '+(active?'ghost':'')+'" data-act="routine-activate" data-id="'+helpers.esc(routine.id)+'"'+(active?' disabled':'')+'>'+(active?'Rutina activa':'Usar como rutina activa')+'</button><button class="btn ghost" data-act="rut-duplicate" data-id="'+helpers.esc(routine.id)+'">Duplicar rutina</button><button class="btn ghost" data-act="rut-export" data-id="'+helpers.esc(routine.id)+'">Compartir rutina</button></div>';
@@ -32,8 +32,8 @@
 
   function routineEditor(state,helpers){
     var routine=state.redit;
-    var output='<div class="head-row"><h2>'+(routine.id?'Editar rutina':'Nueva rutina')+'</h2></div>';
-    output+='<section class="card"><div class="field"><label class="lab" for="r-name">Nombre de la rutina</label>'+
+    var output='<div class="routine-editor"><div class="head-row"><h2>'+(routine.id?'Editar rutina':'Nueva rutina')+'</h2></div>';
+    output+='<section class="card routine-editor-settings"><div class="field"><label class="lab" for="r-name">Nombre de la rutina</label>'+
       '<input id="r-name" class="txt" type="text" data-rf="name" autocomplete="off" placeholder="Por ejemplo Empuje A" value="'+helpers.esc(routine.name)+'"></div>'+
       '<div class="field"><label class="lab" for="r-program">Programa</label><select id="r-program" class="txt" data-routine-program><option value="">Sin programa</option>'+
       Object.keys(state.profile.programs||{}).map(function(id){
@@ -47,7 +47,7 @@
         var weightSetting=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(key);
         return '<div class="field"><label class="lab" for="it-'+key+'-'+index+'">'+label+'</label><input id="it-'+key+'-'+index+'" class="txt" inputmode="decimal" data-it="'+key+'" data-i="'+index+'" value="'+helpers.esc(weightSetting?helpers.weightInput(value):String(value).replace('.',','))+'"></div>';
       };
-      output+='<section class="card"><div class="card-head"><h3>'+helpers.esc(helpers.exName(item.exId))+'</h3><div class="it-tools">'+
+      output+='<section class="card routine-editor-item"><div class="card-head"><div class="routine-editor-title"><span class="routine-item-index">'+String(index+1).padStart(2,'0')+'</span><h3>'+helpers.esc(helpers.exName(item.exId))+'</h3></div><div class="it-tools">'+
         '<button class="mini" data-act="rut-up" data-i="'+index+'"'+(index===0?' disabled':'')+' aria-label="Subir ejercicio">↑</button>'+
         '<button class="mini" data-act="rut-down" data-i="'+index+'"'+(index===routine.items.length-1?' disabled':'')+' aria-label="Bajar ejercicio">↓</button>'+
         '<button class="mini" data-act="rut-rm-item" data-i="'+index+'" aria-label="Quitar ejercicio">×</button></div></div>'+
@@ -64,7 +64,7 @@
     if(routine.pick) output+=helpers.pickerHtml('routine');
     else output+='<button class="btn ghost block" data-act="rut-add">+ Añadir ejercicio</button>';
     output+='<div class="row"><button class="btn" data-act="rut-save">Guardar rutina</button><button class="btn ghost" data-act="rut-cancel">Cancelar</button></div>';
-    return output;
+    return output+'</div>';
   }
 
   return {programEditor:programEditor,routineDetail:routineDetail,routineEditor:routineEditor};
