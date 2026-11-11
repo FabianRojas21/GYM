@@ -27,7 +27,7 @@
     </div>
     <div class="today" id="today"></div>
   </header>
-  <main id="view" tabindex="-1"></main>
+  <main id="view" tabindex="-1" aria-label="Contenido principal"></main>
 </div>
 <nav class="tabs" aria-label="Secciones de la aplicación"><div class="in">
   <button class="tab" aria-controls="view" data-act="tab" data-tab="hoy">Hoy</button>
@@ -54,7 +54,7 @@
 <script src="routine-views.js?v=__BUILD_ID__"></script>
 <script src="exercise-list.js?v=__BUILD_ID__"></script>
 <script src="app.js?v=__BUILD_ID__"></script>
-<div id="pwa-update" hidden><button type="button" id="pwa-update-button">Instalar nueva versión</button></div>
+<div id="pwa-update" hidden role="status" aria-live="polite"><button type="button" id="pwa-update-button">Actualizar la aplicación</button></div>
 <script>
 if (location.hostname === '0.0.0.0') {
   location.replace(location.href.replace('0.0.0.0', '127.0.0.1'));

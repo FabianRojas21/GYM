@@ -35,7 +35,7 @@
     var sort='<label class="field"><span class="lab">Ordenar ejercicios</span><select class="txt" data-profile-exercise-sort><option value="recent"'+(state.exerciseSort==='recent'?' selected':'')+'>Reciente</option><option value="most"'+(state.exerciseSort==='most'?' selected':'')+'>Más realizado</option><option value="volume"'+(state.exerciseSort==='volume'?' selected':'')+'>Mayor volumen</option><option value="name"'+(state.exerciseSort==='name'?' selected':'')+'>Alfabético</option></select></label>';
     var cards=ids.length?ids.map(function(id){
       var exercise=helpers.exById(id), lastDateText=last[id]?helpers.dFmt(last[id]):'Nunca realizado';
-      return '<button class="card profile-exercise-card" data-act="profile-open-exercise" data-id="'+helpers.esc(id)+'"><span><strong>'+helpers.esc(exercise.name)+'</strong><small>'+ (counts[id]||0)+' entrenos · Último: '+helpers.esc(lastDateText)+'</small></span><span class="num">'+helpers.esc(helpers.volumeText(volumes[id]||0))+' '+helpers.weightUnitLabel()+'·reps</span></button>';
+      return '<button class="card profile-exercise-card" data-act="profile-open-exercise" data-id="'+helpers.esc(id)+'"><span class="profile-exercise-mark" aria-hidden="true">'+helpers.esc(exercise.name.trim().charAt(0).toUpperCase()||'E')+'</span><span class="profile-exercise-copy"><strong>'+helpers.esc(exercise.name)+'</strong><small>'+ (counts[id]||0)+' entrenos · Último: '+helpers.esc(lastDateText)+'</small></span><span class="profile-exercise-volume"><strong>'+helpers.esc(helpers.volumeText(volumes[id]||0))+' '+helpers.weightUnitLabel()+'·reps</strong><small>volumen acumulado</small></span></button>';
     }).join(''):'<div class="card"><p class="muted">Añade ejercicios desde la biblioteca para verlos aquí.</p></div>';
     return '<section class="card"><p class="sec-title">Tus ejercicios</p>'+sort+'</section><div class="list">'+cards+'</div>';
   }
@@ -62,7 +62,7 @@
           (key==='weight'?helpers.weightInput(measurement.values[key]):helpers.fmt(measurement.values[key]))+
           (key==='bodyFat'?' %':' '+(key==='weight'?helpers.weightUnitLabel():'cm'))+'</strong></span>';
       }).join(' · ');
-      return '<section class="card"><div class="row" style="justify-content:space-between"><p class="sec-title">'+helpers.esc(helpers.dFmt(measurement.date))+'</p><button class="icon" data-act="measurement-delete" data-id="'+helpers.esc(measurement.id)+'" aria-label="Eliminar medición">×</button></div><p class="small">'+(values||'Sin datos')+'</p>'+
+      return '<section class="card measurement-card"><div class="row" style="justify-content:space-between"><div><p class="eyebrow">Registro corporal</p><p class="sec-title">'+helpers.esc(helpers.dFmt(measurement.date))+'</p></div><button class="icon" data-act="measurement-delete" data-id="'+helpers.esc(measurement.id)+'" aria-label="Eliminar medición">×</button></div><p class="measurement-values">'+(values||'Sin datos')+'</p>'+
         (measurement.notes?'<p class="small muted">'+helpers.esc(measurement.notes)+'</p>':'')+'</section>';
     }).join('');
     var currentWeight=latest.filter(function(measurement){return measurement.values.weight!==undefined;})[0];
