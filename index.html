@@ -61,7 +61,9 @@ if (location.hostname === '0.0.0.0') {
 }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js?v=__BUILD_ID__').then(function(registration){
+    var buildId='__BUILD_ID__';
+    if(buildId==='__BUILD_ID__') buildId='dev';
+    navigator.serviceWorker.register('./sw.js?v='+buildId).then(function(registration){
       if (registration.waiting) document.getElementById('pwa-update').hidden=false;
       registration.addEventListener('updatefound', function(){
         var worker=registration.installing;

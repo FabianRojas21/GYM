@@ -350,7 +350,7 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.match(sw,/SKIP_WAITING/);
   assert.match(index,/app\.js\?v=__BUILD_ID__/);
   assert.match(index,/store\.js\?v=__BUILD_ID__/);
-  assert.match(index,/serviceWorker\.register\('\.\/sw\.js\?v=__BUILD_ID__'\)/);
+  assert.match(index,/var buildId='__BUILD_ID__'[\s\S]*serviceWorker\.register\('\.\/sw\.js\?v='\+buildId\)/);
   assert.match(sw,/app\.js\?v=__BUILD_ID__/);
   assert.match(sw,/store\.js\?v=__BUILD_ID__/);
   assert.match(workflow,/BUILD_ID: \$\{\{ github\.sha \}\}[\s\S]*sed -i .*index\.html sw\.js/);

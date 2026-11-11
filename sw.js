@@ -1,4 +1,7 @@
-const CACHE='sobrecarga-__BUILD_ID__';
+const BUILD_ID=self.location&&self.location.href
+  ? new URL(self.location.href).searchParams.get('v')||'__BUILD_ID__'
+  : '__BUILD_ID__';
+const CACHE='sobrecarga-'+BUILD_ID;
 const ASSETS=['./','./index.html','./index.html?v=__BUILD_ID__','./styles.css?v=__BUILD_ID__','./app.js?v=__BUILD_ID__','./catalog.js?v=__BUILD_ID__','./engine.js?v=__BUILD_ID__','./backup.js?v=__BUILD_ID__','./store.js?v=__BUILD_ID__','./demo.js?v=__BUILD_ID__','./history.js?v=__BUILD_ID__','./profile.js?v=__BUILD_ID__','./settings.js?v=__BUILD_ID__','./library.js?v=__BUILD_ID__','./routine-views.js?v=__BUILD_ID__','./exercise-list.js?v=__BUILD_ID__','./firebase-config.js?v=__BUILD_ID__','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 function cacheResponse(request,response){
   let copy;

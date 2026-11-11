@@ -141,6 +141,22 @@ test('rechaza formas inválidas, campos inesperados y límites excedidos',async(
   const tooManyEntries=session();
   tooManyEntries.entries=Array.from({length:251},()=>({exId:'bench',sets:[]}));
   await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),tooManyEntries));
+
+  const invalidSet=session();
+  invalidSet.entries[0].sets[0].type='unsupported';
+  await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),invalidSet));
+
+  const invalidSetField=session();
+  invalidSetField.entries[0].sets[0].unexpected=true;
+  await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),invalidSetField));
+
+  const invalidEntry=session();
+  invalidEntry.entries[0].sets[0].r=101;
+  await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),invalidEntry));
+
+  const invalidEntryShape=session();
+  invalidEntryShape.entries[0].sets='not-an-array';
+  await assertFails(setDoc(doc(db,'users/owner/sessions/session-1'),invalidEntryShape));
 });
 
 test('permite editar y borrar documentos propios válidos',async()=>{

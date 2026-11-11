@@ -488,7 +488,11 @@ contra el Emulator antes de desplegar; si cambias la estructura persistida,
 actualiza las reglas y sus pruebas antes de publicar. Firebase Hosting no es
 obligatorio; GitHub Pages puede usar los SDK web compatibles con la app estática.
 La configuración Firebase es pública; no se deben incluir claves privadas ni
-credenciales de cuenta de servicio.
+credenciales de cuenta de servicio. Restringe la API key de la aplicación en
+Google Cloud Console por los dominios de producción y desarrollo, y limita las
+APIs habilitadas a las que usa Firebase Authentication y Firestore. La
+protección de los datos depende de Authentication y `firestore.rules`, no de
+ocultar esa configuración del navegador.
 
 En un dispositivo nuevo, espera a que la cuenta termine de cargar el perfil,
 los entrenamientos y el entreno en curso antes de sincronizar. Si la nube no

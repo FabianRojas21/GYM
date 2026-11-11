@@ -20,6 +20,43 @@ service cloud.firestore {
       );
     }
 
+    function validSet(data) {
+      return data is map &&
+        data.keys().hasOnly(['w', 'r', 'rir', 'type', 'progression', 'targetMin',
+          'targetMax', 'targetRir', 'loadPercent', 'stage', 'side', 'pair',
+          'editorDone']) &&
+        (!('type' in data) ||
+          (data.type is string &&
+           data.type.matches('^(normal|topset|warmup|backoff|dropset|restpause)$'))) &&
+        (!('w' in data) || data.w == null || (data.w is number && data.w >= 0 && data.w <= 1000)) &&
+        (!('r' in data) || data.r == null || (data.r is number && data.r >= 0 && data.r <= 100)) &&
+        (!('rir' in data) || data.rir == null || (data.rir is number && data.rir >= 0 && data.rir <= 10)) &&
+        (!('progression' in data) || data.progression is bool);
+    }
+
+    function validSessionEntry(data) {
+      return data is map &&
+        data.keys().hasOnly(['exId', 'unilateral', 'cfg', 'sets']) &&
+        data.exId is string && data.exId.size() > 0 && data.exId.size() <= 128 &&
+        data.unilateral is bool &&
+        (data.cfg == null || data.cfg is map) &&
+        validSets(data.sets);
+    }
+
+    function validEntries(data) {
+      return data is list && data.size() <= 250 &&
+        (data.size() <= 0 || validSessionEntry(data[0])) &&
+        (data.size() <= 1 || validSessionEntry(data[1])) &&
+        (data.size() <= 2 || validSessionEntry(data[2]));
+    }
+
+    function validSets(data) {
+      return data is list && data.size() <= 60 &&
+        (data.size() <= 0 || validSet(data[0])) &&
+        (data.size() <= 1 || validSet(data[1])) &&
+        (data.size() <= 2 || validSet(data[2]));
+    }
+
     function validProfile(data) {
       return hasFields(
           data,
@@ -77,7 +114,7 @@ service cloud.firestore {
         data.ts is int && data.ts >= 0 && data.startedAt is int && data.startedAt >= 0 &&
         data.finishedAt is int && data.finishedAt >= data.startedAt &&
         data.durationMs is int && data.durationMs >= 0 &&
-        data.entries is list && data.entries.size() <= 250 &&
+        validEntries(data.entries) &&
         data.updatedAt is int &&
         data.updatedBy is string && data.updatedBy.size() <= 128 &&
         (!('routineId' in data) || data.routineId is string) &&
