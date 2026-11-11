@@ -115,13 +115,21 @@ permiten. La Biblioteca permite buscar rutinas y ejercicios por nombre, equipo
 o grupo muscular. El Historial agrupa los entrenos por mes y permite desplegar
 cada sesión para consultar sus series y acciones.
 Desde un entrenamiento guardado puedes elegir **Guardar como rutina** para
-crear una plantilla reutilizable con sus ejercicios, series normales,
-aproximaciones, series adicionales (back-off, drop set o rest-pause) y ajustes
-de progresión. También puedes dejar esas series configuradas en las reglas del
-ejercicio; al agregarlo a una rutina se copian como valores iniciales y luego
-puedes personalizarlas para esa rutina. Las series adicionales aparecen al
-final del bloque y no cuentan para la progresión; cada tramo de un drop set o
-rest-pause se registra en una fila aparte.
+crear una plantilla reutilizable. En las reglas del ejercicio y en cada rutina
+puedes definir una secuencia ordenable de aproximaciones y series de trabajo:
+normal, top set, back-off, drop set y rest-pause. Cada fila permite configurar
+repeticiones, RIR/RPE objetivo, porcentaje de carga y si participa en la
+progresión. Por ejemplo, puedes usar solo un top set y un back-off, y dejar
+que el top set guíe la progresión.
+
+Los back-off usan por defecto el 90 % de la carga base. Un drop set crea tres
+tramos por defecto, reduciendo la carga un 20 % entre tramos; ambos valores y
+los rangos de repeticiones son editables. Cada tramo aparece en su propia fila
+durante el entreno. Todas las series de trabajo cuentan para volumen e
+historial, pero solo las seleccionadas guían la progresión; las aproximaciones
+no cuentan. El historial muestra los tipos de serie y separa el volumen por
+tipo. Si una serie queda incompleta o falta algún tramo del drop set, se
+muestra un aviso que no bloquea el guardado.
 
 Para evitar registros accidentales extremos, las series aceptan hasta 1000 kg
 (o su equivalente en lb) y 500 repeticiones. Los gráficos descartan valores no
@@ -235,7 +243,7 @@ la última fecha registrada y las series efectivas de cada ejercicio.
 En **Ajustes → Valores anteriores al entrenar** puedes definir el alcance de
 búsqueda: la última vez que hiciste el ejercicio en cualquier rutina
 (predeterminado) o la última vez que lo hiciste dentro de la rutina actual.
-Al añadir el ejercicio, sus series normales precargan peso, repeticiones y
+Al añadir el ejercicio, las series elegidas para progresar precargan peso, repeticiones y
 esfuerzo de esa sesión; los valores siguen siendo editables y se muestra la
 fecha de referencia. El cambio de preferencia no sobrescribe las series que ya
 están en curso. En la tarjeta de Hoy también aparece un resumen de lo que
@@ -254,7 +262,7 @@ o ya hay valores precargados/anotados, la app pide confirmación antes de
 limpiar ese bloque. El sustituto queda registrado con su propio nombre y no
 cambia la rutina, salvo que al terminar elijas actualizarla.
 
-Al completar una serie normal, la app compara peso, repeticiones y esfuerzo
+Al completar una serie que guía la progresión, la app compara peso, repeticiones y esfuerzo
 con la serie equivalente anterior. La referencia incluye su fecha y rutina de
 origen; el resumen indica si sumaste reps, cambió el peso o hiciste la serie
 con más o menos esfuerzo. Si no se registró esfuerzo en alguna de las sesiones,
@@ -280,19 +288,21 @@ la rutina: cualquier ajuste de peso o series lo decides tú.
 
 Durante un entrenamiento puedes elegir el tipo de cada serie:
 
-- **Normal**: cuenta para las sugerencias de sobrecarga progresiva.
-- **Aproximación**: queda guardada, pero no cuenta para progresar.
-- **Back-off**, **Drop set** y **Rest-pause**: quedan guardadas y no cuentan
-  para progresar. Registra cada bajada de peso o bloque de rest-pause como una
-  fila aparte con su propio peso y repeticiones.
+- **Normal** y **Top set**: pueden guiar la progresión según la selección de
+  cada serie.
+- **Aproximación**: queda guardada, pero no cuenta para el volumen de trabajo
+  ni para progresar.
+- **Back-off**, **Drop set** y **Rest-pause**: cuentan para el volumen de
+  trabajo; cualquiera puede seleccionarse para guiar la progresión. Los tramos
+  de drop set y los bloques de rest-pause se registran en filas separadas.
 
-Al evaluar una subida, la app considera solo las series normales requeridas
-por la configuración del ejercicio. Las series normales adicionales también
-se guardan, pero no bloquean la progresión ni cambian el objetivo.
+Al evaluar una subida, la app considera únicamente las series marcadas para
+progresar y utiliza sus objetivos de repeticiones y esfuerzo. Las demás series
+se guardan en el historial y aportan volumen sin cambiar la recomendación.
 
 El volumen efectivo muscular puede incluir series normales, back-off, drop set
 y rest-pause cuando se realizan a 4 RIR o menos (o no se anotó el RIR). Esto es
-independiente de la progresión, que sigue considerando solo series normales.
+independiente de la progresión, que sigue considerando solo las series marcadas.
 
 Los entrenamientos anteriores siguen siendo compatibles: las series que se
 guardaron como calentamiento se muestran como aproximaciones.
@@ -320,18 +330,18 @@ incluye las series normales, back-off, drop set y rest-pause.
 
 ## Descansos, récords y respaldos
 
-En **Ajustes** puedes configurar el descanso de las series efectivas/back-off
+En **Ajustes** puedes configurar el descanso de las series de trabajo
 (1 a 5 minutos) y el de aproximación (sin temporizador o 15 a 120 segundos).
 Durante el entreno, completa el peso y las repeticiones y pulsa **Terminar
 serie** para iniciar el descanso; en ejercicios unilaterales, el botón se activa
-al completar ambos lados. Drop sets y rest-pause no inician descanso desde ese
-botón. También puedes iniciarlo manualmente, sumar 30 segundos o detenerlo. El
+al completar ambos lados. Cada tramo de drop set o rest-pause tiene su propio
+temporizador de descanso. También puedes iniciarlo manualmente, sumar 30 segundos o detenerlo. El
 contador sigue activo al recargar la página y se cancela al descartar o terminar
 el entreno.
 
 Al terminar una serie, la fila queda marcada con una verificación discreta. El
-encabezado de cada ejercicio muestra el avance de series normales completadas
-(por ejemplo, `2/3 series`); púlsalo para plegar o desplegar el ejercicio.
+encabezado de cada ejercicio muestra el avance de series de trabajo completadas
+(por ejemplo, `2/4 series`); púlsalo para plegar o desplegar el ejercicio.
 El estado plegado se conserva al recargar el entreno. Corregir los datos de una
 serie durante el entreno no quita la marca de realizada. Si la marcaste por
 error, pulsa **Hecha · deshacer**; esto cancela también el descanso activo si
@@ -347,7 +357,7 @@ del editor y no inicia un descanso ni muestra un aviso flotante.
 
 En **Ejercicios**, abre un ejercicio para ver sus récords de peso, repeticiones
 por serie y mejor serie estimada, con la fecha de cada marca. Solo cuentan las
-series normales.
+series elegidas para progresar.
 
 En **Ajustes → Tus datos**, descarga un respaldo JSON e impórtalo cuando lo
 necesites. La restauración pide confirmación y combina los datos: conserva los
@@ -358,12 +368,11 @@ no sustituye ese respaldo externo.
 
 ## Ajustes de rutina y aproximación
 
-Al editar una rutina o los ajustes de un ejercicio durante el entreno puedes
-definir por separado las series de trabajo y las de aproximación. Las
-aproximaciones se agregan al principio y no cuentan para la progresión. Si
-cambias la configuración de una rutina mientras entrenas con ella, al terminar
-puedes guardar esos cambios en la rutina o terminar conservando la configuración
-original.
+Al editar una rutina o las reglas de un ejercicio puedes reordenar y configurar
+cada fila de la secuencia, incluidas las aproximaciones. Si cambias la
+configuración de una rutina mientras entrenas con ella, al terminar puedes ver
+un resumen de la secuencia anterior y la nueva antes de guardar esos cambios,
+o terminar conservando la configuración original.
 
 Las aproximaciones pueden calcularse automáticamente desde el peso de la
 primera serie de trabajo o anotarse manualmente. El modo automático propone

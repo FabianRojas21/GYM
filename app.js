@@ -1087,30 +1087,150 @@ function exName(id){ var e = exById(id); return e ? e.name : 'Ejercicio eliminad
 var Engine = window.SobrecargaEngine;
 var effTxt = Engine.effTxt;
 var SET_TYPES = {
-  normal:'Normal', warmup:'Aproximación', backoff:'Back-off',
+  normal:'Normal', topset:'Top set', warmup:'Aproximación', backoff:'Back-off',
   dropset:'Drop set', restpause:'Rest-pause'
 };
 var SPECIAL_SET_TYPES = ['backoff','dropset','restpause'];
+var WORK_SET_TYPES = ['normal','topset','backoff','dropset','restpause'];
 function specialSetTypes(item){
   return Array.isArray(item && item.specialSets)
     ? item.specialSets.filter(function(type){ return SPECIAL_SET_TYPES.includes(type); }).slice(0,10)
     : [];
 }
+function setSlot(type, index, item){
+  var effort=Number(S.profile.settings.targetRir);
+  var slot={id:'slot_'+index,type:type,repsMin:Number(item.min)||8,repsMax:Number(item.max)||12,targetRir:effort,loadPercent:100,progression:false};
+  if(type==='warmup'){
+    var percents=item.warmupPercents||[];
+    slot.loadPercent=Number(percents[index])||defaultWarmupPercent(index);
+    slot.repsMin=slot.repsMax=8;
+    slot.targetRir=4;
+  }else if(type==='normal'||type==='topset'){
+    slot.progression=true;
+    if(Array.isArray(item.efforts)&&item.efforts[index]!==undefined) slot.targetRir=Number(item.efforts[index]);
+  }else if(type==='backoff'){
+    slot.loadPercent=90; slot.repsMin=8; slot.repsMax=12;
+  }else if(type==='dropset'){
+    slot.loadPercent=100; slot.repsMin=8; slot.repsMax=12; slot.stages=3; slot.reductionPercent=20;
+  }else if(type==='restpause'){
+    slot.repsMin=8; slot.repsMax=12; slot.stages=2;
+  }
+  return slot;
+}
+function setPlanFor(item){
+  var source=item&&Array.isArray(item.setPlan)?item.setPlan:null;
+  if(source&&!source.length) source=null;
+  if(!source){
+    source=[];
+    var warmCount=Math.max(0,Math.min(10,Number(item&&item.warmupSets)||0));
+    for(var w=0;w<warmCount;w++) source.push(setSlot('warmup',w,item||{}));
+    var setCount=Math.max(0,Math.min(10,Number(item&&item.sets)||0));
+    for(var n=0;n<setCount;n++) source.push(setSlot('normal',n,item||{}));
+    specialSetTypes(item).forEach(function(type,index){source.push(setSlot(type,index,item||{}));});
+  }
+  var normalized=source.slice(0,30).map(function(raw,index){
+    var type=raw&&WORK_SET_TYPES.concat(['warmup']).includes(raw.type)?raw.type:'normal';
+    var slot=setSlot(type,index,item||{});
+    slot.id=typeof raw.id==='string'&&raw.id?raw.id:'slot_'+index;
+    slot.repsMin=Math.min(60,Math.max(1,Math.round(Number(raw.repsMin)||slot.repsMin)));
+    slot.repsMax=Math.min(60,Math.max(slot.repsMin,Math.round(Number(raw.repsMax)||slot.repsMax)));
+    slot.targetRir=Math.min(6,Math.max(0,Number.isFinite(Number(raw.targetRir))?Number(raw.targetRir):slot.targetRir));
+    slot.loadPercent=Math.min(200,Math.max(1,Number(raw.loadPercent)||slot.loadPercent));
+    slot.progression=type!=='warmup'&&raw.progression===true;
+    if(type==='dropset'){
+      slot.stages=Math.min(6,Math.max(2,Math.round(Number(raw.stages)||3)));
+      slot.reductionPercent=Math.min(50,Math.max(1,Number(raw.reductionPercent)||20));
+    }
+    if(type==='restpause') slot.stages=Math.min(4,Math.max(1,Math.round(Number(raw.stages)||2)));
+    return slot;
+  });
+  if(normalized.some(function(slot){return slot.type!=='warmup';})&&!normalized.some(function(slot){return slot.progression;})){
+    normalized.filter(function(slot){return slot.type!=='warmup';})[0].progression=true;
+  }
+  return normalized;
+}
+function syncSetPlanConfig(item){
+  item.setPlan=setPlanFor(item);
+  var work=item.setPlan.filter(function(slot){return slot.type!=='warmup';});
+  var progression=work.filter(function(slot){return slot.progression;});
+  var basis=progression[0]||work[0];
+  item.warmupSets=item.setPlan.filter(function(slot){return slot.type==='warmup';}).length;
+  item.sets=progression.length||work.length;
+  if(basis){item.min=basis.repsMin;item.max=basis.repsMax;}
+  item.specialSets=work.filter(function(slot){return SPECIAL_SET_TYPES.includes(slot.type);}).map(function(slot){return slot.type;});
+  item.efforts=progression.map(function(slot){return slot.targetRir;});
+}
+function setPlanEditorHtml(item, owner, index){
+  var slots=setPlanFor(item), mode=S.profile.settings.mode, weightTypes=['normal','topset','warmup','backoff','dropset','restpause'];
+  var ownerAttrs=owner==='routine'?'data-plan-owner="routine" data-i="'+index+'"':'data-plan-owner="exercise" data-id="'+esc(item.id)+'"';
+  var rows=slots.map(function(slot,slotIndex){
+    var attrs=ownerAttrs+' data-slot="'+slotIndex+'"';
+    var typeOptions=Object.keys(SET_TYPES).map(function(type){
+      return '<option value="'+type+'"'+(slot.type===type?' selected':'')+'>'+SET_TYPES[type]+'</option>';
+    }).join('');
+    var effort=mode==='rpe'?10-slot.targetRir:slot.targetRir;
+    var controls='<div class="fields">'+
+      '<label class="field"><span class="lab">Tipo de serie</span><select class="txt" data-plan-field="type" '+attrs+'>'+typeOptions+'</select></label>'+
+      '<label class="field"><span class="lab">Reps mín.</span><input class="txt" inputmode="numeric" data-plan-field="repsMin" '+attrs+' value="'+slot.repsMin+'"></label>'+
+      '<label class="field"><span class="lab">Reps máx.</span><input class="txt" inputmode="numeric" data-plan-field="repsMax" '+attrs+' value="'+slot.repsMax+'"></label>'+
+      '<label class="field"><span class="lab">Carga · % del peso base</span><input class="txt" inputmode="decimal" data-plan-field="loadPercent" '+attrs+' value="'+slot.loadPercent+'"></label>'+
+      (slot.type==='warmup'?'':'<label class="field"><span class="lab">'+(mode==='rpe'?'RPE':'RIR')+' objetivo</span><input class="txt" inputmode="decimal" data-plan-field="targetRir" '+attrs+' value="'+effort+'"></label>')+
+      (slot.type==='dropset'?'<label class="field"><span class="lab">Tramos</span><input class="txt" inputmode="numeric" data-plan-field="stages" '+attrs+' value="'+slot.stages+'"></label><label class="field"><span class="lab">Reducción por tramo · %</span><input class="txt" inputmode="decimal" data-plan-field="reductionPercent" '+attrs+' value="'+slot.reductionPercent+'"></label>':'')+
+      (slot.type==='restpause'?'<label class="field"><span class="lab">Bloques de rest-pause</span><input class="txt" inputmode="numeric" data-plan-field="stages" '+attrs+' value="'+slot.stages+'"></label>':'')+
+      (slot.type==='warmup'?'':'<label class="secondary-muscle-option"><input type="checkbox" data-plan-field="progression" '+attrs+(slot.progression?' checked':'')+'> <span>Esta serie guía la progresión</span></label>')+
+      '</div>';
+    return '<div class="set-plan-slot"><div class="card-head"><strong>'+ (slotIndex+1)+'. '+esc(SET_TYPES[slot.type])+(slot.type==='dropset'?' · '+slot.stages+' tramos':'')+'</strong><div class="it-tools">'+
+      '<button class="mini" data-act="plan-up" '+attrs+(slotIndex===0?' disabled':'')+' aria-label="Mover serie arriba">↑</button>'+
+      '<button class="mini" data-act="plan-down" '+attrs+(slotIndex===slots.length-1?' disabled':'')+' aria-label="Mover serie abajo">↓</button>'+
+      '<button class="mini" data-act="plan-remove" '+attrs+(slots.length<=1?' disabled':'')+' aria-label="Quitar serie">×</button></div></div>'+controls+'</div>';
+  }).join('');
+  var options=weightTypes.map(function(type){return '<option value="'+type+'">'+SET_TYPES[type]+'</option>';}).join('');
+  return '<fieldset class="field set-plan-editor"><legend class="lab">Secuencia de series</legend><p class="small muted">Cada fila es una serie de trabajo; solo las marcadas guían la progresión. Las aproximaciones no cuentan. Puedes ordenarlas y configurar objetivos propios.</p>'+
+    rows+'<label class="field"><span class="lab">Añadir serie</span><select class="txt" data-plan-add '+ownerAttrs+'><option value="">Elegir tipo…</option>'+options+'</select></label></fieldset>';
+}
+function planSetRows(item, plan){
+  var slots=setPlanFor(item), rows=[], warmIndex=0;
+  slots.forEach(function(slot){
+    if(slot.type==='warmup'){
+      var cfg=warmupSettings(item);
+      var warm=newRow(cfg.warmupMode==='manual'?'':warmupWeight(plan&&plan.nextW,slot.loadPercent,cfg.warmupStep),item.unilateral);
+      warm.type='warmup';warm.targetMin=slot.repsMin;warm.targetMax=slot.repsMax;warm.slotId=slot.id;
+      rows.push(warm);warmIndex++;return;
+    }
+    var stages=slot.type==='dropset'?slot.stages:1;
+    for(var stage=0;stage<stages;stage++){
+      var percent=slot.loadPercent*(slot.type==='dropset'?Math.pow(1-slot.reductionPercent/100,stage):1);
+      var rawLoad=plan&&Number.isFinite(Number(plan.nextW))?Number(plan.nextW)*percent/100:null;
+      var load=rawLoad===null?null:Math.floor((rawLoad+1e-9)/exerciseLoadStep(item))*exerciseLoadStep(item);
+      var row=plannedRow(plan,item.unilateral,load===null?null:Math.round(load*100)/100);
+      row.type=slot.type;row.progression=slot.progression;row.targetMin=slot.repsMin;row.targetMax=slot.repsMax;
+      row.targetRir=slot.targetRir;row.loadPercent=percent;row.slotId=slot.id;
+      if(slot.type==='dropset') row.stage=stage+1;
+      if(slot.type==='restpause') row.stage=stage+1;
+      rows.push(row);
+    }
+  });
+  return rows;
+}
 var CSV_TYPE_ALIASES={
   drop:'dropset', 'drop set':'dropset', 'back-off':'backoff', 'rest-pause':'restpause',
-  'rest pause':'restpause', aproximacion:'warmup', 'warm-up':'warmup', failure:'normal'
+  'rest pause':'restpause', 'top set':'topset', topset:'topset',
+  aproximacion:'warmup', 'warm-up':'warmup', failure:'normal'
 };
 function csvSetType(value){ return SobrecargaBackup.csvSetType(value, SET_TYPES, CSV_TYPE_ALIASES); }
 function setType(s){
   return s && Object.prototype.hasOwnProperty.call(SET_TYPES, s.type) ? s.type : (s && s.warm ? 'warmup' : 'normal');
 }
-function countsForProgress(s){ return setType(s) === 'normal'; }
+function countsForProgress(s){
+  return s&&typeof s.progression==='boolean'?s.progression:setType(s)==='normal';
+}
+function isWorkSet(s){ return setType(s)!=='warmup'; }
 function restSecondsFor(row){
   return setType(row) === 'warmup'
     ? Number(S.profile.settings.warmupRestSeconds) || 0
     : Number(S.profile.settings.restSeconds) || 90;
 }
-function autoRestEligible(row){ return ['normal','warmup','backoff'].includes(setType(row)); }
+function autoRestEligible(row){ return ['normal','topset','warmup','backoff','dropset','restpause'].includes(setType(row)); }
 function rowComplete(row, unilateral){
   if(unilateral){
     var sides = ensureRowMode(row, true);
@@ -1549,12 +1669,14 @@ function rowsToSets(rows, unilateral){
       ['right','left'].forEach(function(side){
         var values = r[side], effort = String(values.rir).trim() === '' ? null : num(values.rir);
         var unilateralSet={w:num(values.w), r:num(values.r), rir:effort, type:setType(r), side:side, pair:i};
+        ['progression','targetMin','targetMax','targetRir','loadPercent','slotId','stage'].forEach(function(key){if(r[key]!==undefined) unilateralSet[key]=r[key];});
         if(r.restMs > 0) unilateralSet.restMs=Number(r.restMs);
         all.push(unilateralSet);
       });
     } else {
       var rir = String(r.rir).trim() === '' ? null : num(r.rir);
       var bilateralSet={w:num(r.w), r:num(r.r), rir:rir, type:setType(r)};
+      ['progression','targetMin','targetMax','targetRir','loadPercent','slotId','stage'].forEach(function(key){if(r[key]!==undefined) bilateralSet[key]=r[key];});
       if(r.restMs > 0) bilateralSet.restMs=Number(r.restMs);
       all.push(bilateralSet);
     }
@@ -1605,12 +1727,13 @@ function warmupWeight(load, percent, step){
 function syncAutoWarmupWeights(en, ex){
   var settings = warmupSettings(ex);
   if(settings.warmupMode !== 'auto') return;
-  var work = en.rows.find(function(row){ return setType(row) === 'normal'; });
+  var work = en.rows.find(function(row){ return setType(row) !== 'warmup' && row.progression !== false; }) ||
+    en.rows.find(function(row){ return setType(row) !== 'warmup'; });
   var plan = planFor(ex);
   var warmIndex = 0;
   en.rows.forEach(function(row){
     if(setType(row) !== 'warmup') return;
-    var percent = settings.warmupPercents[warmIndex] || defaultWarmupPercent(warmIndex);
+    var percent = Number(row.loadPercent) || settings.warmupPercents[warmIndex] || defaultWarmupPercent(warmIndex);
     if(ex.unilateral){
       ['right','left'].forEach(function(side){
         var entered = work && work[side] ? num(work[side].w) : null;
@@ -1644,7 +1767,8 @@ function previousExerciseEntry(exId, scope, routineId){
 function quickFillPreviousWeight(entry, ex){
   var previous=previousExerciseEntry(entry.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
   if(!previous || !!previous.entry.unilateral !== !!ex.unilateral) return false;
-  var source=previous.sets.filter(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
+  var progresses=function(set){return typeof set.progression==='boolean'?set.progression:setType(set)==='normal';};
+  var source=previous.sets.filter(function(set){ return progresses(set) && validWeight(set.w) && validReps(set.r); });
   if(ex.unilateral){
     var pairs={};
     source.forEach(function(set){
@@ -1661,7 +1785,7 @@ function quickFillPreviousWeight(entry, ex){
   if(!source.length) return false;
   var changed=false, workIndex=0;
   entry.rows.forEach(function(row){
-    if(setType(row)!=='normal') return;
+    if(!progresses(row)) return;
     var candidate = source[workIndex] || source[source.length-1];
     if(!candidate) return;
     if(ex.unilateral){
@@ -1680,7 +1804,8 @@ function quickFillPreviousWeight(entry, ex){
 function applyPreviousValues(exId, rows, unilateral, routineId){
   var previous=previousExerciseEntry(exId,S.profile.settings.previousExerciseScope,routineId);
   if(!previous || !!previous.entry.unilateral!==!!unilateral) return;
-  var sets=previous.sets.filter(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
+  var progresses=function(set){return typeof set.progression==='boolean'?set.progression:setType(set)==='normal';};
+  var sets=previous.sets.filter(function(set){ return progresses(set) && validWeight(set.w) && validReps(set.r); });
   var pairs={};
   if(unilateral){
     sets.forEach(function(set){
@@ -1694,7 +1819,7 @@ function applyPreviousValues(exId, rows, unilateral, routineId){
   }
   var workIndex=0;
   rows.forEach(function(row){
-    if(setType(row)!=='normal') return;
+    if(!progresses(row)) return;
     var past=sets[workIndex++];
     if(!past) return;
     if(unilateral){
@@ -1715,7 +1840,7 @@ function weightCanBeFilled(target){
   return target.weightTouched === false || String(target.w === undefined || target.w === null ? '' : target.w).trim() === '';
 }
 function copyFirstWeightToUntouched(entry, unilateral){
-  var workRows=entry.rows.filter(function(row){return setType(row)==='normal';});
+  var workRows=entry.rows.filter(function(row){return setType(row)!=='warmup';});
   var source=workRows[0], sides=unilateral?['right','left']:['weight'];
   var sourceAvailable=sides.some(function(side){
     var values=side==='weight'?source:source&&source[side];
@@ -1758,13 +1883,7 @@ function nextRow(previous, unilateral){
   return row;
 }
 function addEntry(exId){
-  var ex = exById(exId), p = planFor(ex), rows = [];
-  for(var j=0;j<(Number(ex.warmupSets) || 0);j++){
-    var warm = newRow(warmupSettings(ex).warmupMode === 'manual' ? '' : p.nextW, ex.unilateral);
-    warm.type = 'warmup'; rows.push(warm);
-  }
-  for(var i=0;i<ex.sets;i++) rows.push(plannedRow(p, ex.unilateral, p.nextW));
-  appendSpecialRows(rows,p,ex.unilateral,p.nextW,ex);
+  var ex = exById(exId), p = planFor(ex), rows = planSetRows(ex,p);
   if(!S.draft.date) S.draft.date = iso(new Date());
   if(!S.draft.startedAt) S.draft.startedAt = Date.now();
   applyPreviousValues(exId,rows,ex.unilateral,S.draft.routineId);
@@ -1812,12 +1931,12 @@ function previousWorkSet(exId, workIndex, unilateral){
   if(!previous || !!previous.entry.unilateral !== !!unilateral) return null;
   var sets=previous.sets;
   if(!unilateral){
-    var normalSets = sets.filter(function(set){ return setType(set) === 'normal' && validWeight(set.w) && set.r > 0; });
+    var normalSets = sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && set.r > 0; });
     return normalSets[workIndex] ? {set:normalSets[workIndex],session:previous.session} : null;
   }
   var pairs = {};
   sets.forEach(function(set){
-    if(set.pair === undefined || setType(set) !== 'normal' || !(validWeight(set.w) && set.r > 0)) return;
+    if(set.pair === undefined || !countsForProgress(set) || !(validWeight(set.w) && set.r > 0)) return;
     var key = String(set.pair);
     if(!pairs[key]) pairs[key] = {};
     pairs[key][set.side] = set;
@@ -1877,8 +1996,8 @@ function refreshEntryComparison(ei,ri){
   var entry=S.draft.entries[ei], row=entry&&entry.rows[ri], exercise=entry&&effEx(entry);
   var card=$('section.card[data-ei="'+ei+'"]'), setElement=card&&$('.set[data-ri="'+ri+'"]',card);
   if(!row||!exercise||!setElement) return;
-  var workIndex=entry.rows.slice(0,ri+1).filter(function(item){return setType(item)==='normal';}).length-1;
-  var previous=setType(row)==='normal'&&workIndex>=0?previousWorkSet(entry.exId,workIndex,exercise.unilateral):null;
+  var workIndex=entry.rows.slice(0,ri+1).filter(countsForProgress).length-1;
+  var previous=countsForProgress(row)&&workIndex>=0?previousWorkSet(entry.exId,workIndex,exercise.unilateral):null;
   var html=completedComparisonHtml(row,previous,exercise.unilateral);
   var current=$('.set-comparison',setElement), finishButton=$('.set-finish',setElement);
   if(html&&current) current.outerHTML=html;
@@ -1966,9 +2085,9 @@ function workingDone(){
     if(ex.unilateral){
       en.rows.forEach(function(raw){
         var row = ensureRowMode(raw, true), right = row.right, left = row.left;
-        if(setType(row) === 'normal' && num(right.w) > 0 && num(right.r) > 0 && num(left.w) > 0 && num(left.r) > 0) c++;
+        if(isWorkSet(row) && validWeight(right.w) && num(right.r) > 0 && validWeight(left.w) && num(left.r) > 0) c++;
       });
-    } else rowsToSets(en.rows, false).forEach(function(s){ if(countsForProgress(s) && validWeight(s.w) && s.r > 0) c++; });
+    } else rowsToSets(en.rows, false).forEach(function(s){ if(isWorkSet(s) && validWeight(s.w) && s.r > 0) c++; });
   });
   return c;
 }
@@ -1992,17 +2111,42 @@ function previousWorkoutSummaryHtml(plan){
   return '<div class="previous-workout-summary"><p><strong>Último entreno · '+esc(dFmt(plan.last.date))+':</strong> '+esc(setsText(plan.last.sets))+'</p>' +
     '<p><strong>Hoy busca:</strong> '+esc(target)+'</p></div>';
 }
+function setValidationWarningsHtml(entry){
+  var ex=effEx(entry), warnings=[];
+  entry.rows.forEach(function(row,index){
+    if(!isWorkSet(row)||rowComplete(row,ex.unilateral)) return;
+    var entered=ex.unilateral
+      ? ['right','left'].some(function(side){return row[side]&&['w','r','rir'].some(function(key){return String(row[side][key]||'').trim()!=='';});})
+      : ['w','r','rir'].some(function(key){return String(row[key]||'').trim()!=='';});
+    if(entered) warnings.push('La serie '+(index+1)+' está incompleta.');
+  });
+  var slots=setPlanFor(ex).filter(function(slot){return slot.type==='dropset';});
+  var configuredDrops={};
+  slots.forEach(function(slot){
+    configuredDrops[slot.id]=true;
+    var count=entry.rows.filter(function(row){return row.slotId===slot.id&&setType(row)==='dropset';}).length;
+    if(count<slot.stages||count<2) warnings.push('El drop set configurado con '+slot.stages+' tramos tiene solo '+count+' fila'+(count===1?'':'s')+' en este entreno.');
+  });
+  var manualDrops={};
+  entry.rows.forEach(function(row){if(setType(row)==='dropset') manualDrops[row.slotId||'manual']=true;});
+  Object.keys(manualDrops).forEach(function(id){
+    if(configuredDrops[id]) return;
+    var count=entry.rows.filter(function(row){return setType(row)==='dropset'&&(row.slotId||'manual')===id;}).length;
+    if(count<2) warnings.push('El drop set marcado tiene solo '+count+' tramo.');
+  });
+  return warnings.length?'<div class="set-validation-warning" role="status"><strong>Revisa estas series</strong><ul>'+warnings.map(function(message){return '<li>'+esc(message)+'</li>';}).join('')+'</ul><span>El aviso no impide guardar el entrenamiento.</span></div>':'';
+}
 function completedWorkSets(en, ex){
-  var target = Math.max(1, Number(ex.sets) || 1);
+  var target = Math.max(1, en.rows.filter(isWorkSet).length);
   return Math.min(target, en.rows.filter(function(row){
-    return setType(row) === 'normal' && row.restTriggered;
+    return isWorkSet(row) && row.restTriggered;
   }).length);
 }
 function workoutTotals(){
   var volume=0, planned=0;
   S.draft.entries.forEach(function(entry){
     var ex=effEx(entry);
-    planned+=Math.max(1,Number(ex.sets)||1);
+    planned+=Math.max(1,entry.rows.filter(isWorkSet).length);
     rowsToSets(entry.rows,!!ex.unilateral).forEach(function(set){
       if(setType(set)!=='warmup'&&validWeight(set.w)&&validReps(set.r)) volume+=Number(set.w)*Number(set.r);
     });
@@ -2020,10 +2164,10 @@ function workoutOverviewHtml(){
     '</div><div class="workout-overview-progress"><div class="progress" role="progressbar" aria-label="Series completadas" aria-valuemin="0" aria-valuemax="'+progressMax+'" aria-valuenow="'+totals.done+'"><span id="workout-progress-bar" style="width:'+progress.toFixed(1)+'%"></span></div><span id="workout-progress-label">'+totals.done+' de '+totals.planned+' series</span></div></section>';
 }
 function calculatorRowIndexForEntry(entry){
-  var next=entry.rows.findIndex(function(item){return setType(item)==='normal'&&!item.restTriggered;});
+  var next=entry.rows.findIndex(function(item){return isWorkSet(item)&&!item.restTriggered;});
   if(next>=0) return next;
   var last=-1;
-  entry.rows.forEach(function(item,index){if(setType(item)==='normal') last=index;});
+  entry.rows.forEach(function(item,index){if(isWorkSet(item)) last=index;});
   return last;
 }
 function calculatorTargetForEntry(entry,rowIndex){
@@ -2045,9 +2189,9 @@ function entryHtml(en, ei){
   var calculatorRowIndex=calculatorRowIndexForEntry(en), calculatorTarget=calculatorTargetForEntry(en,calculatorRowIndex);
   var calculatorTool=loadTools().filter(function(tool){return tool.id===ex.loadToolId;})[0];
   var calculatorHint=calculatorTarget===null?'Calcula el peso de una serie':'Serie '+(calculatorRowIndex+1)+' · '+weightText(calculatorTarget)+(calculatorTool&&calculatorTool.type==='independent'?' por brazo':' total');
-  var targetSets = Math.max(1, Number(ex.sets) || 1);
+  var targetSets = Math.max(1, en.rows.filter(isWorkSet).length);
   var completedSets = completedWorkSets(en, ex);
-  var currentSetIndex=en.rows.findIndex(function(row){return setType(row)==='normal'&&!row.restTriggered;});
+  var currentSetIndex=en.rows.findIndex(function(row){return isWorkSet(row)&&!row.restTriggered;});
   var collapsed = S.collapsedEntries.has(en.uiId);
   var baseExId=en.baseExId||en.exId, alternatives=exerciseSubstitutions(baseExId);
   var substitutionHtml=alternatives.length
@@ -2067,8 +2211,8 @@ function entryHtml(en, ei){
       'Al cambiar se limpiarán los valores cargados o anotados y el temporizador de este bloque. La rutina original se conservará. ¿Continuar?</p><div class="row"><button class="btn danger sm" data-act="substitution-confirm">Cambiar y limpiar series</button><button class="btn ghost sm" data-act="substitution-cancel">Cancelar</button></div></div>';
   }
   var previousForFill = previousExerciseEntry(en.exId, S.profile.settings.previousExerciseScope, S.draft.routineId);
-  var quickFillAvailable = !!previousForFill && previousForFill.sets.some(function(set){ return setType(set)==='normal' && validWeight(set.w) && validReps(set.r); });
-  var copyWeightAvailable=en.rows.filter(function(row){return setType(row)==='normal';}).length>1;
+  var quickFillAvailable = !!previousForFill && previousForFill.sets.some(function(set){ return countsForProgress(set) && validWeight(set.w) && validReps(set.r); });
+  var copyWeightAvailable=en.rows.filter(isWorkSet).length>1;
   var quickFillButtons=[];
   if(quickFillAvailable) quickFillButtons.push('<button class="btn ghost sm" data-act="fill-previous-load" data-ei="' + ei + '">Usar último peso</button>');
   if(copyWeightAvailable) quickFillButtons.push('<button class="btn ghost sm" data-act="copy-first-weight" data-ei="' + ei + '">' +
@@ -2079,16 +2223,18 @@ function entryHtml(en, ei){
     ensureRowMode(r, ex.unilateral);
     var type = setType(r);
     var wi = workIndex;
-    if(type === 'normal') workIndex++;
-    var effPh = type === 'normal' ? fmt(mode === 'rpe' ? 10 - effortTarget(ex, wi, S.profile.settings) : effortTarget(ex, wi, S.profile.settings)) : '';
-    var tgt = type === 'normal' && p.target && p.target[wi] !== undefined ? String(p.target[wi]) : 'reps';
-    var previousMatch=type==='normal'?previousWorkSet(en.exId,wi,ex.unilateral):null;
+    var progresses=countsForProgress(r);
+    if(progresses) workIndex++;
+    var rowEffort=Number.isFinite(Number(r.targetRir))?Number(r.targetRir):effortTarget(ex,wi,S.profile.settings);
+    var effPh = type !== 'warmup' ? fmt(mode === 'rpe' ? 10-rowEffort : rowEffort) : '';
+    var tgt = Number(r.targetMin)|| (progresses&&p.target&&p.target[wi]!==undefined?p.target[wi]:'reps');
+    var previousMatch=progresses?previousWorkSet(en.exId,wi,ex.unilateral):null;
     var options = Object.keys(SET_TYPES).map(function(key){
       return '<option value="' + key + '"' + (type === key ? ' selected' : '') + '>' + SET_TYPES[key] + '</option>';
     }).join('');
     var fields = ex.unilateral ? '<div class="set-fields unilateral-fields">' + ['right','left'].map(function(side){
       var sideData = r[side], name = side === 'right' ? 'derecho' : 'izquierdo';
-      var sideTarget = type === 'normal' && p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[wi] !== undefined
+      var sideTarget = progresses && p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[wi] !== undefined
         ? String(p.sidePlans[side].target[wi]) : tgt;
       return '<div class="side-inputs"><span class="side-label">' + (side === 'right' ? 'Der.' : 'Izq.') + '</span>' +
         '<label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(weightInput(sideData.w)) + '"></label>' +
@@ -2097,16 +2243,16 @@ function entryHtml(en, ei){
     }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"></label>' +
       '<label class="set-input"><span>Reps</span><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"></label>' +
       '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '"></label></div>';
-    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'normal' ? '' : ' is-special') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + (ri===currentSetIndex?' is-current':'') + '" data-ri="' + ri + '" data-current-set="' + (ri===currentSetIndex?'true':'false') + '"' + (ri===currentSetIndex?' role="group" aria-label="Siguiente serie pendiente, serie '+(ri+1)+'" tabindex="-1"':'') + '>' +
+    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + (ri===currentSetIndex?' is-current':'') + '" data-ri="' + ri + '" data-current-set="' + (ri===currentSetIndex?'true':'false') + '"' + (ri===currentSetIndex?' role="group" aria-label="Siguiente serie pendiente, serie '+(ri+1)+'" tabindex="-1"':'') + '>' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
       '<label class="set-type-label"><span>Tipo de serie</span><select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select></label>' +
-      (type === 'normal' ? previousReferenceHtml(en.exId, wi, ex.unilateral, previousMatch) : '') +
+      (progresses ? previousReferenceHtml(en.exId, wi, ex.unilateral, previousMatch) : '') +
       (r.restTriggered
         ? '<button class="set-finish set-finish-done" data-act="undo-finish-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Deshacer fin de la serie ' + (ri+1) + '"><span aria-hidden="true">✓</span> Hecha · deshacer</button>'
         : '<button class="btn ghost sm set-finish" data-act="finish-set" data-ei="' + ei + '" data-ri="' + ri + '"' +
           (!rowComplete(r, ex.unilateral) ? ' disabled' : '') + '>Terminar serie</button>') +
-      (type==='normal'?completedComparisonHtml(r,previousMatch,ex.unilateral):'')+'</div>';
+      (progresses?completedComparisonHtml(r,previousMatch,ex.unilateral):'')+'</div>';
   }).join('');
   var orderControls = S.draft.entries.length > 1
     ? '<div class="workout-card-tools"><button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="-1"' + (ei === 0 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' arriba" title="Mover arriba">↑</button>' +
@@ -2121,50 +2267,38 @@ function entryHtml(en, ei){
     substitutionHtml +
     (collapsed ? '' : '<div class="workout-card-body">' + previousWorkoutSummaryHtml(p) + goalHtml(ex,p) +
     '<button class="workout-calculator-trigger" data-act="open-loading-calculator" data-ei="' + ei + '"><span aria-hidden="true">＋</span><span><strong>Calculadora de discos</strong><small>'+esc(calculatorHint)+'</small></span><span aria-hidden="true">›</span></button>' +
-    '<div class="sets">' + rows + '</div>' +
+    '<div class="sets">' + rows + '</div>' + setValidationWarningsHtml(en) +
     '<details class="workout-help"><summary>Ayuda con las series</summary><p class="hint">' + (ex.unilateral
       ? 'Cada ronda registra ambos lados. Cuenta como una serie cuando completaste derecho e izquierdo; la progresión espera que ambos lados cumplan el objetivo. '
-      : 'Solo las series normales cuentan para la sobrecarga. ') +
-      'Registra cada tramo de drop set o rest-pause en una fila aparte; todos los tipos quedan en el historial. Puedes corregir los campos después de marcar una serie como hecha; «Hecha · deshacer» la reabre y × la quita con opción de deshacer.</p></details>' +
+      : 'Las series de trabajo cuentan para volumen; solo las que marques como guía cuentan para la progresión. ') +
+      'Cada tramo de drop set se registra en su propia fila y los objetivos quedan guardados en la secuencia del ejercicio. Puedes corregir los campos después de marcar una serie como hecha; «Hecha · deshacer» la reabre y × la quita con opción de deshacer.</p></details>' +
     '<div class="row"><button class="btn ghost sm" data-act="add-set" data-ei="' + ei + '">+ Serie</button>' +
     '<button class="btn ghost sm" data-act="repeat-set" data-ei="' + ei + '">Copiar última serie</button>' +
-    '<button class="btn ghost sm" data-act="toggle-cfg" data-ei="' + ei + '" aria-expanded="' + (S.openCfg === en.exId ? 'true' : 'false') + '">Ajustar series, reps y salto</button></div>' +
+    '<button class="btn ghost sm" data-act="toggle-cfg" data-ei="' + ei + '" aria-expanded="' + (S.openCfg === en.exId ? 'true' : 'false') + '">Ajustar progresión</button></div>' +
     (S.openCfg === en.exId ? cfgPanel(en, ei) : '') +
     '<div class="live" id="live-' + ei + '">' + liveHtml(ei) + '</div></div>') + '</section>';
 }
 function cfgPanel(en, ei){
-  var ex = effEx(en), lab = S.profile.settings.mode === 'rpe' ? 'RPE' : 'RIR';
+  var ex = effEx(en);
   var warmCfg = warmupSettings(ex);
   var rt = en.cfg && S.draft.routineId && S.profile.routines[S.draft.routineId];
   var f = function(key, label, val){
     var weightSetting=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(key);
     return '<div class="field"><label class="lab" for="hc-' + key + '-' + ei + '">' + label + '</label><input id="hc-' + key + '-' + ei + '" class="txt" inputmode="decimal" data-hc="' + key + '" data-ei="' + ei + '" value="' + esc(weightSetting?weightInput(val):String(val).replace('.', ',')) + '"></div>';
   };
-  var ef = '';
-  for(var k=0;k<ex.sets;k++){
-    ef += '<div class="field"><label class="lab" for="hef-' + ei + '-' + k + '">Serie ' + (k+1) + '</label><input id="hef-' + ei + '-' + k + '" class="in" inputmode="decimal" data-hef="1" data-ei="' + ei + '" data-k="' + k + '" value="' + esc(effInputVal(effortTarget(ex, k, S.profile.settings))) + '"></div>';
-  }
-  return '<div class="goal"><div class="fields">' + f('sets', 'Series de trabajo', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('maxProgressIncrease', 'Salto máximo aceptable (' + weightUnitLabel() + ', 0 = sin límite)', Number(ex.maxProgressIncrease)||0) +
+  return '<div class="goal"><div class="fields">' + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('maxProgressIncrease', 'Salto máximo aceptable (' + weightUnitLabel() + ', 0 = sin límite)', Number(ex.maxProgressIncrease)||0) +
     '<div class="field"><label class="lab" for="hc-progressionMode-' + ei + '">Estrategia de progresión</label><select id="hc-progressionMode-' + ei + '" class="txt" data-hc="progressionMode" data-ei="' + ei + '"><option value="double"' + (ex.progressionMode === 'weight' ? '' : ' selected') + '>Doble: sumar reps y luego peso</option><option value="weight"' + (ex.progressionMode === 'weight' ? ' selected' : '') + '>Peso primero: subir al cumplir el mínimo de reps</option></select></div>' +
     '<div class="field"><label class="lab" for="hc-warmupMode-' + ei + '">Peso de aproximación</label><select id="hc-warmupMode-' + ei + '" class="txt" data-hc="warmupMode" data-ei="' + ei + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
     f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
     '<div class="field"><label class="lab" for="hc-unilateral-' + ei + '">Ejecución</label><select id="hc-unilateral-' + ei + '" class="txt" data-hc="unilateral" data-ei="' + ei + '"><option value="false"' + (ex.unilateral ? '' : ' selected') + '>Bilateral</option><option value="true"' + (ex.unilateral ? ' selected' : '') + '>Unilateral · ambos lados</option></select></div></div>' +
-    ((Number(ex.warmupSets) || 0) ? '<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">' + warmCfg.warmupPercents.map(function(percent, index){
-      return '<label class="field"><span class="lab">Serie ' + (index+1) + ' · %</span><input class="in" inputmode="decimal" data-hc="warmupPercent" data-ei="' + ei + '" data-k="' + index + '" value="' + esc(String(percent).replace('.', ',')) + '"></label>';
-    }).join('') + '</div></div>' : '') +
-    '<div class="field"><span class="lab">Esfuerzo objetivo por serie (' + lab + ')</span><div class="efforts">' + ef + '</div></div>' +
     '<p class="small muted">' + (rt ? 'Estos ajustes solo cambian el entreno de hoy. Al terminar puedes actualizar «' + esc(rt.name) + '» o conservar su configuración.' : 'Se guardan en este ejercicio y valen para tus próximos entrenos.') +
     ' El redondeo de aproximaciones es hacia abajo; el peso disponible se usa para ajustar las recomendaciones de progresión.</p></div>';
 }
 function applyEntryCfg(ei, key, v, k){
   var en = S.draft.entries[ei]; if(!en) return;
-  var ex = effEx(en), tr = S.profile.settings.targetRir;
-  var c = Object.assign({sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), maxProgressIncrease:Number(ex.maxProgressIncrease)||0, progressionMode:ex.progressionMode==='weight'?'weight':'double', efforts:(ex.efforts || []).slice(), unilateral:!!ex.unilateral}, warmupSettings(ex));
-  while(c.efforts.length < c.sets) c.efforts.push(c.efforts.length ? c.efforts[c.efforts.length-1] : tr);
-  if(key === 'sets') c.sets = Math.min(10, Math.max(1, Math.round(v)));
-  if(key === 'warmupSets') c.warmupSets = Math.min(10, Math.max(0, Math.round(v)));
-  if(key === 'min'){ c.min = Math.min(50, Math.max(1, Math.round(v))); if(c.max <= c.min) c.max = c.min + 1; }
-  if(key === 'max'){ c.max = Math.min(60, Math.max(2, Math.round(v))); if(c.min >= c.max) c.min = c.max - 1; }
+  var ex=effEx(en);
+  var c=Object.assign({},ex,{loadStep:exerciseLoadStep(ex),setPlan:setPlanFor(ex)},warmupSettings(ex));
+  syncSetPlanConfig(c);
   if(key === 'inc') c.inc = Math.min(25, Math.max(0.25, v));
   if(key === 'loadStep') c.loadStep = Math.min(100, Math.max(0.05, v));
   if(key === 'maxProgressIncrease') c.maxProgressIncrease = Math.min(100, Math.max(0, v));
@@ -2172,44 +2306,12 @@ function applyEntryCfg(ei, key, v, k){
   if(key === 'warmupStep') c.warmupStep = Math.min(100, Math.max(0.05, v));
   if(key === 'warmupMode') c.warmupMode = v;
   if(key === 'unilateral') c.unilateral = !!v;
-  if(key === 'ef') c.efforts[k] = Math.min(6, Math.max(0, S.profile.settings.mode === 'rpe' ? 10 - v : v));
-  while(c.efforts.length < c.sets) c.efforts.push(c.efforts.length ? c.efforts[c.efforts.length-1] : tr);
-  c.warmupPercents = warmupSettings(c).warmupPercents;
-  if(key === 'warmupPercent') c.warmupPercents[k] = Math.min(100, Math.max(1, v));
-  c.efforts = c.efforts.slice(0, c.sets);
   if(en.cfg){
     en.cfg = c;
   } else {
     Object.assign(exById(en.exId), clone(c));
   }
   en.rows.forEach(function(row){ ensureRowMode(row, c.unilateral); });
-  var warmCount = en.rows.filter(function(row){ return setType(row) === 'warmup'; }).length;
-  while(warmCount > c.warmupSets){
-    var warmIndex = en.rows.map(setType).lastIndexOf('warmup');
-    en.rows[warmIndex].type = 'normal'; warmCount--;
-  }
-  while(warmCount < c.warmupSets){
-    var firstWork = en.rows.find(function(row){ return setType(row) !== 'warmup'; });
-    var firstValue = c.warmupMode === 'manual' ? '' : (firstWork ? (c.unilateral ? firstWork.right.w : firstWork.w) : '');
-    var warm = newRow(firstValue, c.unilateral);
-    warm.type = 'warmup'; en.rows.unshift(warm); warmCount++;
-  }
-  var normalCount = en.rows.filter(function(row){ return setType(row) === 'normal'; }).length;
-  while(normalCount < c.sets){
-    var lastNormalIndex = en.rows.map(setType).lastIndexOf('normal');
-    var insertAt = lastNormalIndex >= 0 ? lastNormalIndex + 1 : warmCount;
-    var previous = en.rows[insertAt - 1] || en.rows[insertAt];
-    en.rows.splice(insertAt, 0, nextRow(previous, c.unilateral)); normalCount++;
-  }
-  while(normalCount > c.sets){
-    var normalIndex = en.rows.map(setType).lastIndexOf('normal');
-    var last = en.rows[normalIndex];
-    var hasReps = c.unilateral
-      ? (String(last.right.r).trim() !== '' || String(last.left.r).trim() !== '')
-      : String(last.r).trim() !== '';
-    if(hasReps) break;
-    en.rows.splice(normalIndex, 1); normalCount--;
-  }
   syncAutoWarmupWeights(en, effEx(en));
   if(!en.cfg) Store.saveProfile();
   saveDraft(); render();
@@ -2288,22 +2390,11 @@ function savedHtml(){
   var exercises = session.entries.map(function(entry){
     var ex = exById(entry.exId);
     if(!ex) return '';
-    var effective = entry.unilateral
-      ? Object.keys(entry.sets.reduce(function(pairs, set){
-          if(set.pair !== undefined && countsForProgress(set) && validWeight(set.w) && set.r > 0){
-            if(!pairs[set.pair]) pairs[set.pair] = {};
-            pairs[set.pair][set.side] = true;
-          }
-          return pairs;
-        }, {})).filter(function(pair){
-          var sides = entry.sets.filter(function(set){ return String(set.pair) === pair && countsForProgress(set) && validWeight(set.w) && set.r > 0; });
-          return sides.some(function(set){ return set.side === 'right'; }) && sides.some(function(set){ return set.side === 'left'; });
-        }).length
-      : entry.sets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && set.r > 0; }).length;
+    var effective=entryEffectiveSets(entry);
     var reps = entry.sets.reduce(function(total, set){ return total + (setType(set) !== 'warmup' ? set.r : 0); }, 0);
     return '<div class="suggest"><div><div class="nm">' + esc(ex.name) + '</div><div class="small muted">' +
       effective + ' serie' + (effective === 1 ? '' : 's') + (effective === 1 ? ' efectiva' : ' efectivas') + (entry.unilateral ? ' · por lado' : '') +
-      ' · ' + reps + ' reps registradas</div><div class="small">' + esc(setsText(entry.sets, true)) + '</div></div></div>';
+      ' · ' + reps + ' reps registradas</div><div class="small">' + esc(setsText(entry.sets, true)) + '</div>'+entryTypeBreakdownHtml(entry,session.date)+'</div></div>';
   }).join('');
   var items = S.justSaved.next.map(function(it){
     if(!exById(it.exId)) return '';
@@ -2395,6 +2486,19 @@ function sessionStats(session){
     stats.volume += entryVolume(entry, session.date);
   });
   return stats;
+}
+function entryTypeBreakdownHtml(entry, sessionDate){
+  var ex=exById(entry.exId), sets=ex?effectiveSetsFor(ex,entry.sets,sessionDate):entry.sets, groups={};
+  sets.forEach(function(set){
+    if(!set||setType(set)==='warmup'||!validWeight(set.w)||!validReps(set.r)) return;
+    if(!groups[setType(set)]) groups[setType(set)]=[];
+    groups[setType(set)].push(set);
+  });
+  var parts=Object.keys(groups).map(function(type){
+    var volume=Engine.entryVolume(groups[type],SobrecargaEngine.isUnilateralEntry(entry));
+    return (SET_TYPES[type]||type)+': '+volumeText(volume)+' '+weightUnitLabel()+'·reps';
+  });
+  return parts.length?'<small class="history-type-volume">Volumen por tipo · '+esc(parts.join(' · '))+'</small>':'';
 }
 function entryVolume(entry, sessionDate){
   var ex = exById(entry.exId);
@@ -2662,18 +2766,23 @@ function prepareSessionForEdit(session){
   return editable;
 }
 function sessionEditProgressText(entry, exercise){
-  var target = Math.max(1, Number(entry.cfg && entry.cfg.sets) || Number(exercise && exercise.sets) || 1), completed = 0;
+  var target=0, completed=0;
   if(sessionEntryIsUnilateral(entry,exercise)){
     var pairs = Object.create(null);
     entry.sets.forEach(function(set){
-      if(set.pair === undefined || setType(set) !== 'normal' || !set.editorDone) return;
+      if(set.pair === undefined || !isWorkSet(set)) return;
       var key = String(set.pair);
       if(!pairs[key]) pairs[key] = {left:false,right:false};
-      if(set.side === 'left' || set.side === 'right') pairs[key][set.side] = true;
+      if(set.side === 'left' || set.side === 'right') pairs[key][set.side] = !!set.editorDone;
     });
+    target=Object.keys(pairs).filter(function(key){
+      var sides=entry.sets.filter(function(set){return String(set.pair)===key&&isWorkSet(set);});
+      return sides.some(function(set){return set.side==='left';})&&sides.some(function(set){return set.side==='right';});
+    }).length;
     completed = Object.keys(pairs).filter(function(key){ return pairs[key].left && pairs[key].right; }).length;
   }else{
-    completed = entry.sets.filter(function(set){ return setType(set) === 'normal' && set.editorDone; }).length;
+    target=entry.sets.filter(isWorkSet).length;
+    completed=entry.sets.filter(function(set){return isWorkSet(set)&&set.editorDone;}).length;
   }
   return Math.min(target, completed) + '/' + target + ' series';
 }
@@ -2939,6 +3048,7 @@ function viewHoy(){
   if(S.draft.entries.length){
     if(S.confirm === 'finish-routine'){
       out += '<section class="card"><p class="sec-title">¿Actualizar la rutina?</p><p class="small">Cambiaste el orden o la configuración de este entreno. Puedes guardar esos cambios para la próxima vez o dejar la rutina como estaba antes de entrenar.</p>' +
+        routineUpdatePreviewHtml()+
         '<div class="row"><button class="btn" data-act="finish-update"' + (done && !S.finishSaving ? '' : ' disabled') + '>Actualizar rutina y terminar</button><button class="btn ghost" data-act="finish-keep"' + (done && !S.finishSaving ? '' : ' disabled') + '>Terminar sin cambiarla</button><button class="btn ghost" data-act="finish-cancel">Volver al entreno</button></div></section>';
     } else {
       out += '<div class="workout-finish"><div class="row"><button class="btn" id="finish" data-act="finish"' + (done && !S.finishSaving ? '' : ' disabled') + '>' + (S.finishSaving ? 'Guardando…' : 'Terminar entreno') + '</button>' +
@@ -2955,7 +3065,9 @@ function effInputVal(rir){ return fmt(S.profile.settings.mode === 'rpe' ? 10 - r
 function newItem(exId){
   var ex = exById(exId), ef = [];
   for(var i=0;i<ex.sets;i++) ef.push(S.profile.settings.targetRir);
-  return Object.assign({exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, specialSets:specialSetTypes(ex), min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), maxProgressIncrease:Number(ex.maxProgressIncrease)||0, progressionMode:ex.progressionMode==='weight'?'weight':'double', efforts:ef, unilateral:!!ex.unilateral}, warmupSettings(ex));
+  var item=Object.assign({exId:exId, sets:ex.sets, warmupSets:Number(ex.warmupSets) || 0, specialSets:specialSetTypes(ex), min:ex.min, max:ex.max, inc:ex.inc, loadStep:exerciseLoadStep(ex), maxProgressIncrease:Number(ex.maxProgressIncrease)||0, progressionMode:ex.progressionMode==='weight'?'weight':'double', efforts:ef, unilateral:!!ex.unilateral, setPlan:setPlanFor(ex)}, warmupSettings(ex));
+  syncSetPlanConfig(item);
+  return item;
 }
 function viewRut(){
   if(S.pedit) return programEditor();
@@ -2974,8 +3086,10 @@ function viewRut(){
 function routineSummary(routine){
   var workingSets=0,warmupSets=0,muscles=[];
   routine.items.forEach(function(item){
-    workingSets+=Math.max(1,Number(item.sets)||1);
-    warmupSets+=Math.max(0,Number(item.warmupSets)||0);
+    setPlanFor(item).forEach(function(slot){
+      if(slot.type==='warmup') warmupSets++;
+      else workingSets+=slot.type==='dropset'?slot.stages:1;
+    });
     muscleAssignments(exById(item.exId)||item).forEach(function(assignment){
       var group=muscleGroupId(assignment.id);
       if(group&&group!=='unassigned'&&MUSCLE_GROUPS[group]&&muscles.indexOf(group)<0) muscles.push(group);
@@ -2989,6 +3103,16 @@ function routineMuscleLabel(summary){
   if(!summary.muscles.length) return 'Músculos sin asignar';
   return summary.muscles.slice(0,3).map(function(group){return MUSCLE_GROUPS[group];}).join(', ')+
     (summary.muscles.length>3?' + '+(summary.muscles.length-3):'');
+}
+function routineItemPlanSummary(item){
+  var counts={};
+  setPlanFor(item).forEach(function(slot){
+    counts[slot.type]=(counts[slot.type]||0)+(slot.type==='dropset'?slot.stages:1);
+  });
+  return Object.keys(counts).map(function(type){
+    var count=counts[type],label=SET_TYPES[type]||type;
+    return count+' '+label+(count===1?'':'s');
+  }).join(' · ');
 }
 function routineExerciseHistory(exId){
   var history=entriesFor(exId);
@@ -3005,6 +3129,7 @@ function routineLibraryDetail(routine){
     routineSummary:routineSummary,
     routineMuscleLabel:routineMuscleLabel,
     routineExerciseHistory:routineExerciseHistory,
+    routineItemPlanSummary:routineItemPlanSummary,
     exById:exById,
     exName:exName,
     setTypeLabel:function(type){return SET_TYPES[type]||type;},
@@ -3021,6 +3146,8 @@ function routineItemsForEdit(routine){
     while(item.efforts.length < item.sets) item.efforts.push(item.efforts.length ? item.efforts[item.efforts.length-1] : S.profile.settings.targetRir);
     item.efforts = item.efforts.slice(0, item.sets);
     Object.assign(item, warmupSettings(item));
+    item.setPlan=setPlanFor(item);
+    syncSetPlanConfig(item);
     return item;
   });
 }
@@ -3034,6 +3161,7 @@ function routineEditor(){
   return RoutineViews.routineEditor(S,{
     esc:esc,
     warmupSettings:warmupSettings,
+    setPlanEditorHtml:function(item,index){return setPlanEditorHtml(item,'routine',index);},
     weightInput:weightInput,
     effInputVal:effInputVal,
     exName:exName,
@@ -3200,7 +3328,7 @@ function loadingCalculatorHtml(ex){
   var workoutEntry=activeCalc&&activeCalc.open&&Number.isInteger(activeCalc.entryIndex)?S.draft.entries[activeCalc.entryIndex]:null;
   var rowIndex=workoutEntry?(Number.isInteger(activeCalc.rowIndex)?activeCalc.rowIndex:calculatorRowIndexForEntry(workoutEntry)):null;
   var rowOptions=workoutEntry?workoutEntry.rows.map(function(row,index){
-    if(setType(row)!=='normal') return '';
+    if(!countsForProgress(row)) return '';
     return '<option value="'+index+'"'+(index===rowIndex?' selected':'')+'>Serie '+(index+1)+(row.restTriggered?' · completada':'')+'</option>';
   }).join(''):'';
   var canApply=!!(workoutEntry&&rowOptions);
@@ -3272,7 +3400,7 @@ function exDetail(ex){
     (records.reps ? '<div><span>Más reps en una serie</span><strong>' + records.reps.value + ' reps</strong><small>' + esc(dFmt(records.reps.date)) + '</small></div>' : '') +
     (records.estimated && records.estimated.value !== null ? '<div><span>Mejor serie estimada</span><strong>' + weightText(records.estimated.value) + '</strong><small>' + esc(dFmt(records.estimated.date)) + '</small></div>' : '') + '</div>' : '<p class="small muted">Los récords aparecerán después de registrar series normales.</p>';
   var pts = hist.map(function(h){
-    var sets=effectiveSetsFor(ex,h.sets,h.date).filter(function(s){ return setType(s)==='normal' && Number(s.w)>0 && Number(s.r)>0; });
+    var sets=effectiveSetsFor(ex,h.sets,h.date).filter(function(s){ return countsForProgress(s) && Number(s.w)>0 && Number(s.r)>0; });
     var y=null;
     if(S.progressMetric==='weight') y=sets.length?fromKg(Math.max.apply(null,sets.map(function(s){ return Number(s.w); }))):null;
     if(S.progressMetric==='volume') y=sets.length?volumeInCurrentUnit(sets.reduce(function(total,s){ return total+Number(s.w)*Number(s.r); },0)):null;
@@ -3294,11 +3422,9 @@ function exDetail(ex){
     '<p class="muted small">Peso × (1 + (reps + RIR) ÷ 30), ' + (ex.unilateral ? 'mejor estimado del lado más débil por entreno.' : 'mejor serie de cada entreno.') + '</p></div>' +
     (rows ? '<div class="scroll-x"><table class="table"><thead><tr><th>Fecha</th><th>Series</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
     '<div><p class="sec-title" style="margin-bottom:8px">Reglas de este ejercicio</p><div class="field"><span class="lab">Qué activa</span><p class="small muted">' + esc(muscleSummaryText) + '</p></div><div class="fields">' +
-      f('sets', 'Series', ex.sets) + f('warmupSets', 'Series de aproximación', Number(ex.warmupSets) || 0) + f('min', 'Reps mín.', ex.min) + f('max', 'Reps máx.', ex.max) + f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('maxProgressIncrease', 'Salto máximo aceptable (' + weightUnitLabel() + ', 0 = sin límite)', Number(ex.maxProgressIncrease)||0) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
+      f('inc', 'Salto de progresión (' + weightUnitLabel() + ')', ex.inc) + f('loadStep', 'Peso disponible cada (' + weightUnitLabel() + ')', exerciseLoadStep(ex)) + f('maxProgressIncrease', 'Salto máximo aceptable (' + weightUnitLabel() + ', 0 = sin límite)', Number(ex.maxProgressIncrease)||0) + f('warmupStep', 'Incremento para redondear (' + weightUnitLabel() + ')', warmCfg.warmupStep) +
       '<div class="field"><label class="lab" for="cfg-progressionMode">Estrategia de progresión</label><select id="cfg-progressionMode" class="txt" data-cfg="progressionMode" data-id="' + esc(ex.id) + '"><option value="double"' + (ex.progressionMode === 'weight' ? '' : ' selected') + '>Doble: sumar reps y luego peso</option><option value="weight"' + (ex.progressionMode === 'weight' ? ' selected' : '') + '>Peso primero: subir al cumplir el mínimo de reps</option></select><p class="small muted">El límite de salto deja el peso igual si el siguiente incremento supera el máximo que toleras.</p></div>' +
-      '<fieldset class="field"><legend class="lab">Series adicionales</legend><p class="small muted">Se agregan después de las series normales y no cuentan para la progresión. Los tramos de drop set se registran en filas aparte durante el entreno.</p>' +
-      specialSetTypes(ex).map(function(type,index){return '<div class="row"><label class="field"><span class="lab">Serie adicional '+(index+1)+'</span><select class="txt" data-cfg="specialSetType" data-id="'+esc(ex.id)+'" data-k="'+index+'">'+SPECIAL_SET_TYPES.map(function(option){return '<option value="'+option+'"'+(option===type?' selected':'')+'>'+SET_TYPES[option]+'</option>';}).join('')+'</select></label><button class="mini" data-act="ex-special-remove" data-id="'+esc(ex.id)+'" data-k="'+index+'" aria-label="Quitar serie adicional '+(index+1)+'">×</button></div>';}).join('')+
-      '<button class="btn ghost sm" data-act="ex-special-add" data-id="'+esc(ex.id)+'"'+(specialSetTypes(ex).length>=10?' disabled':'')+'>+ Serie adicional</button></fieldset>' +
+      setPlanEditorHtml(ex,'exercise',0)+
       '<div class="field"><label class="lab" for="cfg-warmupMode">Peso de aproximación</label><select id="cfg-warmupMode" class="txt" data-cfg="warmupMode" data-id="' + esc(ex.id) + '"><option value="auto"' + (warmCfg.warmupMode === 'auto' ? ' selected' : '') + '>Calcular automáticamente</option><option value="manual"' + (warmCfg.warmupMode === 'manual' ? ' selected' : '') + '>Anotar manualmente</option></select></div>' +
       '</div><div class="fields"><div class="field"><label class="lab" for="cfg-equipment">Equipo</label><select id="cfg-equipment" class="txt" data-cfg="equipment" data-id="' + esc(ex.id) + '">' + Object.keys(EQUIPMENT_TYPES).map(function(id){return '<option value="' + id + '"' + (exerciseEquipment(ex)===id?' selected':'') + '>' + esc(EQUIPMENT_TYPES[id]) + '</option>';}).join('') + '</select></div><div class="field"><label class="lab" for="cfg-muscle-group">Grupo muscular principal</label><select id="cfg-muscle-group" class="txt" data-cfg="muscle-group" data-id="' + esc(ex.id) + '">' + muscleGroupOptions(SobrecargaEngine.muscleGroupId(muscleId(ex))) + '</select><details class="muscle-advanced"><summary>Elegir músculo específico (avanzado)</summary><label class="lab" for="cfg-muscle">Porción o músculo</label><select id="cfg-muscle" class="txt" data-cfg="muscle" data-id="' + esc(ex.id) + '">' + muscleOptions(ex.muscle) + '</select></details>' + (LEGACY_MUSCLE_IDS[ex.muscle] ? '<p class="small warn-text">Este ejercicio tenía un grupo general antiguo. Revisa y elige la porción muscular más exacta antes de usar el volumen.</p>' : '') + '</div></div>' +
       '<fieldset class="field"><legend class="lab">Músculos secundarios</legend><p class="small muted">Fuente: ' + esc(muscleAssignmentSourceLabel(ex)) + '. Cada serie efectiva secundaria aporta 0,5 serie equivalente estimada (no se suma a carga × reps). Revisa la sugerencia y edítala según tu técnica.</p><div class="secondary-muscle-grid">' + Object.keys(MUSCLES).filter(function(id){ return id !== 'unassigned'; }).map(function(id){
@@ -3422,50 +3548,75 @@ function routineItemsFromSession(session,exerciseMap){
   return session.entries.reduce(function(items,entry){
     var exercise=exerciseMap[entry.exId];
     if(!exercise || exercise.archived) return items;
-    var config=Object.assign({},exercise,entry.cfg||{}), normalSets=entry.sets.filter(function(set){ return setType(set)==='normal'; });
-    var completePairCount=function(sets){
-      var pairs=sets.reduce(function(result,set){
-        if(set.pair===undefined || (set.side!=='left' && set.side!=='right')) return result;
-        var key=String(set.pair);
-        if(!result[key]) result[key]={left:false,right:false};
-        result[key][set.side]=true;
-        return result;
-      },{});
-      return Object.keys(pairs).filter(function(key){ return pairs[key].left && pairs[key].right; }).length;
-    };
-    var workCount=exercise.unilateral
-      ? completePairCount(normalSets)
-      : normalSets.length;
-    if(!workCount) return items;
-    var warmupSets=entry.sets.filter(function(set){ return setType(set)==='warmup'; });
-    if(exercise.unilateral) warmupSets=completePairCount(warmupSets);
-    var specialSetRows=entry.sets.filter(function(set){return SPECIAL_SET_TYPES.includes(setType(set));});
-    var specialSets;
-    if(exercise.unilateral){
-      var specialPairs={};
-      specialSetRows.forEach(function(set){
-        if(set.pair===undefined||!['left','right'].includes(set.side)) return;
-        var key=String(set.pair);
-        if(!specialPairs[key]) specialPairs[key]={};
-        specialPairs[key][set.side]=setType(set);
-      });
-      specialSets=Object.keys(specialPairs).sort(function(a,b){return Number(a)-Number(b);})
-        .filter(function(key){return specialPairs[key].left&&specialPairs[key].left===specialPairs[key].right;})
-        .map(function(key){return specialPairs[key].left;});
-    }else specialSets=specialSetRows.map(function(set){return setType(set);});
+    var config=Object.assign({},exercise,entry.cfg||{}), groups=[], groupByKey={}, legacyRunType=null, legacyRunKey=null, legacyRunIndex=0;
+    entry.sets.forEach(function(set,index){
+      var type=setType(set), key;
+      if(set.slotId){
+        key='slot:'+set.slotId;legacyRunType=null;legacyRunKey=null;
+      }else if(type==='dropset'||type==='restpause'){
+        if(legacyRunType!==type||!legacyRunKey){
+          legacyRunType=type;legacyRunKey='legacy:'+type+':'+(legacyRunIndex++);
+        }
+        key=legacyRunKey;
+      }else{
+        legacyRunType=null;legacyRunKey=null;
+        key=exercise.unilateral&&set.pair!==undefined?'pair:'+set.pair+':'+type:'row:'+index;
+      }
+      if(!groupByKey[key]){
+        groupByKey[key]={key:key,type:type,sets:[]};
+        groups.push(groupByKey[key]);
+      }
+      groupByKey[key].sets.push(set);
+    });
+    groups=groups.filter(function(group){
+      if(!exercise.unilateral) return true;
+      var sides={};
+      group.sets.forEach(function(set){if(set.side==='left'||set.side==='right') sides[set.side]=true;});
+      return sides.left&&sides.right;
+    });
+    var progressionIndex=0;
+    var setPlan=groups.map(function(group,index){
+      var first=group.sets[0], type=group.type;
+      var progression=typeof first.progression==='boolean'?first.progression:(type==='normal'||type==='topset');
+      var targetRir=Number.isFinite(Number(first.targetRir))?Number(first.targetRir):
+        (config.efforts&&config.efforts[progressionIndex]!==undefined?Number(config.efforts[progressionIndex]):2);
+      if(progression) progressionIndex++;
+      var stageCount=group.sets.length;
+      if(exercise.unilateral) stageCount=stageCount/2;
+      var slot={
+        id:typeof first.slotId==='string'&&first.slotId?first.slotId:'slot_'+index,
+        type:type,
+        repsMin:Number(first.targetMin)||Number(config.min)||8,
+        repsMax:Number(first.targetMax)||Number(config.max)||12,
+        targetRir:targetRir,
+        loadPercent:Number(first.loadPercent)||100,
+        progression:progression
+      };
+      if(type==='dropset'){slot.stages=Math.min(6,Math.max(3,stageCount));slot.reductionPercent=20;}
+      if(type==='restpause') slot.stages=Math.max(1,Math.min(4,stageCount));
+      return slot;
+    });
+    var workSlots=setPlan.filter(function(slot){return slot.type!=='warmup';});
+    if(!workSlots.length) return items;
+    if(!setPlan.some(function(slot){return slot.progression;})) workSlots[0].progression=true;
     var item={
       exId:entry.exId,
-      sets:Math.min(10,Math.max(1,workCount)),
-      warmupSets:Math.min(10,Math.max(0,exercise.unilateral?warmupSets:warmupSets.length)),
-      specialSets:specialSets.slice(0,10),
+      setPlan:setPlan,
       min:Number(config.min)||1,
       max:Number(config.max)||20,
       inc:Number(config.inc)>0?Number(config.inc):2.5,
       loadStep:Number(config.loadStep)>0?Number(config.loadStep):exerciseLoadStep(exercise),
       unilateral:!!exercise.unilateral,
-      efforts:Array.isArray(config.efforts)?config.efforts.slice(0,Math.min(10,Math.max(1,workCount))):[]
+      efforts:Array.isArray(config.efforts)?config.efforts.slice():[]
     };
-    Object.assign(item,warmupSettings(config));
+    var progressionSlots=workSlots.filter(function(slot){return slot.progression;});
+    item.sets=progressionSlots.length||workSlots.length;
+    item.warmupSets=setPlan.filter(function(slot){return slot.type==='warmup';}).length;
+    item.specialSets=workSlots.filter(function(slot){return SPECIAL_SET_TYPES.includes(slot.type);}).map(function(slot){return slot.type;});
+    item.min=Number(progressionSlots[0]&&progressionSlots[0].repsMin)||item.min;
+    item.max=Number(progressionSlots[0]&&progressionSlots[0].repsMax)||item.max;
+    item.efforts=progressionSlots.map(function(slot){return slot.targetRir;});
+    Object.assign(item,warmupSettings(Object.assign({},config,{warmupSets:item.warmupSets})));
     items.push(item);
     return items;
   },[]);
@@ -3478,7 +3629,7 @@ function historyCardHtml(s){
     var body = s.entries.map(function(e){
       var rests=e.sets.map(function(set){ return set.restMs; }).filter(function(value){ return Number(value)>0; });
       var avg=rests.length ? Math.round(rests.reduce(function(sum,value){ return sum+Number(value); },0)/rests.length/1000) : 0;
-      return '<div class="history-exercise"><strong>' + esc(exName(e.exId)) + '</strong><div class="small muted">' + esc(setsText(e.sets, true)) + (avg ? ' · descanso medio ' + humanDuration(avg*1000) : '') + '</div></div>';
+      return '<div class="history-exercise"><strong>' + esc(exName(e.exId)) + '</strong><div class="small muted">' + esc(setsText(e.sets, true)) + (avg ? ' · descanso medio ' + humanDuration(avg*1000) : '') + '</div>'+entryTypeBreakdownHtml(e,s.date)+'</div>';
     }).join('');
     var editing = S.sessionEdit && S.sessionEdit.id === s.id;
     var duration = Number(s.durationMs) > 0 ? humanDuration(s.durationMs) : 'Sin duración';
@@ -3739,7 +3890,7 @@ function focusNextWorkoutSet(){
     var entry=S.draft.entries[ei];
     for(var ri=0;ri<entry.rows.length;ri++){
       var row=entry.rows[ri];
-      if(setType(row)!=='normal'||row.restTriggered) continue;
+      if(!isWorkSet(row)||row.restTriggered) continue;
       var input=$('input[data-f="w"][data-ei="'+ei+'"][data-ri="'+ri+'"]')||$('input[data-f="r"][data-ei="'+ei+'"][data-ri="'+ri+'"]');
       if(input){input.focus({preventScroll:true});input.scrollIntoView({block:'center'});return;}
     }
@@ -3775,6 +3926,13 @@ function releaseScreenWakeLock(){
 }
 function refreshLive(ei){
   var el = $('#live-' + ei); if(el) el.innerHTML = liveHtml(ei);
+  var entry=S.draft.entries[ei], card=$('section.card[data-ei="'+ei+'"]');
+  if(entry&&card){
+    var warning=card.querySelector('.set-validation-warning'), html=setValidationWarningsHtml(entry);
+    if(warning&&html) warning.outerHTML=html;
+    else if(!warning&&html){var sets=card.querySelector('.sets');if(sets) sets.insertAdjacentHTML('afterend',html);}
+    else if(warning&&!html) warning.remove();
+  }
   refreshWorkoutOverview();
   var f = $('#finish'); if(f) f.disabled = !workingDone();
   refreshDraftSaveStatus();
@@ -3846,17 +4004,11 @@ function startRoutine(id){
   r.items.forEach(function(it, index){
     if(!exById(it.exId)) return;
     if(exById(it.exId).archived){ skipped = true; return; }
-    var cfg = Object.assign({sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, loadStep:Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId)), maxProgressIncrease:Number(it.maxProgressIncrease)||0, progressionMode:it.progressionMode==='weight'?'weight':'double', efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral}, warmupSettings(it));
-    cfg.specialSets=Array.isArray(it.specialSets)?specialSetTypes(it):specialSetTypes(exById(it.exId));
+    var cfg = Object.assign({sets:it.sets, warmupSets:Number(it.warmupSets) || 0, min:it.min, max:it.max, inc:it.inc, loadStep:Number(it.loadStep) > 0 ? it.loadStep : exerciseLoadStep(exById(it.exId)), maxProgressIncrease:Number(it.maxProgressIncrease)||0, progressionMode:it.progressionMode==='weight'?'weight':'double', efforts:(it.efforts || []).slice(), unilateral:!!it.unilateral, setPlan:setPlanFor(it)}, warmupSettings(it));
+    syncSetPlanConfig(cfg);
     while(cfg.efforts.length < cfg.sets) cfg.efforts.push(cfg.efforts.length ? cfg.efforts[cfg.efforts.length-1] : S.profile.settings.targetRir);
     cfg.efforts = cfg.efforts.slice(0, cfg.sets);
-    var p = planFor(Object.assign({}, exById(it.exId), cfg)), rows = [];
-    for(var j=0;j<cfg.warmupSets;j++){
-      var warm = newRow(cfg.warmupMode === 'manual' ? '' : p.nextW, cfg.unilateral);
-      warm.type = 'warmup'; rows.push(warm);
-    }
-    for(var i=0;i<cfg.sets;i++) rows.push(plannedRow(p, cfg.unilateral, p.nextW));
-    appendSpecialRows(rows,p,cfg.unilateral,p.nextW,cfg);
+    var p = planFor(Object.assign({}, exById(it.exId), cfg)), rows = planSetRows(cfg,p);
     applyPreviousValues(it.exId,rows,cfg.unilateral,id);
     syncAutoWarmupWeights({rows:rows}, Object.assign({}, exById(it.exId), cfg));
     entries.push({uiId:uid('entry_'), exId:it.exId, baseExId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
@@ -3950,10 +4102,35 @@ function draftRoutineItems(){
       Object.assign(item, entry.cfg || {});
       item.exId = entry.exId;
     }
-    item.specialSets=entry.rows.filter(function(row){return SPECIAL_SET_TYPES.includes(setType(row));}).map(function(row){return setType(row);}).slice(0,10);
+    item.setPlan=setPlanFromRows(entry);
+    syncSetPlanConfig(item);
     items.push(item);
   }
   return items;
+}
+function setPlanFromRows(entry){
+  var ex=effEx(entry), previous=setPlanFor(ex), byId={};
+  previous.forEach(function(slot){byId[slot.id]=slot;});
+  var output=[], seen={};
+  entry.rows.forEach(function(row,index){
+    var type=setType(row), id=row.slotId||('legacy_'+index);
+    if(seen[id]) return;
+    seen[id]=true;
+    var base=byId[id]||setSlot(type,index,ex);
+    var matching=entry.rows.filter(function(candidate){return (candidate.slotId||'')===id;});
+    var value=Object.assign({},base,{
+      id:id,type:type,
+      repsMin:Number(row.targetMin)||base.repsMin,
+      repsMax:Number(row.targetMax)||base.repsMax,
+      targetRir:Number.isFinite(Number(row.targetRir))?Number(row.targetRir):base.targetRir,
+      loadPercent:Number(row.loadPercent)||base.loadPercent,
+      progression:type!=='warmup'&&countsForProgress(row)
+    });
+    if(type==='dropset') value.stages=Math.max(2,matching.length);
+    if(type==='restpause') value.stages=Math.max(1,Math.min(4,matching.length));
+    output.push(value);
+  });
+  return output;
 }
 function routineNeedsUpdate(){
   if(!S.draft.routineId) return false;
@@ -3961,6 +4138,23 @@ function routineNeedsUpdate(){
   var desired = draftRoutineItems();
   if(!routine || !desired) return false;
   return JSON.stringify(routine.items) !== JSON.stringify(desired);
+}
+function routineUpdatePreviewHtml(){
+  var routine=S.profile.routines[S.draft.routineId], desired=draftRoutineItems();
+  if(!routine||!desired) return '';
+  var oldOrder=routine.items.map(function(item){return exName(item.exId);}).join(' → ');
+  var newOrder=desired.map(function(item){return exName(item.exId);}).join(' → ');
+  var oldByExercise={};
+  routine.items.forEach(function(item){oldByExercise[item.exId]=item;});
+  var changes=desired.filter(function(item){
+    return JSON.stringify(setPlanFor(oldByExercise[item.exId]||{}))!==JSON.stringify(setPlanFor(item))||
+      Number(oldByExercise[item.exId]&&oldByExercise[item.exId].inc)!==Number(item.inc);
+  });
+  return '<div class="routine-update-preview"><p><strong>Orden</strong><span>Antes: '+esc(oldOrder||'Sin ejercicios')+'</span><span>Después: '+esc(newOrder||'Sin ejercicios')+'</span></p>'+
+    (changes.length?'<ul>'+changes.map(function(item){
+    var before=oldByExercise[item.exId];
+    return '<li><strong>'+esc(exName(item.exId))+'</strong><span>Antes: '+esc(before?routineItemPlanSummary(before):'No estaba en la rutina')+'</span><span>Después: '+esc(routineItemPlanSummary(item))+'</span></li>';
+  }).join('')+'</ul>':'<p class="small muted">No cambió la secuencia de series; solo se guardará el orden o los ajustes restantes.</p>')+'</div>';
 }
 function updateRoutineFromDraft(){
   var routine = S.profile.routines[S.draft.routineId];
@@ -4025,6 +4219,27 @@ function onClick(ev){
   var act = t.dataset.act, ei = t.dataset.ei !== undefined ? +t.dataset.ei : null, ri = t.dataset.ri !== undefined ? +t.dataset.ri : null;
   var st = S.profile.settings;
   switch(act){
+    case 'plan-up': case 'plan-down': case 'plan-remove':
+      var planOwnerItem=t.dataset.planOwner==='routine'?S.redit&&S.redit.items[+t.dataset.i]:exById(t.dataset.id);
+      if(planOwnerItem){
+        var editablePlan=setPlanFor(planOwnerItem), slotIndex=+t.dataset.slot;
+        if(act==='plan-remove'){
+          var removed=editablePlan[slotIndex];
+          if(removed&&removed.progression&&editablePlan.filter(function(slot){return slot.progression;}).length<=1){
+            toast('Deja al menos una serie seleccionada para guiar la progresión');break;
+          }
+          editablePlan.splice(slotIndex,1);
+        }else{
+          var destination=slotIndex+(act==='plan-up'?-1:1);
+          if(destination<0||destination>=editablePlan.length) break;
+          var moving=editablePlan[slotIndex];
+          editablePlan[slotIndex]=editablePlan[destination];editablePlan[destination]=moving;
+        }
+        planOwnerItem.setPlan=editablePlan;syncSetPlanConfig(planOwnerItem);
+        if(t.dataset.planOwner==='exercise') Store.saveProfile();
+        render();
+      }
+      break;
     case 'open-loading-calculator':
       var calculatorEntry=S.draft.entries[ei];
       if(!calculatorEntry) break;
@@ -4171,7 +4386,7 @@ function onClick(ev){
       var applyEntry=applyCalc&&Number.isInteger(applyCalc.entryIndex)?S.draft.entries[applyCalc.entryIndex]:null;
       var applyRowIndex=applyCalc&&Number.isInteger(applyCalc.rowIndex)?applyCalc.rowIndex:-1;
       if(!applyTool||!applyResult||!applyEntry||applyEntry.exId!==applyCalc.exId||
-        !applyEntry.rows[applyRowIndex]||setType(applyEntry.rows[applyRowIndex])!=='normal'){
+        !applyEntry.rows[applyRowIndex]||!isWorkSet(applyEntry.rows[applyRowIndex])){
         toast('No se pudo preparar la aplicación; vuelve a calcular y elige una serie normal');break;
       }
       var applyWeight=applyTool.type==='bar'?applyResult.totalKg:applyResult.perArmKg;
@@ -4182,7 +4397,7 @@ function onClick(ev){
       var confirmedCalc=S.loadingCalc, confirmedPending=confirmedCalc&&confirmedCalc.pendingApply;
       var confirmedEntry=confirmedCalc&&Number.isInteger(confirmedCalc.entryIndex)?S.draft.entries[confirmedCalc.entryIndex]:null;
       var confirmedRow=confirmedEntry&&confirmedEntry.rows[confirmedPending&&confirmedPending.rowIndex];
-      if(!confirmedPending||!confirmedEntry||confirmedEntry.exId!==confirmedCalc.exId||!confirmedRow||setType(confirmedRow)!=='normal'){
+      if(!confirmedPending||!confirmedEntry||confirmedEntry.exId!==confirmedCalc.exId||!confirmedRow||!isWorkSet(confirmedRow)){
         toast('No se pudo aplicar el peso; la serie ya no está disponible');break;
       }
       var confirmedExercise=effEx(confirmedEntry);
@@ -4456,7 +4671,7 @@ function onClick(ev){
       finishRow.restTriggered = true;
       finishRow.restCompletedAt = finishedAt;
       finishRow.restToken = uid('rest_');
-      var remainingEntrySets=finishEntry.rows.filter(function(row){return setType(row)==='normal';});
+      var remainingEntrySets=finishEntry.rows.filter(isWorkSet);
       if(remainingEntrySets.length&&remainingEntrySets.every(function(row){return row.restTriggered;})){
         S.collapsedEntries.add(finishEntry.uiId);
         S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
@@ -4487,14 +4702,13 @@ function onClick(ev){
       if(!previousRow){ toast('Completa una serie para poder copiarla'); break; }
       var copiedRow=nextRow(previousRow,repeatExercise.unilateral);
       var targetRow=repeatEntry.rows.find(function(row){
-        if(setType(row)!=='normal') return false;
+        if(!isWorkSet(row)) return false;
         var sides=repeatExercise.unilateral ? [row.right||{},row.left||{}] : [row];
         return sides.every(function(side){ return [side.w,side.r,side.rir].every(function(value){ return String(value===undefined?'':value).trim()===''; }); });
       });
       if(targetRow){
         copiedRow=targetRow;
         if(repeatExercise.unilateral) ensureRowMode(copiedRow,true);
-        copiedRow.type='normal';
       }else repeatEntry.rows.push(copiedRow);
       if(repeatExercise.unilateral){
         ['right','left'].forEach(function(side){
@@ -4774,7 +4988,7 @@ function onInput(ev){
     target.rir = (t.value.trim() === '' || v === null) ? '' : String(S.profile.settings.mode === 'rpe' ? 10 - v : v);
   }
   var entry = S.draft.entries[ei], exercise = effEx(entry);
-  if(f === 'w' && setType(row) === 'normal') refreshAutoWarmupInputs(ei, entry, exercise);
+  if(f === 'w' && countsForProgress(row)) refreshAutoWarmupInputs(ei, entry, exercise);
   var finishControl = $('.set-finish[data-ei="' + ei + '"][data-ri="' + ri + '"]');
   if(finishControl){
     if(row.restTriggered){
@@ -4800,6 +5014,70 @@ function onInput(ev){
 }
 function onChange(ev){
   var t = ev.target;
+  if(t.dataset.planAdd!==undefined){
+    var addItem=t.dataset.planOwner==='routine'?S.redit&&S.redit.items[+t.dataset.i]:exById(t.dataset.id);
+    if(!addItem||!WORK_SET_TYPES.concat(['warmup']).includes(t.value)){render();return;}
+    var addSlots=setPlanFor(addItem);
+    if(addSlots.length>=30){toast('La secuencia puede tener hasta 30 series');render();return;}
+    addSlots.push(setSlot(t.value,addSlots.length,addItem));
+    addItem.setPlan=addSlots;syncSetPlanConfig(addItem);
+    if(t.dataset.planOwner==='exercise') Store.saveProfile();
+    render();return;
+  }
+  if(t.dataset.planField){
+    var planItem=t.dataset.planOwner==='routine'?S.redit&&S.redit.items[+t.dataset.i]:exById(t.dataset.id);
+    var planSlots=planItem&&setPlanFor(planItem), planSlot=planSlots&&planSlots[+t.dataset.slot];
+    if(!planItem||!planSlot){render();return;}
+    var field=t.dataset.planField;
+    if(field==='type'){
+      if(!WORK_SET_TYPES.concat(['warmup']).includes(t.value)){render();return;}
+      if(planSlot.progression&&!['normal','topset'].includes(t.value)&&
+        planSlots.filter(function(slot){return slot.progression;}).length<=1){
+        toast('Deja al menos una serie seleccionada para guiar la progresión');render();return;
+      }
+      var converted=setSlot(t.value,+t.dataset.slot,planItem);converted.id=planSlot.id;
+      converted.repsMin=planSlot.repsMin;converted.repsMax=planSlot.repsMax;
+      converted.targetRir=planSlot.targetRir;converted.loadPercent=planSlot.loadPercent;
+      if(t.value==='normal'||t.value==='topset') converted.progression=true;
+      planSlots[+t.dataset.slot]=converted;
+    }else if(field==='progression'){
+      var currentProgressionCount=planSlots.filter(function(slot){return slot.progression;}).length;
+      if(!t.checked&&planSlot.progression&&currentProgressionCount<=1){
+        toast('Deja al menos una serie seleccionada para guiar la progresión');render();return;
+      }
+      planSlot.progression=t.checked;
+    }else{
+      var value=num(t.value);
+      if(value===null){toast('Introduce un valor válido para la serie');render();return;}
+      if(field==='targetRir'){
+        value=S.profile.settings.mode==='rpe'?10-value:value;
+        if(value<0||value>6){toast('El esfuerzo objetivo debe estar entre RIR 0 y 6');render();return;}
+        planSlot.targetRir=value;
+      }else if(field==='repsMin'||field==='repsMax'){
+        value=Math.round(value);
+        if(value<1||value>60){toast('Las repeticiones deben estar entre 1 y 60');render();return;}
+        planSlot[field]=value;
+        if(planSlot.repsMin>planSlot.repsMax){
+          if(field==='repsMin') planSlot.repsMax=value;
+          else planSlot.repsMin=value;
+        }
+      }else if(field==='loadPercent'){
+        if(value<1||value>200){toast('La carga relativa debe estar entre 1 % y 200 %');render();return;}
+        planSlot.loadPercent=value;
+      }else if(field==='stages'){
+        value=Math.round(value);
+        var limits=planSlot.type==='dropset'?[2,6]:[1,4];
+        if(value<limits[0]||value>limits[1]){toast('El número de tramos está fuera del rango permitido');render();return;}
+        planSlot.stages=value;
+      }else if(field==='reductionPercent'){
+        if(value<1||value>50){toast('La reducción por tramo debe estar entre 1 % y 50 %');render();return;}
+        planSlot.reductionPercent=value;
+      }
+    }
+    planItem.setPlan=planSlots;syncSetPlanConfig(planItem);
+    if(t.dataset.planOwner==='exercise') Store.saveProfile();
+    render();return;
+  }
   if(t.dataset.sessionRoutineLink!==undefined){
     var editedSession=S.sessionEdit&&S.sessionEdit.session;
     if(!editedSession||!linkSessionRoutine(editedSession,t.value,routineList())){
@@ -4838,7 +5116,7 @@ function onChange(ev){
   if(t.dataset.loadingRow!==undefined){
     var rowCalc=S.loadingCalc, rowEntry=rowCalc&&Number.isInteger(rowCalc.entryIndex)?S.draft.entries[rowCalc.entryIndex]:null;
     var selectedRowIndex=Number(t.value), selectedRow=rowEntry&&rowEntry.rows[selectedRowIndex];
-    if(!rowCalc||!rowEntry||!Number.isInteger(selectedRowIndex)||!selectedRow||setType(selectedRow)!=='normal'){
+    if(!rowCalc||!rowEntry||!Number.isInteger(selectedRowIndex)||!selectedRow||!isWorkSet(selectedRow)){
       toast('Elige una serie normal válida');render();return;
     }
     rowCalc.rowIndex=selectedRowIndex;
@@ -5143,6 +5421,14 @@ function onChange(ev){
   if(t.dataset.setType !== undefined){
     var setRow = S.draft.entries[+t.dataset.ei] && S.draft.entries[+t.dataset.ei].rows[+t.dataset.ri];
     if(!setRow || !Object.prototype.hasOwnProperty.call(SET_TYPES, t.value)){ render(); return; }
+    if(setRow.type!==t.value){
+      setRow.progression=t.value==='normal'||t.value==='topset';
+      if(t.value==='warmup') setRow.progression=false;
+      if(t.value==='dropset'){setRow.stage=1;setRow.targetMin=8;setRow.targetMax=12;}
+      if(t.value==='topset'||t.value==='normal'){setRow.targetMin=Number(effEx(S.draft.entries[+t.dataset.ei]).min)||8;setRow.targetMax=Number(effEx(S.draft.entries[+t.dataset.ei]).max)||12;}
+      if(t.value==='backoff'){setRow.targetMin=8;setRow.targetMax=12;}
+      if(!setRow.slotId) setRow.slotId=uid('slot_');
+    }
     cancelRestForRow(setRow);
     setRow.type = t.value; delete setRow.warm;
     delete setRow.restTriggered; delete setRow.restCompletedAt; delete setRow.restMs;

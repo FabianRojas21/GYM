@@ -311,10 +311,21 @@ test('redondea una bajada hacia un peso disponible', () => {
   assert.equal(result.nextW, 54);
 });
 
-test('no cuenta aproximaciones ni series especiales para la progresión', () => {
+test('solo las series elegidas guían la progresión y admiten objetivos distintos', () => {
   const result = analyze(baseExercise, [set(10,2,60,'warmup'), set(10), set(10), set(10)], null, rirSettings);
   assert.equal(result.status, 'sube');
   assert.deepEqual(result.reps, [10,10,10]);
+
+  const topAndBackoff=analyzeCore({
+    sets:1,min:8,max:12,inc:2.5,efforts:[2],
+    setPlan:[{type:'topset',progression:true,repsMin:6,repsMax:10,targetRir:2}]
+  },[
+    {w:60,r:10,rir:2,type:'topset',progression:true,targetMin:6,targetMax:10,targetRir:2},
+    {w:54,r:12,rir:1,type:'backoff',progression:false,targetMin:8,targetMax:12,targetRir:2}
+  ],null,rirSettings);
+  assert.equal(topAndBackoff.status,'sube');
+  assert.deepEqual(topAndBackoff.reps,[10]);
+  assert.deepEqual(topAndBackoff.target,[6]);
 });
 
 test('espera ambas partes de cada ronda unilateral', () => {
@@ -765,6 +776,9 @@ test('crear una rutina desde historial conserva configuración y cuenta rondas u
   assert.equal(items[0].min,6);
   assert.equal(items[0].inc,2);
   assert.deepEqual(items[0].specialSets,['dropset']);
+  assert.deepEqual(items[0].setPlan.map(slot=>slot.type),['warmup','normal','normal','normal','dropset']);
+  assert.equal(items[0].setPlan[1].progression,true);
+  assert.equal(items[0].setPlan[4].stages,3);
   assert.equal(items[1].unilateral,true);
   assert.match(source,/data-act="session-make-routine"/);
   assert.match(source,/case 'session-make-routine':[\s\S]*?routineItemsFromSession/);
@@ -1282,10 +1296,12 @@ test('las recomendaciones muestran el motivo y el resultado solo al desplegar el
   assert.match(app,/f\('maxProgressIncrease'/);
   assert.match(app,/data-cfg="progressionMode"/);
   assert.match(app,/f\('maxProgressIncrease'/);
-  assert.match(app,/data-cfg="specialSetType"/);
-  assert.match(app,/data-act="ex-special-add"/);
-  assert.match(app,/function appendSpecialRows/);
-  assert.match(app,/cfg\.specialSets=Array\.isArray\(it\.specialSets\)/);
+  assert.match(app,/data-plan-field="type"/);
+  assert.match(app,/data-plan-field="progression"/);
+  assert.match(app,/data-plan-field="reductionPercent"/);
+  assert.match(app,/function planSetRows/);
+  assert.match(app,/function setPlanFromRows/);
+  assert.match(app,/setPlan:setPlanFor\(it\)/);
 });
 
 test('la sugerencia de semana liviana es prudente, manual y descarta datos de ejemplo',()=>{

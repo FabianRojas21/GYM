@@ -13,7 +13,10 @@
     return fmt(displayed)+' '+unit;
   }
   function mean(values){ return values.reduce(function(sum, value){ return sum + value; }, 0) / values.length; }
-  function countsForProgress(set){ return !set.type || set.type === 'normal'; }
+  function countsForProgress(set){
+    if(set && typeof set.progression==='boolean') return set.progression;
+    return !set.type || set.type === 'normal';
+  }
   function isEffectiveSet(set){
     if(!set || set.type === 'warmup' || !Number.isFinite(Number(set.w)) || Number(set.w) < 0 || !(Number(set.r) > 0)) return false;
     if(set.rir === null || set.rir === undefined || set.rir === '') return true;
@@ -269,65 +272,71 @@
     var wk = sets.filter(function(set){ return countsForProgress(set) && Number.isFinite(Number(set.w)) && set.w >= 0 && set.r > 0; });
     if(!wk.length) return null;
     var weight = Math.max.apply(null, wk.map(function(set){ return set.w; }));
-    var at = wk.filter(function(set){ return set.w === weight; }).slice(0, ex.sets);
+    var progressionPlan=Array.isArray(ex.setPlan)?ex.setPlan.filter(function(slot){return slot.progression===true;}):[];
+    var need=progressionPlan.length || ex.sets;
+    var at = wk.slice(0, need);
     var reps = at.map(function(set){ return set.r; });
     var rirs = at.map(function(set){ return set.rir; }).filter(function(value){ return value !== null && value !== undefined; });
     var avgRir = rirs.length ? mean(rirs) : null;
     var diffs = [];
     at.forEach(function(set, index){
-      if(set.rir !== null && set.rir !== undefined) diffs.push(set.rir - effortTarget(ex, index, settings));
+      var targetRir=Number.isFinite(Number(set.targetRir))?Number(set.targetRir):effortTarget(ex, index, settings);
+      if(set.rir !== null && set.rir !== undefined) diffs.push(set.rir - targetRir);
     });
     var avgDiff = diffs.length ? mean(diffs) : null;
-    var n = at.length, need = ex.sets, increment = ex.inc;
+    var n = at.length, increment = ex.inc;
     var avgReps = mean(reps);
     var goalProfile = sessionGoalProfile(settings);
-    var allTop = n >= need && reps.every(function(value){ return value >= ex.max; });
+    var minAt=function(index){return Number(at[index]&&at[index].targetMin)||ex.min;};
+    var maxAt=function(index){return Number(at[index]&&at[index].targetMax)||ex.max;};
+    var allTop = n >= need && reps.every(function(value,index){ return value >= maxAt(index); });
     var okEffort = avgDiff === null || avgDiff >= goalProfile.effortTolerance;
-    var easy = avgDiff !== null && avgDiff >= goalProfile.easyThreshold && n >= need && reps.every(function(value){ return value >= ex.min; });
-    var span = Math.max(1, ex.max - ex.min), progress = 0;
+    var allMinimums = n >= need && reps.every(function(value,index){ return value >= minAt(index); });
+    var easy = avgDiff !== null && avgDiff >= goalProfile.easyThreshold && allMinimums;
+    var progress = 0;
     for(var i = 0; i < need; i++){
-      progress += Math.min(1, Math.max(0, ((reps[i] !== undefined ? reps[i] : ex.min) - ex.min) / span));
+      var minimum=minAt(i), maximum=maxAt(i), span=Math.max(1,maximum-minimum);
+      progress += Math.min(1, Math.max(0, ((reps[i] !== undefined ? reps[i] : minimum) - minimum) / span));
     }
     progress /= need;
     var repsFalt = 0;
     for(var j = 0; j < need; j++){
-      if(reps[j] !== undefined) repsFalt += Math.max(0, ex.max - reps[j]);
+      if(reps[j] !== undefined) repsFalt += Math.max(0, maxAt(j) - reps[j]);
     }
     var serFalt = Math.max(0, need - n);
     var progressIncrease = availableWeight(increment, ex.loadStep || increment, 'up');
     var progressionMode = ex.progressionMode === 'weight' ? 'weight' : 'double';
     var maxProgressIncrease = Number(ex.maxProgressIncrease) || 0;
     var weightReady = progressionMode === 'weight'
-      ? n >= need && reps.every(function(value){ return value >= ex.min; }) && okEffort
+      ? allMinimums && okEffort
       : (allTop && okEffort) || easy;
     var jumpTooLarge = maxProgressIncrease > 0 && progressIncrease > maxProgressIncrease;
     var result = {W:weight, nextW:weight, progressTarget:Math.round((weight + progressIncrease) * 100) / 100, progressIncrease:progressIncrease, progressionMode:progressionMode, reps:reps, avgRir:avgRir, n:n, progress:progress, repsFalt:repsFalt, serFalt:serFalt, target:[], goal:goalProfile.label};
-    var fill = function(value){ return Array.apply(null, Array(need)).map(function(){ return value; }); };
+    var fill = function(value){ return Array.apply(null, Array(need)).map(function(_,index){ return typeof value==='function'?value(index):value; }); };
 
     if(weightReady && jumpTooLarge){
-      result.status = 'mantener'; result.target = fill(progressionMode === 'weight' ? ex.min : ex.max); result.progress = progressionMode === 'weight' ? progress : 1;
+      result.status = 'mantener'; result.target = fill(progressionMode === 'weight' ? minAt : maxAt); result.progress = progressionMode === 'weight' ? progress : 1;
       result.headline = 'Mantén ' + weightText(weight,settings);
       result.detail = 'El siguiente salto disponible (' + weightText(progressIncrease,settings) + ') supera tu límite configurado de ' + weightText(maxProgressIncrease,settings) + '. Mantén el peso y ajusta el salto máximo o el peso disponible del equipo si quieres progresar.';
     } else if(weightReady){
-      result.status = 'sube'; result.nextW = result.progressTarget; result.target = fill(ex.min); result.progress = 1;
+      result.status = 'sube'; result.nextW = result.progressTarget; result.target = fill(minAt); result.progress = 1;
       result.headline = 'Sube a ' + weightText(result.nextW,settings);
       result.detail = progressionMode === 'weight' && !allTop
-        ? 'Completaste todas las series con al menos ' + ex.min + ' reps y esfuerzo razonable. Próximo entreno: ' + weightText(result.nextW,settings) + ' y vuelve a buscar ' + ex.min + ' reps.'
+        ? 'Completaste las series elegidas para progresar con sus mínimos de repeticiones y esfuerzo razonable. Próximo entreno: ' + weightText(result.nextW,settings) + ' y vuelve a buscar esos mínimos.'
         : allTop
-        ? 'Cumpliste ' + need + '×' + ex.max + (avgRir !== null ? ' con ' + effTxt(avgRir, settings) : '') + '. Próximo entreno: ' + weightText(result.nextW,settings) + ' y apunta a ' + ex.min + ' reps en cada serie.'
-        : 'Te sobraron repeticiones (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '). Sube a ' + weightText(result.nextW,settings) + ' y apunta a ' + ex.min + ' reps en cada serie.';
+        ? 'Cumpliste los máximos de reps en las series elegidas para progresar' + (avgRir !== null ? ' con ' + effTxt(avgRir, settings) : '') + '. Próximo entreno: ' + weightText(result.nextW,settings) + ' y apunta a sus mínimos de reps.'
+        : 'Te sobraron repeticiones (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '). Sube a ' + weightText(result.nextW,settings) + ' y apunta a los mínimos de reps configurados.';
     } else if(allTop){
-      result.status = 'confirma'; result.target = fill(ex.max); result.progress = 1;
+      result.status = 'confirma'; result.target = fill(maxAt); result.progress = 1;
       result.headline = 'Repite ' + weightText(weight,settings);
-      result.detail = 'Llegaste a ' + ex.max + ' reps pero más al límite de lo pedido (' + effTxt(avgRir, settings) + '). Repite con ' + targetText(ex, settings) + ' para confirmar la subida.';
-    } else if(avgReps < ex.min){
+      result.detail = 'Llegaste al máximo de reps pero más al límite de lo pedido (' + effTxt(avgRir, settings) + '). Repite con ' + targetText(ex, settings) + ' para confirmar la subida.';
+    } else if(reps.some(function(value,index){return value<minAt(index);})){
       var previousLow = false;
       if(prevSets){
         var previous = prevSets.filter(function(set){ return countsForProgress(set) && Number.isFinite(Number(set.w)) && set.w >= 0 && set.r > 0; });
         if(previous.length){
-          var previousWeight = Math.max.apply(null, previous.map(function(set){ return set.w; }));
-          var previousReps = previous.filter(function(set){ return set.w === previousWeight; }).map(function(set){ return set.r; });
-          previousLow = previousWeight === weight && mean(previousReps) < ex.min;
+          var previousReps = previous.slice(0,need).map(function(set){ return set.r; });
+          previousLow = mean(previousReps) < ex.min;
         }
       }
       if(previousLow && weight>0){
@@ -335,18 +344,18 @@
         if(downWeight >= weight) downWeight = Math.max(0, weight - increment);
         downWeight = availableWeight(downWeight, ex.loadStep || increment, 'down');
         if(downWeight <= 0 || downWeight >= weight){
-          result.status='mantener'; result.nextW=weight; result.target=fill(ex.min);
+          result.status='mantener'; result.nextW=weight; result.target=fill(minAt);
           result.headline='Mantén ' + weightText(weight,settings);
-          result.detail='No hay un peso inferior disponible y seguro para bajar con el incremento configurado. Mantén el peso y vuelve a buscar ' + ex.min + ' reps.';
+          result.detail='No hay un peso inferior disponible y seguro para bajar con el incremento configurado. Mantén el peso y vuelve a buscar los mínimos de reps configurados.';
         } else {
-          result.status = 'bajar'; result.nextW = downWeight; result.target = fill(ex.min);
+          result.status = 'bajar'; result.nextW = downWeight; result.target = fill(minAt);
           result.headline = 'Baja a ' + weightText(downWeight,settings);
-          result.detail = 'Dos entrenos seguidos bajo ' + ex.min + ' reps con ' + weightText(weight,settings) + '. Baja un poco y vuelve a construir desde ' + ex.min + ' reps.';
+          result.detail = 'Dos entrenos seguidos por debajo del mínimo de reps con ' + weightText(weight,settings) + '. Baja un poco y vuelve a construir desde los mínimos configurados.';
         }
       } else {
-        result.status = 'mantener'; result.target = fill(ex.min);
+        result.status = 'mantener'; result.target = fill(minAt);
         result.headline = 'Mantén ' + weightText(weight,settings);
-        result.detail = 'Promedio de ' + fmt1(avgReps) + ' reps, bajo el mínimo de ' + ex.min + '. Busca ' + ex.min + ' reps en todas las series antes de subir.';
+        result.detail = 'Una o más series elegidas quedaron por debajo de su mínimo. Busca cumplir cada objetivo antes de progresar.';
       }
     } else {
       result.status = 'reps';
@@ -354,7 +363,7 @@
       var repStep = goalProfile.repStep || 1;
       for(var k = 0; k < need; k++){
         var current = reps[k] !== undefined ? reps[k] : last;
-        result.target.push(okEffort ? Math.min(ex.max, current + repStep) : current);
+        result.target.push(okEffort ? Math.min(maxAt(k), current + repStep) : current);
       }
       result.headline = weightText(weight,settings) + ', suma reps';
       result.detail = 'Objetivo: ' + result.target.join(', ') + ' reps. Te faltan ' + repsFalt + ' rep' + (repsFalt === 1 ? '' : 's') + (serFalt ? ' y ' + serFalt + ' serie' + (serFalt > 1 ? 's' : '') : '') + ' para subir a ' + weightText(result.progressTarget,settings) + '.' + (okEffort ? '' : ' El esfuerzo fue mayor al pedido (' + effTxt(avgRir, settings) + ' frente a ' + targetText(ex, settings) + '), así que mantén las reps.');

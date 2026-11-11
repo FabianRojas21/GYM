@@ -156,7 +156,7 @@ test('crea y abre una rutina desde la biblioteca',async({page})=>{
   await expect(page.locator('.library-card').filter({hasText:'Rutina E2E'})).toBeVisible();
 });
 
-test('guarda las series adicionales en una rutina y las carga al entrenar',async({page})=>{
+test('guarda un top set y back-off ordenables en una rutina y los carga al entrenar',async({page})=>{
   await page.route('https://www.gstatic.com/**',route=>route.abort());
   await page.route('https://fonts.googleapis.com/**',route=>route.abort());
   await page.route('https://fonts.gstatic.com/**',route=>route.abort());
@@ -169,22 +169,31 @@ test('guarda las series adicionales en una rutina y las carga al entrenar',async
   await page.getByLabel('Añadir ejercicio').fill('Press banca');
   await page.locator('[data-act="rpick"][data-lib="Press banca"]').click();
 
-  await page.locator('[data-act="rut-special-add"][data-i="0"]').click();
-  await page.locator('[data-it="specialSetType"][data-i="0"][data-k="0"]').selectOption('backoff');
+  await page.locator('[data-plan-field="type"][data-i="0"][data-slot="0"]').selectOption('topset');
+  await page.locator('[data-plan-add][data-i="0"]').selectOption('backoff');
+  await page.locator('[data-plan-field="repsMin"][data-i="0"][data-slot="3"]').fill('8');
+  await page.locator('[data-plan-field="repsMax"][data-i="0"][data-slot="3"]').fill('12');
+  await page.locator('[data-plan-field="loadPercent"][data-i="0"][data-slot="3"]').fill('90');
+  await page.locator('[data-act="plan-remove"][data-i="0"][data-slot="2"]').click();
+  await page.locator('[data-act="plan-remove"][data-i="0"][data-slot="1"]').click();
+  await expect(page.locator('[data-plan-field="progression"][data-i="0"][data-slot="0"]')).toBeChecked();
+  await expect(page.locator('[data-plan-field="progression"][data-i="0"][data-slot="1"]')).not.toBeChecked();
   await page.locator('[data-act="rut-save"]').click();
   await expect(page.getByRole('heading',{name:'Rutina con back-off'})).toBeVisible();
+  await expect(page.locator('.library-exercise-row')).toContainText('Top set');
   await expect(page.locator('.library-exercise-row')).toContainText('Back-off');
+  await page.locator('[data-act="rut-edit"]').click();
+  await expect(page.locator('[data-plan-field="loadPercent"][data-i="0"][data-slot="1"]')).toHaveValue('90');
+  await page.locator('[data-act="rut-cancel"]').click();
   await page.locator('[data-act="rut-start"]').click();
 
   const setTypes=page.locator('.workout-card[data-ei="0"] .set-type');
-  await expect(setTypes).toHaveCount(4);
-  await expect(setTypes.nth(0)).toHaveValue('normal');
-  await expect(setTypes.nth(1)).toHaveValue('normal');
-  await expect(setTypes.nth(2)).toHaveValue('normal');
-  await expect(setTypes.nth(3)).toHaveValue('backoff');
+  await expect(setTypes).toHaveCount(2);
+  await expect(setTypes.nth(0)).toHaveValue('topset');
+  await expect(setTypes.nth(1)).toHaveValue('backoff');
 });
 
-test('guarda series especiales en las reglas del ejercicio',async({page})=>{
+test('guarda una plantilla drop set por ejercicio con tramos y reducción',async({page})=>{
   await page.route('https://www.gstatic.com/**',route=>route.abort());
   await page.route('https://fonts.googleapis.com/**',route=>route.abort());
   await page.route('https://fonts.gstatic.com/**',route=>route.abort());
@@ -196,8 +205,9 @@ test('guarda series especiales en las reglas del ejercicio',async({page})=>{
   await page.locator('[data-act="library-section"][data-section="ejercicios"]').click();
   await page.locator('[data-act="toggle-ex"]').filter({hasText:'Press banca'}).click();
 
-  await page.locator('[data-act="ex-special-add"]').click();
-  await page.locator('[data-cfg="specialSetType"]').selectOption('dropset');
+  await page.locator('[data-plan-add][data-id]').selectOption('dropset');
+  await expect(page.locator('[data-plan-field="stages"][data-id]')).toHaveValue('3');
+  await expect(page.locator('[data-plan-field="reductionPercent"][data-id]')).toHaveValue('20');
   await page.locator('.tab[data-tab="hoy"]').click();
   await page.locator('.workout-card[data-ei="0"] [data-act="rm-ex"]').click();
   await page.locator('[data-act="start"]').click();
@@ -205,8 +215,15 @@ test('guarda series especiales en las reglas del ejercicio',async({page})=>{
   await page.locator('[data-act="pick"]').filter({hasText:'Press banca'}).first().click();
 
   const setTypes=page.locator('.workout-card[data-ei="0"] .set-type');
-  await expect(setTypes).toHaveCount(4);
+  await expect(setTypes).toHaveCount(6);
   await expect(setTypes.nth(3)).toHaveValue('dropset');
+  await expect(setTypes.nth(4)).toHaveValue('dropset');
+  await expect(setTypes.nth(5)).toHaveValue('dropset');
+  await page.locator('[data-f="w"][data-ei="0"][data-ri="0"]').fill('40');
+  await page.locator('[data-f="r"][data-ei="0"][data-ri="0"]').fill('8');
+  await page.locator('[data-f="w"][data-ei="0"][data-ri="3"]').fill('20');
+  await expect(page.locator('.set-validation-warning')).toContainText('La serie 4 está incompleta');
+  await expect(page.getByRole('button',{name:'Terminar entreno'})).toBeEnabled();
 });
 
 test('navega por las categorías de Ajustes y vuelve al menú',async({page})=>{

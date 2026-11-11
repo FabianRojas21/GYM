@@ -17,11 +17,9 @@
     var active=state.profile.activeRoutineId===routine.id;
     var summary=helpers.routineSummary(routine);
     var exercises=routine.items.map(function(item){
-      var warmups=Number(item.warmupSets)||0;
       var exercise=helpers.exById(item.exId);
       return '<div class="library-exercise-row"><span class="exercise-mark" aria-hidden="true">'+helpers.esc(helpers.exName(item.exId).trim().charAt(0).toUpperCase())+'</span><span><strong>'+helpers.esc(helpers.exName(item.exId))+'</strong><small>'+
-        (warmups?warmups+' aprox. + ':'')+item.sets+' series · '+item.min+'–'+item.max+' reps'+(item.unilateral?' · por lado':'')+
-        ((item.specialSets||[]).length?' + '+item.specialSets.map(function(type){return helpers.setTypeLabel(type);}).join(', '):'')+
+        helpers.esc(helpers.routineItemPlanSummary(item))+(item.unilateral?' · por lado':'')+
         (exercise&&exercise.archived?' · ejercicio archivado (se omitirá al entrenar)':'')+'</small><small class="routine-exercise-history">'+helpers.esc(helpers.routineExerciseHistory(item.exId))+'</small></span></div>';
     }).join('');
     return '<div class="library-heading"><div><button class="text-button library-back" data-act="routine-back">‹ '+(program?helpers.esc(program.name):'Biblioteca')+'</button><h2>'+helpers.esc(routine.name)+'</h2></div>'+
@@ -33,7 +31,7 @@
   }
 
   function routineEditor(state,helpers){
-    var routine=state.redit, lab=state.profile.settings.mode==='rpe'?'RPE':'RIR';
+    var routine=state.redit;
     var output='<div class="head-row"><h2>'+(routine.id?'Editar rutina':'Nueva rutina')+'</h2></div>';
     output+='<section class="card"><div class="field"><label class="lab" for="r-name">Nombre de la rutina</label>'+
       '<input id="r-name" class="txt" type="text" data-rf="name" autocomplete="off" placeholder="Por ejemplo Empuje A" value="'+helpers.esc(routine.name)+'"></div>'+
@@ -49,34 +47,19 @@
         var weightSetting=['inc','loadStep','warmupStep','maxProgressIncrease'].includes(key);
         return '<div class="field"><label class="lab" for="it-'+key+'-'+index+'">'+label+'</label><input id="it-'+key+'-'+index+'" class="txt" inputmode="decimal" data-it="'+key+'" data-i="'+index+'" value="'+helpers.esc(weightSetting?helpers.weightInput(value):String(value).replace('.',','))+'"></div>';
       };
-      var efforts='';
-      for(var setIndex=0;setIndex<item.sets;setIndex++){
-        var effort=item.efforts&&item.efforts[setIndex]!==undefined?item.efforts[setIndex]:state.profile.settings.targetRir;
-        efforts+='<div class="field"><label class="lab" for="ef-'+index+'-'+setIndex+'">Serie '+(setIndex+1)+'</label><input id="ef-'+index+'-'+setIndex+'" class="in" inputmode="decimal" data-ef="1" data-i="'+index+'" data-k="'+setIndex+'" value="'+helpers.esc(helpers.effInputVal(effort))+'"></div>';
-      }
       output+='<section class="card"><div class="card-head"><h3>'+helpers.esc(helpers.exName(item.exId))+'</h3><div class="it-tools">'+
         '<button class="mini" data-act="rut-up" data-i="'+index+'"'+(index===0?' disabled':'')+' aria-label="Subir ejercicio">↑</button>'+
         '<button class="mini" data-act="rut-down" data-i="'+index+'"'+(index===routine.items.length-1?' disabled':'')+' aria-label="Bajar ejercicio">↓</button>'+
         '<button class="mini" data-act="rut-rm-item" data-i="'+index+'" aria-label="Quitar ejercicio">×</button></div></div>'+
-        '<div class="fields">'+field('sets','Series de trabajo',item.sets)+field('warmupSets','Series de aproximación',Number(item.warmupSets)||0)+field('min','Reps mín.',item.min)+field('max','Reps máx.',item.max)+
-        field('inc','Salto de progresión ('+helpers.weightUnitLabel()+')',item.inc)+
+        '<div class="fields">'+field('inc','Salto de progresión ('+helpers.weightUnitLabel()+')',item.inc)+
         field('loadStep','Peso disponible cada ('+helpers.weightUnitLabel()+')',Number(item.loadStep)>0?item.loadStep:helpers.exerciseLoadStep(helpers.exById(item.exId)||item))+
         field('maxProgressIncrease','Salto máximo aceptable ('+helpers.weightUnitLabel()+', 0 = sin límite)',Number(item.maxProgressIncrease)||0)+
         '<div class="field"><label class="lab" for="it-progressionMode-'+index+'">Estrategia de progresión</label><select id="it-progressionMode-'+index+'" class="txt" data-it="progressionMode" data-i="'+index+'"><option value="double"'+(item.progressionMode==='weight'?'':' selected')+'>Doble: sumar reps y luego peso</option><option value="weight"'+(item.progressionMode==='weight'?' selected':'')+'>Peso primero: subir al cumplir el mínimo de reps</option></select></div>'+
         '<div class="field"><label class="lab" for="it-warmupMode-'+index+'">Peso de aproximación</label><select id="it-warmupMode-'+index+'" class="txt" data-it="warmupMode" data-i="'+index+'"><option value="auto"'+(warmCfg.warmupMode==='auto'?' selected':'')+'>Calcular automáticamente</option><option value="manual"'+(warmCfg.warmupMode==='manual'?' selected':'')+'>Anotar manualmente</option></select></div>'+
         field('warmupStep','Incremento para redondear ('+helpers.weightUnitLabel()+')',warmCfg.warmupStep)+
         '<div class="field"><label class="lab" for="it-unilateral-'+index+'">Ejecución</label><select id="it-unilateral-'+index+'" class="txt" data-it="unilateral" data-i="'+index+'"><option value="false"'+(item.unilateral?'':' selected')+'>Bilateral</option><option value="true"'+(item.unilateral?' selected':'')+'>Unilateral · ambos lados</option></select></div></div>'+
-          '<fieldset class="field"><legend class="lab">Series adicionales</legend><p class="small muted">Se agregan después de las series normales y no cuentan para la progresión. Los tramos de drop set se anotan en filas aparte al entrenar.</p>'+
-          (item.specialSets||[]).map(function(type,specialIndex){
-            return '<div class="row"><label class="field"><span class="lab">Serie adicional '+(specialIndex+1)+'</span><select class="txt" data-it="specialSetType" data-i="'+index+'" data-k="'+specialIndex+'">'+['backoff','dropset','restpause'].map(function(option){return '<option value="'+option+'"'+(option===type?' selected':'')+'>'+helpers.setTypeLabel(option)+'</option>';}).join('')+'</select></label><button class="mini" data-act="rut-special-remove" data-i="'+index+'" data-k="'+specialIndex+'" aria-label="Quitar serie adicional '+(specialIndex+1)+'">×</button></div>';
-          }).join('')+
-          '<button class="btn ghost sm" data-act="rut-special-add" data-i="'+index+'"'+((item.specialSets||[]).length>=10?' disabled':'')+'>+ Serie adicional</button></fieldset>'+
-          ((Number(item.warmupSets)||0)?'<div class="field"><span class="lab">Porcentaje de cada aproximación</span><div class="efforts">'+warmCfg.warmupPercents.map(function(percent,percentIndex){
-          return '<label class="field"><span class="lab">Serie '+(percentIndex+1)+' · %</span><input class="in" inputmode="decimal" data-it="warmupPercent" data-i="'+index+'" data-k="'+percentIndex+'" value="'+helpers.esc(String(percent).replace('.',','))+'"></label>';
-        }).join('')+'</div></div>':'')+
-        '<div class="field"><span class="lab">Esfuerzo objetivo por serie ('+lab+')</span><div class="efforts">'+efforts+'</div></div>'+
-        '<p class="small muted">'+((Number(item.warmupSets)||0)?item.warmupSets+(item.warmupSets===1?' serie de aproximación + ':' series de aproximación + ')+(warmCfg.warmupMode==='auto'?' calculada desde el peso de trabajo y redondeada hacia abajo en saltos de '+helpers.weightText(warmCfg.warmupStep)+'. ':'con peso manual. '):'')+
-        item.sets+' series de trabajo × '+item.min+'–'+item.max+' reps. '+(item.progressionMode==='weight'?'Subes cuando todas las series llegan al mínimo de '+item.min+' reps con esfuerzo razonable. ':'En doble progresión, subes '+helpers.weightText(item.inc)+' cuando todas las series lleguen a '+item.max+' reps con esfuerzo razonable. ')+(Number(item.maxProgressIncrease)>0?'Si el salto supera '+helpers.weightText(item.maxProgressIncrease)+', mantienes el peso actual.':'')+'</p></section>';
+        helpers.setPlanEditorHtml(item,index)+
+        '<p class="small muted">Las series elegidas para progresar determinan el objetivo. '+(warmCfg.warmupMode==='auto'?'Las aproximaciones se calculan desde el peso de trabajo y se redondean en saltos de '+helpers.weightText(warmCfg.warmupStep)+'. ':'Las aproximaciones se registran con peso manual. ')+(Number(item.maxProgressIncrease)>0?'Si el salto supera '+helpers.weightText(item.maxProgressIncrease)+', se mantiene el peso.':'')+'</p></section>';
     });
     if(routine.pick) output+=helpers.pickerHtml('routine');
     else output+='<button class="btn ghost block" data-act="rut-add">+ Añadir ejercicio</button>';

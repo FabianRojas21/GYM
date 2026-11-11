@@ -12,7 +12,9 @@ const helpers={
   exName:id=>id==='press'?'Press banca':id,
   dFmt:value=>value,
   routineExerciseHistory:()=> 'Último registro: 2026-11-01 · 3 series efectivas',
+  routineItemPlanSummary:item=>item.specialSets&&item.specialSets.includes('backoff')?'3 normales · 1 Back-off':'2 series',
   warmupSettings:()=>({warmupMode:'auto',warmupStep:2.5,warmupPercents:[50]}),
+  setPlanEditorHtml:()=>'<fieldset data-plan-field="repsMin">Secuencia editable</fieldset>',
   weightInput:value=>String(value),
   effInputVal:value=>String(value),
   weightUnitLabel:()=>'kg',
@@ -56,15 +58,12 @@ test('routine editor renders the existing exercise controls and actions',()=>{
   assert.match(html,/data-rf="name"/);
   assert.match(html,/data-routine-program/);
   assert.match(html,/data-it="warmupMode"/);
-  assert.match(html,/data-it="warmupPercent"/);
   assert.match(html,/data-it="progressionMode"/);
   assert.match(html,/data-it="maxProgressIncrease"/);
-  assert.match(html,/data-it="specialSetType"/);
-  assert.match(html,/data-act="rut-special-add"/);
-  assert.match(html,/data-act="rut-special-remove"/);
+  assert.match(html,/data-plan-field="repsMin"/);
+  assert.match(html,/Secuencia editable/);
   assert.match(html,/Peso primero: subir al cumplir el mínimo de reps/);
-  assert.match(html,/Si el salto supera 5 kg, mantienes el peso actual/);
-  assert.match(html,/data-ef="1"/);
+  assert.match(html,/Si el salto supera 5 kg, se mantiene el peso/);
   assert.match(html,/data-act="rut-up"/);
   assert.match(html,/data-act="rut-rm-item"/);
   assert.match(html,/data-act="rut-save"/);
