@@ -17,6 +17,7 @@ function makeState(overrides={}){
   return {
     profile:{settings:{
       weightUnit:'kg',
+      theme:'auto',
       trainingGoal:'hypertrophy',
       mode:'rir',
       targetRir:2,
@@ -54,6 +55,9 @@ test('settings home shows categories without exposing their controls',()=>{
 
 test('training category keeps units, goal, and effort controls together',()=>{
   const html=renderSettings('training');
+  assert.match(html,/data-setting="theme"[\s\S]*Automático según el dispositivo/);
+  assert.match(html,/value="light">Claro/);
+  assert.match(html,/value="dark">Oscuro/);
   assert.match(html,/data-setting="weightUnit"[\s\S]*Kilogramos \(kg\)/);
   assert.match(html,/data-setting="trainingGoal"[\s\S]*Hipertrofia/);
   assert.match(html,/aria-label="Escala de esfuerzo"/);

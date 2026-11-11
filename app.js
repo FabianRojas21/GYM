@@ -124,7 +124,7 @@ var RTOK = RTK + ':owner';
 var AUTO_BACKUP_KEY=AUTO_BACKUP_BASE_KEY;
 var BACKUP_EXPORT_KEY=BACKUP_EXPORT_BASE_KEY;
 var WORKOUT_SIMPLE_KEY='sobrecarga:workout-simple:v1';
-function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', trainingGoal:'hypertrophy', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, activeProgramId:null, activeRoutineId:null, goals:{}, measurements:[], recoveryRatings:{}}; }
+function defaultProfile(){ return {v:2, settings:{mode:'rir', targetRir:2, restSeconds:90, warmupRestSeconds:45, weightUnit:'kg', reminderEnabled:false, reminderIntervalDays:3, previousExerciseScope:'any', trainingGoal:'hypertrophy', theme:'auto', loadingTools:[], plateProfiles:[]}, exercises:{}, routines:{}, programs:{}, activeProgramId:null, activeRoutineId:null, goals:{}, measurements:[], recoveryRatings:{}}; }
 function trainingGoalLabel(goal){
   var labels={hypertrophy:'Hipertrofia', strength:'Fuerza', volume:'Volumen'};
   return labels[goal] || 'Hipertrofia';
@@ -141,6 +141,7 @@ function normProfile(p){
   if(![2,3,5,7].includes(Number(d.settings.reminderIntervalDays))) d.settings.reminderIntervalDays=3;
   if(!['any','sameRoutine'].includes(d.settings.previousExerciseScope)) d.settings.previousExerciseScope='any';
   if(!['hypertrophy','strength','volume'].includes(d.settings.trainingGoal)) d.settings.trainingGoal='hypertrophy';
+  if(!['auto','light','dark'].includes(d.settings.theme)) d.settings.theme='auto';
   if(![60,90,120,180,300].includes(Number(d.settings.restSeconds))) d.settings.restSeconds = 90;
   if(![0,15,30,45,60,90,120].includes(Number(d.settings.warmupRestSeconds))) d.settings.warmupRestSeconds = 45;
   d.exercises = p.exercises || {};
@@ -3861,6 +3862,7 @@ function deleteSession(id){
 function render(){
   var y = window.scrollY;
   var views = {hoy:viewHoy, rutinas:viewRut, ejercicios:viewRut, historial:viewHist, yo:viewProfile, ajustes:viewSet};
+  document.documentElement.dataset.theme=S.profile.settings.theme==='auto'?'':S.profile.settings.theme;
   document.body.classList.toggle('is-workout-active',S.ready&&S.tab==='hoy'&&S.draft.entries.length>0);
   try {
     syncCollapsedEntries();
@@ -5366,6 +5368,10 @@ function onChange(ev){
   if(t.dataset.setting === 'weightUnit'){
     if(!['kg','lb'].includes(t.value)){ render(); return; }
     S.profile.settings.weightUnit=t.value; Store.saveProfile(); render(); return;
+  }
+  if(t.dataset.setting === 'theme'){
+    if(!['auto','light','dark'].includes(t.value)){ render(); return; }
+    S.profile.settings.theme=t.value; Store.saveProfile(); render(); return;
   }
   if(t.dataset.setting === 'reminderEnabled'){
     if(t.type!=='checkbox'){ render(); return; }

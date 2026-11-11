@@ -1023,11 +1023,90 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .history-session-content{display:flex;flex-direction:column;gap:12px;padding:0 14px 14px}
 .history-session-summary:focus-visible{outline-offset:-3px;border-radius:14px}
 .profile-nav button[aria-pressed="false"]{background:color-mix(in srgb,var(--surface) 70%,transparent)}
+.home-dashboard{
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+}
+.home-dashboard::after{
+  content:"";
+  position:absolute;
+  top:-90px;
+  right:-70px;
+  z-index:-1;
+  width:220px;
+  height:220px;
+  border-radius:50%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--accent) 25%,transparent),transparent 68%);
+  pointer-events:none;
+}
+.home-heading h2{max-width:12ch}
+.home-focus-card{
+  border-color:color-mix(in srgb,var(--accent) 38%,var(--line));
+  box-shadow:0 12px 28px rgba(27,75,196,.12);
+}
+.home-focus-card strong{font-size:18px;line-height:1.15}
+.home-focus-card p{max-width:42ch;line-height:1.35}
+.weekly-stat{transition:transform .15s ease,border-color .15s ease,background .15s ease}
+.weekly-stat:hover{
+  transform:translateY(-2px);
+  border-color:color-mix(in srgb,var(--accent) 38%,var(--line));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 10%,var(--surface)),rgba(255,255,255,.03));
+}
+.workout-overview{
+  border-color:color-mix(in srgb,var(--accent) 24%,var(--line));
+  box-shadow:0 10px 24px rgba(0,0,0,.1);
+}
+.workout-overview-progress .progress{height:9px;border-radius:999px}
+.workout-overview-progress .progress span{border-radius:inherit}
+.workout-screen .set{
+  border-radius:12px;
+  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.workout-screen .set:not(.head):not(.is-current):has(.set-finish-done){
+  border-color:color-mix(in srgb,var(--go) 35%,var(--line));
+}
+.workout-screen .set.is-current{
+  transform:translateY(-1px);
+}
+.workout-screen .set.is-current::before{
+  content:"Siguiente";
+  position:absolute;
+  top:-10px;
+  right:12px;
+  padding:3px 8px;
+  border-radius:999px;
+  background:var(--accent);
+  color:var(--on-accent);
+  font:700 10px/1 var(--font-body);
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.workout-screen .set{position:relative}
+.workout-screen .set-type-label{
+  color:var(--muted);
+  font-weight:600;
+}
+.draft-save-status{
+  display:inline-flex;
+  align-self:flex-start;
+  margin-top:-4px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--surface-2) 85%,transparent);
+  font-size:12px;
+}
+.draft-save-status[data-state="synced"]{color:var(--go)}
+.draft-save-status[data-state="localOnly"],.draft-save-status[data-state="saving"]{color:var(--warn)}
+.draft-save-status[data-state="error"]{color:var(--stop)}
 @media (max-width:520px){
   .workout-heading-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
   .workout-heading-actions .btn{min-width:0;padding:0 8px;font-size:13px}
   .history-session-summary{min-height:80px;padding:12px}
   .history-session-content{padding:0 12px 12px}
+  .home-dashboard::after{right:-120px}
+  .home-heading h2{max-width:15ch}
+  .workout-screen .set.is-current{margin-inline:2px}
 }
 @media (prefers-reduced-motion:reduce){
   .history-session-chevron{transition:none}
