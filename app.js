@@ -3543,7 +3543,7 @@ function historySummaryHtml(matches){
     var previous=historyAggregate(historySessionsInWindow(window.previousStart,window.previousEnd,S.historyQuery.trim().toLocaleLowerCase('es')));
     trendHtml='<p class="small muted">Comparación con los '+S.historyRange+' días anteriores · entrenos: '+esc(historyTrend(current.sessions,previous.sessions))+' · series efectivas: '+esc(historyTrend(current.effectiveSets,previous.effectiveSets))+' · volumen: '+esc(historyTrend(current.volume,previous.volume))+'</p>';
   }
-  return '<section class="card history-summary"><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' '+weightUnitLabel()+'·reps</strong><span>carga × reps</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
+  return '<section class="card history-summary"><div class="history-summary-heading"><div><p class="eyebrow">Resumen del periodo</p><h3>Tu actividad</h3></div><span class="history-summary-mark" aria-hidden="true">↗</span></div><div class="summary-stats"><div><strong>'+current.sessions+'</strong><span>entrenos</span></div><div><strong>'+current.effectiveSets+'</strong><span>series efectivas</span></div><div><strong>'+volumeText(current.volume)+' '+weightUnitLabel()+'·reps</strong><span>carga × reps</span></div><div><strong>'+humanDuration(current.duration)+'</strong><span>duración acumulada</span></div></div>'+trendHtml+'</section>';
 }
 function routineItemsFromSession(session,exerciseMap){
   return session.entries.reduce(function(items,entry){
@@ -3635,7 +3635,7 @@ function historyCardHtml(s){
     var editing = S.sessionEdit && S.sessionEdit.id === s.id;
     var duration = Number(s.durationMs) > 0 ? humanDuration(s.durationMs) : 'Sin duración';
     return '<details class="card history-session-card" data-history-session="'+esc(s.id)+'"'+(editing||S.confirm==='sess:'+s.id?' open':'')+'><summary class="history-session-summary"><span><strong>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</strong>' +
-      '<small class="history-session-meta">' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + ' · ' + total + ' series · ' + duration + (s.routineName ? ' · ' + esc(s.routineName) : '') + (s.demo ? ' · ejemplo' : '') + '</small></span><span class="history-session-chevron" aria-hidden="true">⌄</span></summary><div class="history-session-content">' +
+      '<small class="history-session-meta"><span>' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + '</span><span>' + total + ' series</span><span>' + duration + '</span>' + (s.routineName ? '<span>' + esc(s.routineName) + '</span>' : '') + (s.demo ? '<span>ejemplo</span>' : '') + '</small></span><span class="history-session-chevron" aria-hidden="true">⌄</span></summary><div class="history-session-content">' +
       '<div class="list history-exercises">' + body + '</div>' +
       (editing ? sessionEditorHtml(s) : '<div class="row history-actions"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar entrenamiento</button>' +
         (!s.demo ? '<button class="btn ghost sm" data-act="session-make-routine" data-id="' + esc(s.id) + '">Guardar como rutina</button>' : '') +

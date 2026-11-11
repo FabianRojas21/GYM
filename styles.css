@@ -890,8 +890,18 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .library-empty>span{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:color-mix(in srgb,var(--accent) 12%,var(--surface));font-size:22px}
 .library-empty h3{letter-spacing:.01em}
 .history-session-card{border-left:3px solid color-mix(in srgb,var(--accent) 70%,var(--line))}
+.history-session-card[open]{border-left-color:var(--accent)}
 .history-exercise{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--surface-2) 65%,var(--surface))}
+.history-session-meta{display:flex;flex-wrap:wrap;gap:5px 7px}
+.history-session-meta span{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:color-mix(in srgb,var(--surface-2) 78%,transparent);font-size:12px}
 .history-summary,.recovery-panel{border-color:color-mix(in srgb,var(--accent) 22%,var(--line))}
+.history-summary{display:flex;flex-direction:column;gap:14px;overflow:hidden;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 8%,var(--surface)),var(--surface))}
+.history-summary-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.history-summary-heading h3{margin-top:3px;font-size:22px}
+.history-summary-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent);font-size:22px}
+.history-summary .summary-stats{padding-top:2px}
+.history-summary .summary-stats>div{min-width:0;padding:10px;border:1px solid color-mix(in srgb,var(--line) 75%,transparent);border-radius:11px;background:color-mix(in srgb,var(--surface-2) 55%,transparent)}
+.history-summary .summary-stats strong{overflow-wrap:anywhere}
 .history-empty{align-items:center;min-height:220px;text-align:center;background:radial-gradient(ellipse at 50% 0%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 58%),var(--surface)}
 .history-empty>span{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:color-mix(in srgb,var(--accent) 12%,var(--surface));color:var(--accent);font-size:25px}
 .history-empty h3{font-size:22px}
