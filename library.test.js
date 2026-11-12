@@ -42,6 +42,7 @@ test('library search filters routine cards and gives a useful empty state',()=>{
   assert.match(matched,/Cuerpo completo/);
   const empty=render({...baseState,libraryQuery:'pierna'},helpers);
   assert.match(empty,/No hay rutinas con ese nombre/);
+  assert.match(empty,/data-act="rut-new"/);
   assert.match(empty,/data-library-search/);
 });
 

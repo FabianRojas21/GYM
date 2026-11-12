@@ -897,6 +897,8 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .library-empty{min-height:210px;justify-content:center;border-color:color-mix(in srgb,var(--accent) 22%,var(--line));background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 54%),var(--surface)}
 .library-empty>span{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:color-mix(in srgb,var(--accent) 12%,var(--surface));font-size:22px}
 .library-empty h3{letter-spacing:.01em}
+.library-empty .eyebrow{margin-top:2px;color:var(--accent)}
+.library-empty .btn{margin-top:3px}
 .history-session-card{border-left:3px solid color-mix(in srgb,var(--accent) 70%,var(--line))}
 .history-session-card[open]{border-left-color:var(--accent)}
 .history-exercise{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--surface-2) 65%,var(--surface))}
