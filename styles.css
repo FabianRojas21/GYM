@@ -8,7 +8,7 @@
   --ink:#151A1C;
   --muted:#556165;
   --line:#CDD3CF;
-  --accent:#1B4BC4;
+  --accent:#1645A8;
   --on-accent:#FFFFFF;
   --go:#146C3E;
   --warn:#8F5409;
@@ -373,7 +373,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .home-state-badge.igual{background:rgba(255,180,67,.12);color:#f7d78c;border-color:rgba(255,180,67,.36)}
 .home-state-badge.peor{background:rgba(214,77,77,.12);color:#f5a9a9;border-color:rgba(214,77,77,.36)}
 .home-heading h2{margin-top:5px;font:700 30px/1 var(--font-display);letter-spacing:.02em;text-transform:uppercase}
-.home-week,.latest-date{color:#858A93;font-size:13px;text-align:right}
+.home-week,.latest-date{color:var(--muted);font-size:13px;text-align:right}
 .weekly-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .weekly-stat{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 10px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid rgba(176,184,199,.1)}
 .weekly-stat strong{font:700 clamp(18px,5vw,26px)/1.1 var(--font-display);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -402,9 +402,9 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .recovery-muscle .lab{font-size:12px}
 .recovery-muscle select{font-size:13px}
 .recovery-stimulus{font-size:11px;line-height:1.3}
-.weekly-muscles>div:first-child p,.home-weekly-note{margin-top:4px;color:#969BA3;font-size:12px}
+.weekly-muscles>div:first-child p,.home-weekly-note{margin-top:4px;color:var(--muted);font-size:12px}
 .volume-help{margin-top:5px}
-.volume-help p{margin-top:6px;color:#969BA3;font-size:12px}
+.volume-help p{margin-top:6px;color:var(--muted);font-size:12px}
 .weekly-muscle-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px}
 .weekly-muscle-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;background:#191A1E;color:#C8CBD0;font-size:14px}
 .weekly-muscle-row strong{color:#E4E6E9;font:700 20px/1 var(--font-display);font-variant-numeric:tabular-nums}
@@ -819,7 +819,7 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .weekly-stat span{line-height:1.25}
 .home-start{
   position:relative;min-height:58px;border:1px solid rgba(255,255,255,.17);
-  border-radius:14px;background:linear-gradient(110deg,#315fe0,#4c87f2 58%,#79a7ff);
+  border-radius:14px;background:linear-gradient(110deg,#1645A8,#1D5BC8 58%,#2870D8);color:#FFFFFF;
   box-shadow:0 10px 26px rgba(43,101,224,.29),0 1px 0 rgba(255,255,255,.2) inset;
 }
 .home-start:hover{filter:brightness(1.07)}

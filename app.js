@@ -757,9 +757,10 @@ var Store = {
     S.kind='cloud';
     Store.firebaseUser=user;
     var localData=Store.readLocalData();
-    var localProfile=clone(S.profile), localSessions=clone(S.sessions);
+    if(hasLegacyLocalData) localData=legacyLocalData;
+    var localProfile=clone(localData.profile || defaultProfile()), localSessions=clone(localData.sessions || []);
     render();
-    if(hasLegacyLocalData) toast('Tus datos de este navegador se conservaron aparte para no mezclarlos con la cuenta. Cierra sesión para verlos y exportarlos si quieres pasarlos a esta cuenta.');
+    if(hasLegacyLocalData) toast('Encontramos datos locales anteriores. Se intentarán migrar a esta cuenta sin borrar los datos del navegador.');
     var root=Store.firebaseDb.collection('users').doc(user.uid);
     Store.ref=root.collection('app').doc('state');
     Store.col=root.collection('sessions');
@@ -2926,8 +2927,9 @@ function homeDashboard(){
   var through=iso(new Date());
   var previousStart = new Date(start.getTime());
   previousStart.setDate(previousStart.getDate() - 7);
-  var previousThrough = new Date(start.getTime());
-  previousThrough.setDate(previousThrough.getDate() - 1);
+  var elapsedDays = Math.floor((Date.now() - start.getTime()) / 86400000) + 1;
+  var previousThrough = new Date(previousStart.getTime());
+  previousThrough.setDate(previousThrough.getDate() + elapsedDays - 1);
   previousThrough.setHours(23, 59, 59, 999);
   var week = S.sessions.filter(function(session){ return session.date >= from&&session.date<=through; });
   var previousWeek = S.sessions.filter(function(session){ return session.date >= iso(previousStart) && session.date <= iso(previousThrough); });
@@ -3558,7 +3560,7 @@ function weeklyProgressStatus(current,previous){
 }
 function weeklyTrendSummaryHtml(currentStats, previousStats){
   var trend = weeklyProgressStatus(currentStats, previousStats);
-  return '<div class="home-week-trend"><div class="home-week-trend-head">' + chip(trend.status) + '<strong>' + esc(trend.label) + '</strong></div><small>' + esc(trend.detail) + '</small></div>';
+  return '<div class="home-week-trend"><div class="home-week-trend-head"><strong>' + esc(trend.label) + '</strong></div><small>' + esc(trend.detail) + '</small></div>';
 }
 function historySummaryHtml(matches){
   var current=historyAggregate(matches), trendHtml='';

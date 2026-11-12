@@ -67,6 +67,7 @@
     });
     var arms=profile.type==='independent'?2:1;
     var desired=Math.round((profile.type==='bar'?(target-base)/2:target-base)*1000);
+    var exactTolerance = Math.max(2, Math.round(Math.max.apply(null, [0].concat(plates)) * 0.00001));
     var totalAvailable=plates.reduce(function(sum,weight){return sum+weight;},0);
     var maxPlate=Math.max.apply(null,[0].concat(plates));
     var ceiling=Math.min(Math.max(0,desired)+maxPlate,totalAvailable);
@@ -104,7 +105,7 @@
         addedPerSideKg:diskWeight,
         perArmKg:actualPerUnit,
         totalKg:total,
-        exact:Math.abs((profile.type==='bar'?total:actualPerUnit)-target)<0.0005
+        exact:Math.abs((profile.type==='bar'?total:actualPerUnit)-target)<=exactTolerance/1000
       };
     };
     var lowerOption=makeOption(lower===null?undefined:lower), upperOption=makeOption(upper===null?undefined:upper);
@@ -115,7 +116,7 @@
       arms:arms,
       lower:lowerOption,
       upper:upperOption,
-      exact:!!(lowerOption&&lowerOption.exact)
+      exact:!!((lowerOption&&lowerOption.exact)||(upperOption&&upperOption.exact))
     };
   }
   function isUnilateralEntry(entry){
@@ -134,6 +135,8 @@
     'press militar':{muscle:'shoulderAnterior',equipment:'barbell',secondaryMuscles:['tricepsLateral','tricepsMedial']},
     'remo con barra':{muscle:'upperBack',equipment:'barbell',secondaryMuscles:['bicepsShort','brachialis']},
     'dominadas lastradas':{muscle:'lats',equipment:'bodyweight',secondaryMuscles:['bicepsShort','brachialis']},
+    'dominadas':{muscle:'lats',equipment:'bodyweight',secondaryMuscles:['bicepsShort','brachialis']},
+    'dominada':{muscle:'lats',equipment:'bodyweight',secondaryMuscles:['bicepsShort','brachialis']},
     'press inclinado con mancuernas':{muscle:'chestUpper',equipment:'dumbbell',secondaryMuscles:['tricepsLateral','tricepsMedial','shoulderAnterior']},
     'peso muerto rumano':{muscle:'hamstrings',equipment:'barbell',secondaryMuscles:['glutesMax','lowerBack']},
     'prensa de piernas':{muscle:'quads',equipment:'machine',secondaryMuscles:['glutesMax','adductors']},
