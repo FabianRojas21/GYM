@@ -5739,6 +5739,21 @@ document.addEventListener('click', onClick);
 document.addEventListener('input', onInput);
 document.addEventListener('change', onChange);
 document.addEventListener('keydown', onWorkoutKeydown);
+window.addEventListener('offline',function(){
+  if(S.kind==='cloud'){
+    S.syncUnavailable=true;
+    if(S.draft.entries.length) S.draftSaveState='localOnly';
+    refreshDraftSaveStatus();
+    toast('Sin conexión: tus cambios se guardan en este dispositivo');
+  }
+});
+window.addEventListener('online',function(){
+  if(S.kind!=='cloud') return;
+  S.syncUnavailable=false;
+  toast('Conexión recuperada; intentando sincronizar');
+  if(S.draft.entries.length) saveDraft(true);
+  if(profDirty) Store.flush().catch(function(error){ console.warn('No se pudo reintentar la sincronización del perfil',error); });
+});
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState!=='visible'||!S.screenAwake||screenWakeLock) return;
   requestScreenWakeLock().catch(function(error){

@@ -363,6 +363,10 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.doesNotMatch(app,/experimentalForceLongPolling|experimentalAutoDetectLongPolling/);
   assert.equal(manifest.display,'standalone');
   assert.match(workflow,/actions\/deploy-pages/);
+  assert.match(app,/window\.addEventListener\('offline'/);
+  assert.match(app,/window\.addEventListener\('online'/);
+  assert.match(app,/tus cambios se guardan en este dispositivo/);
+  assert.match(app,/intentando sincronizar/);
 });
 
 test('el Service Worker entrega la respuesta aunque falle su copia offline', async () => {
