@@ -888,6 +888,9 @@ var Store = {
   },
   syncToCloud:function(){
     if(!Store.firebaseUser || !Store.ref || !Store.col) return Promise.reject(new Error('No hay una cuenta de Firebase disponible'));
+    if(typeof navigator!=='undefined' && navigator.onLine===false){
+      return Promise.reject(new Error('No hay conexión a internet. Tus datos locales se conservaron; vuelve a intentarlo cuando estés conectado.'));
+    }
     if(!S.ready || S.syncUnavailable || S.kind!=='cloud'){
       return Promise.reject(new Error('La cuenta no terminó de cargar. Vuelve a conectar antes de sincronizar; no se subieron datos para proteger los que ya están en la nube.'));
     }
@@ -4271,6 +4274,10 @@ function onClick(ev){
       break;
     case 'cloud-sync':
       if(S.cloudSyncing) break;
+      if(typeof navigator!=='undefined' && navigator.onLine===false){
+        toast('No hay conexión a internet; tus datos locales se conservaron');
+        break;
+      }
       if(!S.ready || S.syncUnavailable || S.kind!=='cloud'){
         if(Store.firebaseUser){
           Store.startFirebase(Store.firebaseUser);

@@ -367,6 +367,8 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.match(app,/window\.addEventListener\('online'/);
   assert.match(app,/tus cambios se guardan en este dispositivo/);
   assert.match(app,/intentando sincronizar/);
+  assert.match(app,/navigator\.onLine===false/);
+  assert.match(app,/No hay conexión a internet; tus datos locales se conservaron/);
 });
 
 test('el Service Worker entrega la respuesta aunque falle su copia offline', async () => {
