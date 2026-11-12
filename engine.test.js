@@ -289,6 +289,48 @@ test('repite para confirmar si las series al máximo superan el esfuerzo pedido'
   assert.equal(result.nextW, 60);
 });
 
+test('propone una vuelta prudente tras una pausa y detecta una meseta', () => {
+  const history = [1, 2, 3, 4].map(day => ({
+    date: `2026-10-0${day}`,
+    sets: [set(8), set(8), set(8)]
+  }));
+  const result = analyze(
+    baseExercise,
+    [set(8), set(8), set(8)],
+    null,
+    rirSettings,
+    {history, currentDate:'2026-11-12'}
+  );
+  assert.deepEqual(result.signals.pause, {days:39, percent:10});
+  assert.deepEqual(result.signals.plateau, {sessions:4, weight:60, reps:8});
+});
+
+test('marca un récord actual y distingue top set de back-off', () => {
+  const history = [{
+    date:'2026-11-10',
+    sets:[
+      {...set(6,2,70), type:'topset', progression:true},
+      {...set(8,2,60), type:'backoff', progression:true}
+    ]
+  }];
+  const result = analyze(
+    baseExercise,
+    [{...set(7,2,72.5), type:'topset', progression:true}, {...set(8,2,60), type:'backoff', progression:true}, set(8)],
+    null,
+    rirSettings,
+    {history, currentDate:'2026-11-12'}
+  );
+  assert.equal(result.signals.record.kind, 'weight');
+  assert.deepEqual(result.signals.structure, {topWeight:70, backoffWeight:60});
+});
+
+test('propone un salto mayor solo como señal cuando el esfuerzo fue muy cómodo', () => {
+  const exercise = {...baseExercise, maxProgressIncrease:5};
+  const result = analyze(exercise, [set(10,5), set(10,5), set(10,5)], null, rirSettings);
+  assert.deepEqual(result.signals.easyJump, {from:2, to:4});
+  assert.equal(result.nextW, 62);
+});
+
 test('propone sumar repeticiones cuando todavía no se llega al máximo', () => {
   const result = analyze(baseExercise, [set(8), set(9), set(9)], null, rirSettings);
   assert.equal(result.status, 'reps');

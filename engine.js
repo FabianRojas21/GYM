@@ -270,6 +270,49 @@
     var snapped = (direction === 'down' ? Math.floor(units + 1e-9) : Math.ceil(units - 1e-9)) * step;
     return Math.round(snapped * 100) / 100;
   }
+  function isoDay(value){
+    if(!value) return null;
+    var match=String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return match ? Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3])) : null;
+  }
+  function validProgressSets(sets){
+    return (sets||[]).filter(function(set){
+      return countsForProgress(set) && Number.isFinite(Number(set.w)) && Number(set.w)>=0 && Number(set.r)>0;
+    });
+  }
+  function progressionSignals(ex, result, history, settings, currentDate){
+    history=Array.isArray(history)?history.filter(function(item){return item&&item.date;}):[];
+    var latest=history.length?history[history.length-1]:null;
+    var currentDay=isoDay(currentDate), latestDay=latest&&isoDay(latest.date);
+    var daysAway=currentDay!==null&&latestDay!==null?Math.floor((currentDay-latestDay)/86400000):0;
+    var signals={};
+    if(latest&&daysAway>=14){
+      signals.pause={days:daysAway,percent:daysAway>=21?10:5};
+    }
+    var recent=history.slice(-6).map(function(item){
+      var sets=validProgressSets(item.sets);
+      return {date:item.date,weight:sets.length?Math.max.apply(null,sets.map(function(set){return Number(set.w);})):null,reps:sets.length?mean(sets.map(function(set){return Number(set.r);})):null};
+    }).filter(function(item){return item.weight!==null;});
+    if(recent.length>=4){
+      var stable=recent.slice(-4), sameWeight=stable.every(function(item){return Math.abs(item.weight-stable[0].weight)<0.001;});
+      var sameReps=stable.every(function(item){return Math.abs(item.reps-stable[0].reps)<0.001;});
+      if(sameWeight&&sameReps) signals.plateau={sessions:4,weight:stable[0].weight,reps:stable[0].reps};
+    }
+    var historicalSets=validProgressSets(history.reduce(function(all,item){return all.concat(item.sets||[]);},[]));
+    var bestWeight=historicalSets.length?Math.max.apply(null,historicalSets.map(function(set){return Number(set.w);})):null;
+    var currentSets=result&&result.reps?result.reps:[], currentWeight=result&&Number.isFinite(Number(result.W))?Number(result.W):null;
+    if(currentWeight!==null&&bestWeight!==null&&currentWeight>bestWeight) signals.record={kind:'weight',value:currentWeight};
+    var roles=validProgressSets((history.length?history[history.length-1].sets:[]));
+    var topSets=roles.filter(function(set){return set.type==='topset';}), backoffSets=roles.filter(function(set){return set.type==='backoff';});
+    if(topSets.length&&backoffSets.length) signals.structure={topWeight:Math.max.apply(null,topSets.map(function(set){return Number(set.w);})),backoffWeight:Math.max.apply(null,backoffSets.map(function(set){return Number(set.w);}))};
+    if(result&&result.avgRir!==null&&result.avgRir!==undefined&&result.avgRir>=4&&result.status==='sube'){
+      var desired=Number(result.progressIncrease)||0, max=Number(ex.maxProgressIncrease)||0;
+      var larger=Math.round(desired*2*100)/100;
+      if(max>0) larger=Math.min(larger,max);
+      if(larger>desired) signals.easyJump={from:desired,to:larger};
+    }
+    return signals;
+  }
 
   function analyzeCore(ex, sets, prevSets, settings){
     var wk = sets.filter(function(set){ return countsForProgress(set) && Number.isFinite(Number(set.w)) && set.w >= 0 && set.r > 0; });
@@ -424,8 +467,12 @@
     return {program:program,current:latest||null,routine:sequence[(index+1)%sequence.length]};
   }
 
-  function analyze(ex, sets, prevSets, settings){
-    if(!ex.unilateral) return analyzeCore(ex, sets, prevSets, settings);
+  function analyze(ex, sets, prevSets, settings, context){
+    if(!ex.unilateral){
+      var direct=analyzeCore(ex, sets, prevSets, settings);
+      if(direct) direct.signals=progressionSignals(ex,direct,context&&context.history,settings,context&&context.currentDate);
+      return direct;
+    }
     var current = completeUnilateralSets(sets);
     if(!current.length) return null;
     var previous = prevSets ? completeUnilateralSets(prevSets) : null;
@@ -436,13 +483,15 @@
     var rank = {sube:0, reps:1, confirma:2, mantener:3, bajar:4};
     var weaker = rank[right.status] >= rank[left.status] ? right : left;
     var sideTarget = function(name, result){ return name + ': ' + weightText(result.nextW,settings) + ' × ' + result.target.join(', ') + ' reps'; };
-    return Object.assign({}, weaker, {
+    var combined=Object.assign({}, weaker, {
       W:Math.min(right.W, left.W), nextW:Math.min(right.nextW, left.nextW), progressTarget:Math.min(right.progressTarget, left.progressTarget), progress:Math.min(right.progress, left.progress),
       sidePlans:{right:right, left:left},
       displayTarget:sideTarget('Der.', right) + ' · ' + sideTarget('Izq.', left),
       headline:(weaker === right ? 'Derecho: ' : 'Izquierdo: ') + weaker.headline,
       detail:'Derecho: ' + right.detail + ' Izquierdo: ' + left.detail
     });
+    combined.signals=progressionSignals(ex,combined,context&&context.history,settings,context&&context.currentDate);
+    return combined;
   }
 
   return {
@@ -454,6 +503,7 @@
     muscleGroupId:muscleGroupId, effectiveBodyweight:effectiveBodyweight,
     orderedProgramRoutines:orderedProgramRoutines, programRoutineOrderConfigured:programRoutineOrderConfigured,
     programRecommendation:programRecommendation,
-    comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend, suggestDeload:suggestDeload
+    comparableWeekRange:comparableWeekRange, compareWeeklyTrend:compareWeeklyTrend, suggestDeload:suggestDeload,
+    progressionSignals:progressionSignals
   };
 });

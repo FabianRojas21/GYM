@@ -1285,7 +1285,7 @@ function planFor(ex){
   var hist = entriesFor(ex.id);
   if(!hist.length) return {status:'nuevo'};
   var last = hist[hist.length-1], prev = hist[hist.length-2];
-  var a = analyze(ex, effectiveSetsFor(ex, last.sets, last.date), prev ? effectiveSetsFor(ex, prev.sets, prev.date) : null, S.profile.settings);
+  var a = analyze(ex, effectiveSetsFor(ex, last.sets, last.date), prev ? effectiveSetsFor(ex, prev.sets, prev.date) : null, S.profile.settings, {history:hist, currentDate:iso(new Date())});
   if(!a) return {status:'nuevo'};
   a.last = last;
   return a;
@@ -1934,6 +1934,16 @@ function recommendationStateLine(a){
   var headline = labelMap[a.status] || 'Objetivo';
   return '<div class="goal-state-line"><div class="goal-state-copy"><span>Estado</span>' + chip(a.status) + '</div><strong>' + esc(headline) + ' · ' + esc(a.headline) + '</strong></div>';
 }
+function progressionSignalsHtml(signals){
+  if(!signals) return '';
+  var notices=[];
+  if(signals.pause) notices.push('<aside class="progression-signal pause" role="status"><strong>Regreso tras una pausa</strong><span>Han pasado '+signals.pause.days+' días desde la última sesión de este ejercicio. Considera empezar con un '+signals.pause.percent+'% menos y ajusta según cómo te sientas. No se cambia el peso automáticamente.</span></aside>');
+  if(signals.plateau) notices.push('<aside class="progression-signal plateau" role="status"><strong>Posible meseta</strong><span>Las últimas '+signals.plateau.sessions+' sesiones fueron muy parecidas ('+weightText(signals.plateau.weight)+' × '+Math.round(signals.plateau.reps)+' reps). Considera variar el rango, revisar la técnica o hacer una semana más liviana.</span></aside>');
+  if(signals.record) notices.push('<aside class="progression-signal record" role="status"><strong>Posible récord personal</strong><span>La carga actual supera tu mayor peso registrado en este ejercicio. Verifica la técnica antes de darlo por válido.</span></aside>');
+  if(signals.structure) notices.push('<p class="progression-structure"><strong>Top set + back-off:</strong> la serie superior guía la progresión y las series de descarga aportan volumen.</p>');
+  if(signals.easyJump) notices.push('<p class="progression-easy"><strong>Esfuerzo muy cómodo:</strong> el siguiente salto disponible es '+weightText(signals.easyJump.to)+' si el equipo lo permite. Es una propuesta, no un cambio automático.</p>');
+  return notices.join('');
+}
 function progressionMathHtml(ex, result){
   if(!result || !Number.isFinite(Number(result.W)) || !Number.isFinite(Number(result.progressIncrease))) return '';
   var intended=Number(ex.inc)||0, available=exerciseLoadStep(ex), used=Number(result.progressIncrease);
@@ -1944,12 +1954,12 @@ function liveHtml(ei){
   var sets = rowsToSets(en.rows, ex.unilateral);
   var hist = entriesFor(ex.id), last = hist[hist.length-1];
   var datedSets = effectiveSetsFor(ex, sets, S.draft.date || iso(new Date()));
-  var a = analyze(ex, datedSets, last ? effectiveSetsFor(ex, last.sets, last.date) : null, S.profile.settings);
+  var a = analyze(ex, datedSets, last ? effectiveSetsFor(ex, last.sets, last.date) : null, S.profile.settings, {history:hist, currentDate:S.draft.date || iso(new Date())});
   if(!a) return '<p class="muted small">' + (ex.unilateral
     ? 'Completa peso y repeticiones en ambos lados para ver tu progreso.'
     : 'Anota tus series y verás cuánto te falta para subir de peso.') + '</p>';
   var resultSets = datedSets.filter(function(set){ return countsForProgress(set) && validWeight(set.w) && validReps(set.r); });
-  return recommendationStateLine(a) + barHtml(a, ex) + progressionMathHtml(ex,a) +
+  return progressionSignalsHtml(a.signals) + recommendationStateLine(a) + barHtml(a, ex) + progressionMathHtml(ex,a) +
     '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Resultado de hoy: ' + esc(setsText(resultSets)) + '</p><p class="small">' + esc(a.detail) + '</p></details>';
 }
 function previousWorkSet(exId, workIndex, unilateral){
