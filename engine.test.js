@@ -369,6 +369,8 @@ test('la PWA y la publicación incluyen recursos y actualización offline', () =
   assert.match(app,/intentando sincronizar/);
   assert.match(app,/navigator\.onLine===false/);
   assert.match(app,/No hay conexión a internet; tus datos locales se conservaron/);
+  assert.match(app,/function draftValidationIssues\(\)/);
+  assert.match(app,/Peso, reps y esfuerzo deben ser válidos/);
 });
 
 test('el Service Worker entrega la respuesta aunque falle su copia offline', async () => {

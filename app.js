@@ -1242,6 +1242,27 @@ function rowComplete(row, unilateral){
   }
   return validWeight(row.w) && validReps(row.r);
 }
+function draftValidationIssues(){
+  var issues=[];
+  S.draft.entries.forEach(function(entry){
+    var exercise=effEx(entry), unilateral=!!exercise.unilateral;
+    (entry.rows||[]).forEach(function(row,index){
+      var values=unilateral
+        ? ['right','left'].map(function(side){return row[side]||{};})
+        : [row];
+      values.forEach(function(value){
+        var hasInput=[value.w,value.r,value.rir].some(function(item){return item!==undefined&&item!==null&&String(item).trim()!=='';});
+        if(!hasInput) return;
+        var weight= num(value.w), reps=num(value.r), effort=value.rir;
+        if(weight===null||!validWeight(weight)||reps===null||!Number.isInteger(reps)||!validReps(reps)||
+          (effort!==undefined&&effort!==null&&String(effort).trim()!==''&&(!Number.isFinite(Number(effort))||Number(effort)<0||Number(effort)>10))){
+          if(issues.length<3) issues.push(exercise.name+' · serie '+(index+1));
+        }
+      });
+    });
+  });
+  return issues;
+}
 /* ejercicio efectivo: ajustes base + ajustes propios de la rutina (solo en esa rutina) */
 function effEx(en){ return Object.assign({}, exById(en.exId), en.cfg || {}); }
 var effortTarget = Engine.effortTarget;
@@ -4170,6 +4191,8 @@ function updateRoutineFromDraft(){
   return true;
 }
 function finish(updateRoutine){
+  var validationIssues=draftValidationIssues();
+  if(validationIssues.length){ toast('Revisa '+validationIssues.join(', ')+'. Peso, reps y esfuerzo deben ser válidos.'); return; }
   if(!workingDone()){ toast('Registra al menos una serie efectiva completa'); return; }
   if(S.finishSaving) return;
   if(updateRoutine === undefined && routineNeedsUpdate()){
