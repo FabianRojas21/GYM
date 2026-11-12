@@ -246,3 +246,39 @@ test('navega por las categorías de Ajustes y vuelve al menú',async({page})=>{
   await page.locator('[data-act="settings-home"]').click();
   await expect(page.locator('.settings-category-card')).toHaveCount(6);
 });
+
+test('persiste el tema elegido en Ajustes',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('.tab[data-tab="ajustes"]').click();
+  await page.locator('[data-act="settings-section"][data-section="training"]').click();
+  const theme=page.locator('[data-setting="theme"]');
+  await expect(theme).toHaveValue('auto');
+  await theme.selectOption('dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await page.reload();
+  await page.locator('.tab[data-tab="ajustes"]').click();
+  await page.locator('[data-act="settings-section"][data-section="training"]').click();
+  await expect(page.locator('[data-setting="theme"]')).toHaveValue('dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+});
+
+test('conserva el borrador local al quedar offline',async({page,context})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('[data-home-start]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
+  await page.locator('[data-f="w"][data-ei="0"][data-ri="0"]').fill('42,5');
+  await page.locator('[data-f="r"][data-ei="0"][data-ri="0"]').fill('9');
+  await context.setOffline(true);
+  await page.locator('[data-f="w"][data-ei="0"][data-ri="0"]').fill('45');
+  await expect(page.locator('[data-f="w"][data-ei="0"][data-ri="0"]')).toHaveValue('45');
+  const draft=await page.evaluate(()=>JSON.parse(localStorage.getItem('sobrecarga:draft:v1')));
+  expect(Number(draft.entries[0].rows[0].w)).toBe(45);
+  await context.setOffline(false);
+});
