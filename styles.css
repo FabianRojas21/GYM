@@ -1152,6 +1152,15 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
   text-transform:uppercase;
 }
 .workout-screen .set{position:relative}
+.set-compact-summary{display:none;align-items:center;min-height:40px;color:var(--ink);font:600 16px/1.1 var(--font-display);font-variant-numeric:tabular-nums}
+.workout-screen .set.is-complete{grid-template-columns:26px minmax(0,1fr) 40px;align-items:center;min-height:58px}
+.workout-screen .set.is-complete .set-fields,
+.workout-screen .set.is-complete .set-type-label,
+.workout-screen .set.is-complete .set-reference,
+.workout-screen .set.is-complete .set-comparison{display:none}
+.workout-screen .set.is-complete .set-compact-summary{display:flex}
+.workout-screen .set.is-complete .icon{display:none}
+.workout-screen .set.is-complete .set-finish{grid-column:3;grid-row:1;justify-self:stretch;min-height:40px;padding:0 6px}
 .workout-screen .set-type-label{
   color:var(--muted);
   font-weight:600;
