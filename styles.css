@@ -883,6 +883,10 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .set{gap:9px;padding:12px;border-radius:13px;background:color-mix(in srgb,var(--surface-2) 72%,var(--bg));transition:border-color .18s ease,background .18s ease,transform .18s ease}
 .set .n{display:grid;place-items:center;width:27px;height:27px;margin:6px auto 0;padding:0;border-radius:50%;background:color-mix(in srgb,var(--muted) 12%,var(--surface));font-size:16px}
 .set .in{height:48px;border-color:color-mix(in srgb,var(--line) 76%,var(--accent));background:var(--surface);font-size:23px}
+.stepper{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;gap:4px}
+.stepper .in{min-width:0}
+.stepper-btn{width:34px;height:40px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--accent);font:600 22px/1 var(--font-body)}
+.stepper-btn:active{background:color-mix(in srgb,var(--accent) 15%,var(--surface-2))}
 .set.is-complete{border-color:color-mix(in srgb,var(--go) 48%,var(--line));background:linear-gradient(120deg,color-mix(in srgb,var(--go) 10%,var(--surface-2)),var(--surface-2))}
 .set.is-complete .n{background:var(--go);color:var(--on-accent)}
 .set-finish:not(:disabled):not(.set-finish-done){border-color:color-mix(in srgb,var(--go) 42%,var(--line));background:color-mix(in srgb,var(--go) 9%,var(--surface));color:var(--go)}

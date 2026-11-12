@@ -1922,6 +1922,19 @@ function effDisplay(row){
   var v = num(row.rir); if(v === null) return '';
   return fmt(S.profile.settings.mode === 'rpe' ? 10 - v : v);
 }
+function adjustWorkoutValue(entryIndex, rowIndex, field, direction, side){
+  var entry=S.draft.entries[entryIndex], row=entry&&entry.rows[rowIndex];
+  if(!entry||!row) return false;
+  var ex=effEx(entry), target=side?ensureRowMode(row,true)[side]:row;
+  var step=field==='w'?exerciseLoadStep(ex):1, current=num(target[field]);
+  if(current===null){
+    if(field!=='r') return false;
+    current=Number(target.targetMin)||Number(ex.min)||1;
+  }
+  target[field]=String(Math.max(0,Math.round((current+direction*step)*100)/100));
+  if(field==='w'){ target.weightTouched=true; refreshAutoWarmupInputs(entryIndex,entry,ex); }
+  return true;
+}
 function recommendationStateLine(a){
   var labelMap = {
     sube:'Sube peso',
@@ -2273,11 +2286,11 @@ function entryHtml(en, ei){
       var sideTarget = progresses && p.sidePlans && p.sidePlans[side] && p.sidePlans[side].target[wi] !== undefined
         ? String(p.sidePlans[side].target[wi]) : tgt;
       return '<div class="side-inputs"><span class="side-label">' + (side === 'right' ? 'Der.' : 'Izq.') + '</span>' +
-        '<label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(weightInput(sideData.w)) + '"></label>' +
-        '<label class="set-input"><span>Reps</span><input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '"></label>' +
+        '<label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="-1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar peso">−</button><input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(weightInput(sideData.w)) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir peso">+</button></div></label>' +
+        '<label class="set-input"><span>Reps</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="-1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar repeticiones">−</button><input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir repeticiones">+</button></div></label>' +
         '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '"></label></div>';
-    }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"></label>' +
-      '<label class="set-input"><span>Reps</span><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"></label>' +
+    }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="-1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar peso">−</button><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir peso">+</button></div></label>' +
+      '<label class="set-input"><span>Reps</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="-1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar repeticiones">−</button><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir repeticiones">+</button></div></label>' +
       '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '"></label></div>';
     return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + (ri===currentSetIndex?' is-current':'') + '" data-ri="' + ri + '" data-current-set="' + (ri===currentSetIndex?'true':'false') + '"' + (ri===currentSetIndex?' role="group" aria-label="Siguiente serie pendiente, serie '+(ri+1)+'" tabindex="-1"':'') + '>' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
@@ -4259,6 +4272,11 @@ function onClick(ev){
   var act = t.dataset.act, ei = t.dataset.ei !== undefined ? +t.dataset.ei : null, ri = t.dataset.ri !== undefined ? +t.dataset.ri : null;
   var st = S.profile.settings;
   switch(act){
+    case 'adjust-set':
+      if(adjustWorkoutValue(ei,ri,t.dataset.field,Number(t.dataset.direction)||0,t.dataset.side)){
+        saveDraft(); render(); focusSetControl(ei,ri);
+      }
+      break;
     case 'plan-up': case 'plan-down': case 'plan-remove':
       var planOwnerItem=t.dataset.planOwner==='routine'?S.redit&&S.redit.items[+t.dataset.i]:exById(t.dataset.id);
       if(planOwnerItem){
