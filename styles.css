@@ -887,6 +887,9 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .stepper .in{min-width:0}
 .stepper-btn{width:34px;height:40px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--accent);font:600 22px/1 var(--font-body)}
 .stepper-btn:active{background:color-mix(in srgb,var(--accent) 15%,var(--surface-2))}
+.effort-quick{display:flex;gap:4px;margin-top:5px}
+.effort-chip{min-width:30px;height:30px;padding:0 6px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2);color:var(--muted);font:600 13px/1 var(--font-body)}
+.effort-chip.is-selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,var(--surface-2));color:var(--accent)}
 .set.is-complete{border-color:color-mix(in srgb,var(--go) 48%,var(--line));background:linear-gradient(120deg,color-mix(in srgb,var(--go) 10%,var(--surface-2)),var(--surface-2))}
 .set.is-complete .n{background:var(--go);color:var(--on-accent)}
 .set-finish:not(:disabled):not(.set-finish-done){border-color:color-mix(in srgb,var(--go) 42%,var(--line));background:color-mix(in srgb,var(--go) 9%,var(--surface));color:var(--go)}

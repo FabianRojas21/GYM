@@ -1935,6 +1935,13 @@ function adjustWorkoutValue(entryIndex, rowIndex, field, direction, side){
   if(field==='w'){ target.weightTouched=true; refreshAutoWarmupInputs(entryIndex,entry,ex); }
   return true;
 }
+function effortQuickHtml(ei,ri,side,mode,current){
+  var values=mode==='rpe'?[10,9,8,7]:[0,1,2,3];
+  return '<div class="effort-quick" role="group" aria-label="Seleccionar '+(mode==='rpe'?'RPE':'RIR')+'">'+values.map(function(value){
+    var selected=Number(current)=== (mode==='rpe'?10-value:value);
+    return '<button type="button" class="effort-chip'+(selected?' is-selected':'')+'" data-act="set-effort" data-value="'+value+'" data-side="'+(side||'')+'" data-ei="'+ei+'" data-ri="'+ri+'">'+(mode==='rpe'?value:(value===3?'3+':value))+'</button>';
+  }).join('')+'</div>';
+}
 function recommendationStateLine(a){
   var labelMap = {
     sube:'Sube peso',
@@ -2288,10 +2295,10 @@ function entryHtml(en, ei){
       return '<div class="side-inputs"><span class="side-label">' + (side === 'right' ? 'Der.' : 'Izq.') + '</span>' +
         '<label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="-1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar peso">−</button><input class="in" data-f="w" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(weightInput(sideData.w)) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir peso">+</button></div></label>' +
         '<label class="set-input"><span>Reps</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="-1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar repeticiones">−</button><input class="in" data-f="r" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(sideTarget) + '" aria-label="Repeticiones lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(sideData.r) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="1" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir repeticiones">+</button></div></label>' +
-        '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '"></label></div>';
+        '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-side="' + side + '" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' lado ' + name + ', serie ' + (ri+1) + '" value="' + esc(effDisplay(sideData)) + '">' + effortQuickHtml(ei,ri,side,mode,sideData.rir) + '</label></div>';
     }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="-1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar peso">−</button><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir peso">+</button></div></label>' +
       '<label class="set-input"><span>Reps</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="-1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar repeticiones">−</button><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir repeticiones">+</button></div></label>' +
-      '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '"></label></div>';
+      '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '">' + effortQuickHtml(ei,ri,'',mode,r.rir) + '</label></div>';
     return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + (ri===currentSetIndex?' is-current':'') + '" data-ri="' + ri + '" data-current-set="' + (ri===currentSetIndex?'true':'false') + '"' + (ri===currentSetIndex?' role="group" aria-label="Siguiente serie pendiente, serie '+(ri+1)+'" tabindex="-1"':'') + '>' +
       '<span class="n">' + (ri+1) + '</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
@@ -4276,6 +4283,14 @@ function onClick(ev){
       if(adjustWorkoutValue(ei,ri,t.dataset.field,Number(t.dataset.direction)||0,t.dataset.side)){
         saveDraft(); render(); focusSetControl(ei,ri);
       }
+      break;
+    case 'set-effort':
+      var effortEntry=S.draft.entries[ei], effortRow=effortEntry&&effortEntry.rows[ri];
+      if(!effortRow) break;
+      var effortTarget=t.dataset.side?ensureRowMode(effortRow,true)[t.dataset.side]:effortRow;
+      var effortValue=Number(t.dataset.value);
+      effortTarget.rir=String(S.profile.settings.mode==='rpe'?10-effortValue:effortValue);
+      saveDraft(); render(); focusSetControl(ei,ri);
       break;
     case 'plan-up': case 'plan-down': case 'plan-remove':
       var planOwnerItem=t.dataset.planOwner==='routine'?S.redit&&S.redit.items[+t.dataset.i]:exById(t.dataset.id);
