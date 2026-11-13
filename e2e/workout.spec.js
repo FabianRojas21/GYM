@@ -64,6 +64,36 @@ test('recupera el borrador de entrenamiento después de recargar',async({page})=
   await expect(page.locator('[data-f="r"][data-ei="0"][data-ri="0"]')).toHaveValue('9');
 });
 
+test('permite editar rápidamente peso, reps y esfuerzo en móvil',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('[data-home-start]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
+
+  const firstSet=page.locator('.set[data-ri="0"]');
+  const weight=firstSet.locator('[data-f="w"]');
+  const reps=firstSet.locator('[data-f="r"]');
+  await weight.fill('40');
+  await reps.fill('8');
+  await firstSet.locator('[data-act="adjust-set"][data-field="r"][data-direction="1"]').click();
+  await expect(reps).toHaveValue('9');
+  await firstSet.locator('[data-act="adjust-set"][data-field="w"][data-direction="1"]').click();
+  await expect(weight).not.toHaveValue('40');
+  await firstSet.locator('[data-act="set-effort"][data-value="2"]').click();
+  await expect(firstSet.locator('.effort-chip.is-selected')).toHaveText('2');
+
+  await firstSet.locator('[data-act="finish-set"]').click();
+  await expect(firstSet).toHaveClass(/is-complete/);
+  await expect(firstSet.locator('.set-compact-summary')).toContainText('✓');
+  await expect(firstSet.locator('[data-f="w"]')).toBeHidden();
+  await firstSet.locator('[data-act="undo-finish-set"]').click();
+  await expect(firstSet).not.toHaveClass(/is-complete/);
+  await expect(firstSet.locator('[data-f="w"]')).toBeVisible();
+});
+
 test('resalta la siguiente serie y pliega el ejercicio al completarlo',async({page})=>{
   await page.route('https://www.gstatic.com/**',route=>route.abort());
   await page.route('https://fonts.googleapis.com/**',route=>route.abort());
