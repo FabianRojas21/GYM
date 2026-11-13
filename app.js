@@ -444,6 +444,7 @@ var S = {
 };
 S.collapsedEntries=new Set(S.draft.collapsedEntryIds || []);
 var screenWakeLock=null;
+var restAudioContext=null;
 try { S.simpleWorkoutMode=localStorage.getItem(WORKOUT_SIMPLE_KEY)==='1'; } catch(e){}
 try { var t0 = localStorage.getItem(TK); if(t0) S.tab = t0; } catch(e){}
 if(S.tab === 'ejercicios') S.tab = 'rutinas';
@@ -548,10 +549,43 @@ function saveRestEnd(syncCloud){
   } catch(e){ toast('No se pudo guardar el temporizador'); }
 }
 function startRest(seconds, owner){
+  armRestAlert();
   S.restEndsAt = Date.now() + seconds * 1000;
   S.restOwner = owner || null;
   saveRestEnd();
   refreshRestTimerSection();
+}
+function armRestAlert(){
+  if(restAudioContext || !window.AudioContext && !window.webkitAudioContext) return;
+  var AudioContextCtor=window.AudioContext || window.webkitAudioContext;
+  try{
+    restAudioContext=new AudioContextCtor();
+    if(restAudioContext.state==='suspended') restAudioContext.resume().catch(function(error){
+      console.warn('No se pudo activar el sonido del descanso',error);
+    });
+  }catch(error){
+    console.warn('El sonido de descanso no está disponible',error);
+    restAudioContext=null;
+  }
+}
+function notifyRestComplete(){
+  if(navigator.vibrate) navigator.vibrate([180,80,180]);
+  if(!restAudioContext) return;
+  try{
+    var now=restAudioContext.currentTime;
+    var oscillator=restAudioContext.createOscillator();
+    var gain=restAudioContext.createGain();
+    oscillator.type='sine';
+    oscillator.frequency.setValueAtTime(880,now);
+    oscillator.frequency.setValueAtTime(660,now+0.16);
+    gain.gain.setValueAtTime(0.0001,now);
+    gain.gain.exponentialRampToValueAtTime(0.16,now+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001,now+0.34);
+    oscillator.connect(gain); gain.connect(restAudioContext.destination);
+    oscillator.start(now); oscillator.stop(now+0.36);
+  }catch(error){
+    console.warn('No se pudo reproducir el aviso de descanso',error);
+  }
 }
 function cancelRestForRow(row){
   if(row && row.restToken && S.restOwner === row.restToken){
@@ -612,6 +646,7 @@ function updateRestTimer(){
   var remaining = S.restEndsAt - Date.now();
   if(remaining <= 0){
     S.restEndsAt = null; S.restOwner=null; saveRestEnd();
+    notifyRestComplete();
     refreshRestTimerSection();
     toast('Descanso terminado');
     return;
