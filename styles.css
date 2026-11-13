@@ -1195,3 +1195,47 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 @media (prefers-reduced-motion:reduce){
   .history-session-chevron{transition:none}
 }
+
+/* Mobile visual rhythm: keep secondary information quiet and actions together. */
+@media (max-width:520px){
+  body{padding-block:10px 88px}
+  .wrap{gap:12px}
+  .top{padding:4px 4px 8px}
+  .brand{font-size:23px}
+  .today{font-size:12px}
+  .card{padding:13px;border-radius:12px;box-shadow:none}
+  .home-dashboard{gap:12px}
+  .home-heading{align-items:flex-start;gap:8px}
+  .home-heading h2{font-size:29px;line-height:1}
+  .home-heading-side{gap:3px}
+  .home-week{font-size:11px}
+  .weekly-stats{gap:7px}
+  .weekly-stat{min-height:70px;padding:10px 8px;border-radius:10px}
+  .weekly-stat strong{font-size:22px}
+  .weekly-stat span{font-size:11px}
+  .home-focus-card,.latest-workout,.weekly-muscles{border-radius:12px;box-shadow:none}
+  .home-focus-card{padding:13px}
+  .home-focus-copy small{font-size:13px;line-height:1.35}
+  .latest-workout{padding:13px}
+  .latest-head h3{font-size:22px}
+  nav.tabs{min-height:60px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(16px);box-shadow:0 -6px 20px rgba(0,0,0,.18)}
+  nav.tabs .in{min-height:56px}
+  .tab{min-height:56px;padding:6px 1px 5px;gap:3px;font-size:10px}
+  .tab::before{font-size:18px}
+  .workout-screen{gap:10px;padding:10px 12px 18px}
+  .workout-heading{gap:8px}
+  .workout-heading h2{font-size:27px}
+  .workout-heading-actions{display:flex;justify-content:flex-start;flex-wrap:nowrap;width:calc(100vw - 24px);overflow-x:auto;padding:2px 0 5px;scrollbar-width:none}
+  .workout-heading-actions::-webkit-scrollbar{display:none}
+  .workout-heading-actions .btn{flex:0 0 auto;min-height:38px;padding:0 11px;font-size:12px}
+  .workout-screen .workout-card{gap:11px;border-radius:13px;box-shadow:none}
+  .workout-screen .workout-card::before{width:3px}
+  .workout-card-head{padding-bottom:0}
+  .workout-card-toggle{min-height:46px}
+  .workout-card-name{font-size:21px}
+  .workout-muscle-summary{font-size:11px}
+  .workout-card-body{gap:10px}
+  .goal{padding:11px;border-radius:10px}
+  .workout-calculator-trigger{min-height:50px;padding:8px 10px}
+  .rest-timer{padding:9px 10px;border-radius:11px;box-shadow:none}
+}
