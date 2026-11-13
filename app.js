@@ -1949,7 +1949,10 @@ function addEntry(exId){
   if(!S.draft.startedAt) S.draft.startedAt = Date.now();
   applyPreviousValues(exId,rows,ex.unilateral,S.draft.routineId);
   syncAutoWarmupWeights({rows:rows}, ex);
-  S.draft.entries.push({uiId:uid('entry_'), exId:exId, baseExId:exId, rows:rows});
+  var newEntry={uiId:uid('entry_'), exId:exId, baseExId:exId, rows:rows};
+  S.draft.entries.push(newEntry);
+  if(S.draft.entries.length>1) S.collapsedEntries.add(newEntry.uiId);
+  S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
   saveDraft();
 }
 function effDisplay(row){
@@ -2186,12 +2189,12 @@ function goalHtml(ex, planned){
   var p = planned || planFor(ex);
   var plan = '<p class="muted small">' + ex.sets + (ex.unilateral ? ' rondas · cada lado: ' : ' series × ') + ex.min + '–' + ex.max + ' reps · esfuerzo por serie: ' + esc(tgtText(ex, S.profile.settings)) + ' · salto ' + weightText(ex.inc) + '</p>';
   if(p.status === 'nuevo'){
-    return '<div class="goal"><div class="goal-row">' + chip('nuevo') + '<strong>Primera vez</strong></div>' +
-      '<p class="small">Elige un peso con el que llegues a ' + ex.min + '–' + ex.max + ' reps con ' + esc(tgtText(ex, S.profile.settings)) + (ex.unilateral ? ' en cada lado' : '') + '. Con eso te armo el objetivo del próximo entreno.</p>' + plan + '</div>';
+    return '<details class="goal"><summary class="goal-summary"><span class="goal-summary-copy">' + chip('nuevo') + '<strong>Primera vez</strong></span><span class="goal-summary-chevron" aria-hidden="true">▸</span></summary>' +
+      '<div class="goal-body"><p class="small">Elige un peso con el que llegues a ' + ex.min + '–' + ex.max + ' reps con ' + esc(tgtText(ex, S.profile.settings)) + (ex.unilateral ? ' en cada lado' : '') + '. Con eso te armo el objetivo del próximo entreno.</p>' + plan + '</div></details>';
   }
-  return '<div class="goal"><div class="goal-row">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</span></div>' +
-    barHtml(p, ex) + progressionMathHtml(ex,p) +
-    '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Último entreno, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div>';
+  return '<details class="goal"><summary class="goal-summary"><span class="goal-summary-copy">' + chip(p.status) + '<span class="goal-h num' + (p.sidePlans ? ' goal-sides' : '') + '">' + esc(p.displayTarget || (weightText(p.nextW) + ' × ' + p.target.join(' · '))) + '</span></span><span class="goal-summary-chevron" aria-hidden="true">▸</span></summary>' +
+    '<div class="goal-body">' + barHtml(p, ex) + progressionMathHtml(ex,p) +
+    '<details class="goal-more"><summary>Ver motivo</summary><p class="muted small">Último entreno, ' + dFmt(p.last.date) + ': ' + esc(setsText(p.last.sets)) + '</p><p class="small">' + esc(p.detail) + '</p>' + plan + '</details></div></details>';
 }
 function previousWorkoutSummaryHtml(plan){
   if(!plan || plan.status==='nuevo' || !plan.last) return '';
@@ -2354,12 +2357,17 @@ function entryHtml(en, ei){
     ? '<div class="workout-card-tools"><button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="-1"' + (ei === 0 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' arriba" title="Mover arriba">↑</button>' +
       '<button class="mini" data-act="move-exercise" data-ei="' + ei + '" data-direction="1"' + (ei === S.draft.entries.length - 1 ? ' disabled' : '') + ' aria-label="Mover ' + esc(ex.name) + ' abajo" title="Mover abajo">↓</button></div>'
     : '';
+  var secondaryActions='<details class="workout-card-menu"><summary class="mini" aria-label="Más acciones" title="Más acciones">⋮</summary><div class="workout-card-menu-panel">'+
+    orderControls+
+    '<button class="btn ghost sm" data-act="toggle-cfg" data-ei="' + ei + '" aria-expanded="' + (S.openCfg === en.exId ? 'true' : 'false') + '">Ajustar progresión</button>'+
+    '<button class="btn ghost sm" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">Quitar ejercicio</button>'+
+    '</div></details>';
   return '<section class="card workout-card' + (collapsed ? ' is-collapsed' : '') + (S.simpleWorkoutMode?' workout-card-simple':'') + '" data-ei="' + ei + '">' +
     quickFillHtml +
     '<div class="card-head workout-card-head"><h3 class="workout-card-heading"><button class="workout-card-toggle" data-act="toggle-entry" data-ei="' + ei + '" aria-expanded="' + (!collapsed) + '">' +
     '<span class="workout-card-title"><span class="workout-card-name">' + esc(ex.name) + '</span><span class="workout-muscle-summary">Músculos: ' + esc(exerciseMuscleSummary(ex)) + '</span><span class="workout-progress">' + completedSets + '/' + targetSets + ' series</span>' + (collapsed ? '<span class="workout-card-summary">' + esc(collapsedSummary) + '</span>' : '') + '</span>' +
     '<span class="workout-card-chevron" aria-hidden="true">' + (collapsed ? '▸' : '▾') + '</span></button></h3>' +
-    '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
+    '<div class="workout-card-actions">' + secondaryActions + '</div></div>' +
     substitutionHtml +
     (collapsed ? '' : '<div class="workout-card-body">' + previousWorkoutSummaryHtml(p) + goalHtml(ex,p) +
     '<button class="workout-calculator-trigger" data-act="open-loading-calculator" data-ei="' + ei + '"><span aria-hidden="true">＋</span><span><strong>Calculadora de discos</strong><small>'+esc(calculatorHint)+'</small></span><span aria-hidden="true">›</span></button>' +
@@ -2370,7 +2378,7 @@ function entryHtml(en, ei){
       'Cada tramo de drop set se registra en su propia fila y los objetivos quedan guardados en la secuencia del ejercicio. Puedes corregir los campos después de marcar una serie como hecha; «Hecha · deshacer» la reabre y × la quita con opción de deshacer.</p></details>' +
     '<div class="row"><button class="btn ghost sm" data-act="add-set" data-ei="' + ei + '">+ Serie</button>' +
     '<button class="btn ghost sm" data-act="repeat-set" data-ei="' + ei + '">Copiar última serie</button>' +
-    '<button class="btn ghost sm" data-act="toggle-cfg" data-ei="' + ei + '" aria-expanded="' + (S.openCfg === en.exId ? 'true' : 'false') + '">Ajustar progresión</button></div>' +
+    '</div>' +
     (S.openCfg === en.exId ? cfgPanel(en, ei) : '') +
     '<div class="live" id="live-' + ei + '">' + liveHtml(ei) + '</div></div>') + '</section>';
 }
@@ -4112,10 +4120,11 @@ function startRoutine(id){
     entries.push({uiId:uid('entry_'), exId:it.exId, baseExId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
   });
   if(!entries.length){ toast(skipped ? 'La rutina solo tiene ejercicios archivados' : 'La rutina no tiene ejercicios'); return; }
+  var collapsedEntryIds=entries.slice(1).map(function(entry){return entry.uiId;});
   S.draft = {date:iso(new Date()), startedAt:Date.now(), routineId:id,
     programId:r.programId && S.profile.programs[r.programId] ? r.programId : null,
-    entries:entries, collapsedEntryIds:[]};
-  S.collapsedEntries.clear();
+    entries:entries, collapsedEntryIds:collapsedEntryIds};
+  S.collapsedEntries=new Set(collapsedEntryIds);
   saveDraft();
   S.restEndsAt = null; saveRestEnd();
   S.confirm = null; S.picker = false; S.justSaved = null; S.tab = 'hoy'; render(); window.scrollTo(0, 0);
@@ -4791,6 +4800,10 @@ function onClick(ev){
       var remainingEntrySets=finishEntry.rows.filter(isWorkSet);
       if(remainingEntrySets.length&&remainingEntrySets.every(function(row){return row.restTriggered;})){
         S.collapsedEntries.add(finishEntry.uiId);
+        var nextEntry=S.draft.entries.slice(ei+1).concat(S.draft.entries.slice(0,ei)).filter(function(entry){
+          return entry!==finishEntry && entry.rows.some(function(row){return isWorkSet(row)&&!row.restTriggered;});
+        })[0];
+        if(nextEntry) S.collapsedEntries.delete(nextEntry.uiId);
         S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
       }
       var finishRestSeconds = restSecondsFor(finishRow);

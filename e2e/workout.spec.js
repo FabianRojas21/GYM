@@ -146,6 +146,35 @@ test('resalta la siguiente serie y pliega el ejercicio al completarlo',async({pa
   await expect(page.locator('[data-act="finish"]')).toBeFocused();
 });
 
+test('inicia con ejercicios compactos y avanza al siguiente bloque',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('[data-home-start]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
+  await page.locator('[data-act="start"]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Sentadilla');
+  await page.locator('[data-act="pick"][data-lib="Sentadilla"]').click();
+
+  await expect(page.locator('.workout-card[data-ei="0"]')).not.toHaveClass(/is-collapsed/);
+  await expect(page.locator('.workout-card[data-ei="1"]')).toHaveClass(/is-collapsed/);
+
+  const firstSet=page.locator('.workout-card[data-ei="0"] .set[data-ri="0"]');
+  await firstSet.locator('[data-f="w"]').fill('40');
+  await firstSet.locator('[data-f="r"]').fill('8');
+  await firstSet.locator('[data-act="finish-set"]').click();
+  for(let ri=1;ri<3;ri++){
+    const set=page.locator(`.workout-card[data-ei="0"] .set[data-ri="${ri}"]`);
+    await set.locator('[data-f="w"]').fill('40');
+    await set.locator('[data-f="r"]').fill('8');
+    await set.locator('[data-act="finish-set"]').click();
+  }
+  await expect(page.locator('.workout-card[data-ei="0"]')).toHaveClass(/is-collapsed/);
+  await expect(page.locator('.workout-card[data-ei="1"]')).not.toHaveClass(/is-collapsed/);
+});
+
 test('mantiene la pantalla activa o comunica la limitación del navegador',async({page})=>{
   await page.route('https://www.gstatic.com/**',route=>route.abort());
   await page.route('https://fonts.googleapis.com/**',route=>route.abort());
@@ -268,6 +297,7 @@ test('guarda una plantilla drop set por ejercicio con tramos y reducción',async
   await expect(page.locator('[data-plan-field="stages"][data-id]')).toHaveValue('3');
   await expect(page.locator('[data-plan-field="reductionPercent"][data-id]')).toHaveValue('20');
   await page.locator('.tab[data-tab="hoy"]').click();
+  await page.locator('.workout-card[data-ei="0"] .workout-card-menu>summary').click();
   await page.locator('.workout-card[data-ei="0"] [data-act="rm-ex"]').click();
   await page.locator('[data-act="start"]').click();
   await page.getByLabel('Añadir ejercicio').fill('Press banca');

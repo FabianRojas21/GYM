@@ -145,6 +145,21 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .workout-card.is-collapsed{gap:0}
 .workout-card-actions,.workout-card-tools{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .workout-card-tools .mini{width:34px;height:34px}
+.workout-card-menu{position:relative}
+.workout-card-menu>summary{list-style:none;cursor:pointer;display:grid;place-items:center}
+.workout-card-menu>summary::-webkit-details-marker{display:none}
+.workout-card-menu-panel{position:absolute;top:calc(100% + 6px);right:0;z-index:5;display:flex;flex-direction:column;align-items:stretch;gap:5px;min-width:170px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 10px 24px rgba(0,0,0,.16)}
+.workout-card-menu-panel .workout-card-tools{justify-content:flex-end}
+.workout-card-menu-panel .btn{width:100%;text-align:left}
+.workout-card-menu-panel .workout-card-tools .mini{width:40px;height:40px}
+.workout-card-menu>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.goal-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;list-style:none}
+.goal-summary::-webkit-details-marker{display:none}
+.goal-summary-copy{display:flex;align-items:center;gap:8px;min-width:0}
+.goal-summary-copy .goal-h{overflow-wrap:anywhere}
+.goal-summary-chevron{flex:0 0 auto;color:var(--muted);font-size:18px}
+.goal[open]>.goal-summary-chevron{transform:rotate(90deg)}
+.goal-body{display:flex;flex-direction:column;gap:8px;padding-top:8px}
 .sec-title{font:700 20px/1 var(--font-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .head-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .head-row h2{font:700 34px/1 var(--font-display);letter-spacing:.03em;text-transform:uppercase}
