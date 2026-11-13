@@ -185,6 +185,7 @@ test('crea y abre una rutina desde la biblioteca',async({page})=>{
   await expect(search).toBeVisible();
   await search.fill('Rutina E2E');
   await expect(page.locator('.library-card').filter({hasText:'Rutina E2E'})).toBeVisible();
+  await expect(page.locator('.library-card').filter({hasText:'Rutina E2E'}).locator('.routine-card-volume')).toContainText('3 series efectivas');
 });
 
 test('guarda un top set y back-off ordenables en una rutina y los carga al entrenar',async({page})=>{
