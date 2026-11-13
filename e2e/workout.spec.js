@@ -114,6 +114,7 @@ test('resalta la siguiente serie y pliega el ejercicio al completarlo',async({pa
   const exerciseCard=page.locator('.workout-card[data-ei="0"]');
   await expect(exerciseCard).toHaveClass(/is-collapsed/);
   await expect(exerciseCard.locator('.workout-progress')).toHaveText('3/3 series');
+  await expect(exerciseCard.locator('.workout-card-summary')).toHaveText('Completado · listo para el resumen');
   await page.locator('[data-act="focus-next-set"]').click();
   await expect(page.locator('[data-act="finish"]')).toBeFocused();
 });

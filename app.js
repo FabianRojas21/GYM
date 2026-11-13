@@ -2284,6 +2284,11 @@ function entryHtml(en, ei){
   var completedSets = completedWorkSets(en, ex);
   var currentSetIndex=en.rows.findIndex(function(row){return isWorkSet(row)&&!row.restTriggered;});
   var collapsed = S.collapsedEntries.has(en.uiId);
+  var collapsedSummary = completedSets >= targetSets
+    ? 'Completado · listo para el resumen'
+    : currentSetIndex >= 0
+      ? 'Siguiente: serie '+(currentSetIndex+1)+(p&&p.target&&p.target[currentSetIndex]!==undefined?' · '+p.target[currentSetIndex]+' reps':'')
+      : 'Listo para empezar';
   var baseExId=en.baseExId||en.exId, alternatives=exerciseSubstitutions(baseExId);
   var substitutionHtml=alternatives.length
     ? (function(){
@@ -2334,7 +2339,7 @@ function entryHtml(en, ei){
     }).join('') + '</div>' : '<div class="set-fields"><label class="set-input"><span>Peso · ' + weightUnitLabel() + '</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="-1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar peso">−</button><input class="in" data-f="w" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="—" aria-label="Peso (' + weightUnitLabel() + ') de la serie ' + (ri+1) + '" value="' + esc(weightInput(r.w)) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="w" data-direction="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir peso">+</button></div></label>' +
       '<label class="set-input"><span>Reps</span><div class="stepper"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="-1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Bajar repeticiones">−</button><input class="in" data-f="r" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="' + esc(tgt) + '" aria-label="Repeticiones de la serie ' + (ri+1) + '" value="' + esc(r.r) + '"><button type="button" class="stepper-btn" data-act="adjust-set" data-field="r" data-direction="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Subir repeticiones">+</button></div></label>' +
       '<label class="set-input"><span>' + effLab + '</span><input class="in" data-f="e" data-ei="' + ei + '" data-ri="' + ri + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="' + effPh + '" aria-label="' + effLab + ' de la serie ' + (ri+1) + '" value="' + esc(effDisplay(r)) + '">' + effortQuickHtml(ei,ri,'',mode,r.rir) + '</label></div>';
-    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + (ri===currentSetIndex?' is-current':'') + '" data-ri="' + ri + '" data-current-set="' + (ri===currentSetIndex?'true':'false') + '"' + (ri===currentSetIndex?' role="group" aria-label="Siguiente serie pendiente, serie '+(ri+1)+'" tabindex="-1"':'') + '>' +
+    return '<div class="set' + (ex.unilateral ? ' set-unilateral' : '') + ' set-type-' + esc(type) + (type === 'warmup' ? ' is-warm' : '') + (r.restTriggered ? ' is-complete' : '') + (ri===currentSetIndex?' is-current':'') + '" data-ri="' + ri + '" data-current-set="' + (ri===currentSetIndex?'true':'false') + '"' + (ri===currentSetIndex?' role="group" aria-label="Siguiente serie pendiente, serie '+(ri+1)+'" tabindex="-1"':'') + '>' +
       '<span class="n">' + (ri+1) + '</span><span class="set-compact-summary">' + (ex.unilateral ? esc(weightInput(r.right.w)) + ' / ' + esc(weightInput(r.left.w)) + ' · ' + esc(r.right.r) + ' / ' + esc(r.left.r) : esc(weightInput(r.w)) + ' · ' + esc(r.r)) + (ex.unilateral ? '' : (String(r.rir).trim() !== '' ? ' · ' + esc(effDisplay(r)) : '')) + ' ✓</span>' + fields +
       '<button class="icon" data-act="rm-set" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Quitar serie ' + (ri+1) + '">×</button>' +
       '<label class="set-type-label"><span>Tipo de serie</span><select class="set-type" data-set-type="1" data-ei="' + ei + '" data-ri="' + ri + '" aria-label="Tipo de serie ' + (ri+1) + '">' + options + '</select></label>' +
@@ -2352,7 +2357,7 @@ function entryHtml(en, ei){
   return '<section class="card workout-card' + (collapsed ? ' is-collapsed' : '') + (S.simpleWorkoutMode?' workout-card-simple':'') + '" data-ei="' + ei + '">' +
     quickFillHtml +
     '<div class="card-head workout-card-head"><h3 class="workout-card-heading"><button class="workout-card-toggle" data-act="toggle-entry" data-ei="' + ei + '" aria-expanded="' + (!collapsed) + '">' +
-    '<span class="workout-card-title"><span class="workout-card-name">' + esc(ex.name) + '</span><span class="workout-muscle-summary">Músculos: ' + esc(exerciseMuscleSummary(ex)) + '</span><span class="workout-progress">' + completedSets + '/' + targetSets + ' series</span></span>' +
+    '<span class="workout-card-title"><span class="workout-card-name">' + esc(ex.name) + '</span><span class="workout-muscle-summary">Músculos: ' + esc(exerciseMuscleSummary(ex)) + '</span><span class="workout-progress">' + completedSets + '/' + targetSets + ' series</span>' + (collapsed ? '<span class="workout-card-summary">' + esc(collapsedSummary) + '</span>' : '') + '</span>' +
     '<span class="workout-card-chevron" aria-hidden="true">' + (collapsed ? '▸' : '▾') + '</span></button></h3>' +
     '<div class="workout-card-actions">' + orderControls + '<button class="icon" data-act="rm-ex" data-ei="' + ei + '" aria-label="Quitar ' + esc(ex.name) + ' de hoy">×</button></div></div>' +
     substitutionHtml +

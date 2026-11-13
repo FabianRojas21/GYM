@@ -139,6 +139,7 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .workout-card-name{overflow:hidden;text-overflow:ellipsis;font-size:1.02rem}
 .workout-muscle-summary{font:500 12px/1.2 var(--font-body);color:var(--muted)}
 .workout-progress{font:600 13px/1.1 var(--font-body);letter-spacing:0;color:var(--muted);text-transform:none}
+.workout-card-summary{display:none;color:var(--muted);font-size:12px;line-height:1.25}
 .workout-card-chevron{flex:0 0 auto;color:var(--muted);font:500 18px/1 var(--font-body)}
 .workout-card-body{display:flex;flex-direction:column;gap:12px;min-width:0}
 .workout-card.is-collapsed{gap:0}
@@ -1083,6 +1084,8 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .workout-screen .set.is-current:focus{outline:3px solid color-mix(in srgb,var(--accent) 52%,transparent);outline-offset:3px}
 .workout-screen .set{scroll-margin-block:100px 150px}
 .workout-screen .workout-card.is-collapsed{border-color:color-mix(in srgb,var(--go) 42%,var(--line))}
+.workout-screen .workout-card.is-collapsed .workout-card-summary{display:block}
+.workout-screen .workout-card.is-collapsed .workout-muscle-summary{display:none}
 .workout-heading-actions [aria-pressed="true"]{border-color:color-mix(in srgb,var(--go) 48%,var(--line));color:var(--go)}
 .library-search{margin:0}
 .library-search .txt{width:100%}
@@ -1165,6 +1168,16 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .workout-screen .set:not(.is-current):not(.is-complete){opacity:.82}
 .workout-screen .set:not(.is-current):not(.is-complete):focus-within{opacity:1}
 .workout-screen .set{position:relative}
+.workout-screen .set-type-warmup{border-left:3px solid color-mix(in srgb,var(--muted) 55%,var(--line))}
+.workout-screen .set-type-topset{border-left:3px solid color-mix(in srgb,var(--accent) 72%,var(--line))}
+.workout-screen .set-type-backoff{border-left:3px solid color-mix(in srgb,#8b5cf6 72%,var(--line))}
+.workout-screen .set-type-dropset{border-left:3px solid color-mix(in srgb,var(--warn) 72%,var(--line))}
+.workout-screen .set-type-restpause{border-left:3px solid color-mix(in srgb,var(--stop) 72%,var(--line))}
+.workout-screen .set-type-warmup .set-type-label,
+.workout-screen .set-type-topset .set-type-label,
+.workout-screen .set-type-backoff .set-type-label,
+.workout-screen .set-type-dropset .set-type-label,
+.workout-screen .set-type-restpause .set-type-label{color:var(--ink)}
 .set-compact-summary{display:none;align-items:center;min-height:40px;color:var(--ink);font:600 16px/1.1 var(--font-display);font-variant-numeric:tabular-nums}
 .workout-screen .set.is-complete{grid-template-columns:26px minmax(0,1fr) 40px;align-items:center;min-height:58px}
 .workout-screen .set.is-complete .set-fields,
