@@ -59,7 +59,6 @@ body.is-workout-active{
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
 body{
   background:var(--bg);color:var(--ink);
   font:400 16px/1.45 var(--font-body);
@@ -1249,6 +1248,5 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
   .rest-timer{padding:9px 10px;border-radius:11px;box-shadow:none}
 }
 @media (prefers-reduced-motion:reduce){
-  html{scroll-behavior:auto}
   .workout-screen .workout-card,.workout-screen .set{transition:none}
 }
