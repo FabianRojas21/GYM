@@ -977,8 +977,10 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
   .workout-screen .set:not(.set-unilateral) .set-fields>.set-input:nth-child(3){grid-column:1/-1}
   .workout-screen .set-unilateral .side-inputs{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .workout-screen .set-unilateral .side-inputs>.set-input:nth-of-type(3){grid-column:1/-1}
-  .workout-screen .set .stepper{min-width:0;grid-template-columns:34px minmax(32px,1fr) 34px;gap:4px}
-  .workout-screen .set .stepper-btn{width:34px;height:46px;font-size:24px}
+  .workout-screen .set .set-input{width:100%;overflow:hidden}
+  .workout-screen .set .stepper{width:100%;min-width:0;grid-template-columns:32px minmax(0,1fr) 32px;gap:4px}
+  .workout-screen .set .stepper-btn{width:32px;height:46px;font-size:24px}
+  .workout-screen .set .stepper .in{display:block;width:100%;min-width:0;height:46px;padding:0 3px}
   .workout-screen .set .set-fields .set-input .in{height:50px;font-size:21px}
   .workout-screen .set>.icon{width:40px;height:44px}
   .workout-screen .set .set-finish:not(.set-finish-done),
