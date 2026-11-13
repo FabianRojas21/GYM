@@ -94,6 +94,33 @@ test('permite editar rápidamente peso, reps y esfuerzo en móvil',async({page})
   await expect(firstSet.locator('[data-f="w"]')).toBeVisible();
 });
 
+test('mantiene el temporizador de descanso compacto y accesible en móvil',async({page})=>{
+  await page.route('https://www.gstatic.com/**',route=>route.abort());
+  await page.route('https://fonts.googleapis.com/**',route=>route.abort());
+  await page.route('https://fonts.gstatic.com/**',route=>route.abort());
+  await page.goto('/');
+  await page.locator('[data-home-start]').click();
+  await page.getByLabel('Añadir ejercicio').fill('Press banca');
+  await page.locator('[data-act="pick"][data-lib="Press banca"]').click();
+
+  const firstSet=page.locator('.set[data-ri="0"]');
+  await firstSet.locator('[data-f="w"]').fill('40');
+  await firstSet.locator('[data-f="r"]').fill('8');
+  await firstSet.locator('[data-act="finish-set"]').click();
+
+  const timer=page.locator('#rest-timer');
+  await expect(timer).toBeVisible();
+  await expect(timer.locator('#rest-clock')).toContainText(':');
+  await expect(timer.locator('[data-act="rest-add"]')).toBeVisible();
+  await expect(timer.locator('[data-act="rest-stop"]')).toBeVisible();
+  await timer.locator('[data-act="rest-add"]').click();
+  await timer.locator('[data-act="rest-stop"]').click();
+  await expect(timer.locator('#rest-clock')).toHaveText('Listo');
+
+  const viewport=await page.evaluate(()=>({width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth}));
+  expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width);
+});
+
 test('resalta la siguiente serie y pliega el ejercicio al completarlo',async({page})=>{
   await page.route('https://www.gstatic.com/**',route=>route.abort());
   await page.route('https://fonts.googleapis.com/**',route=>route.abort());

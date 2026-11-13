@@ -238,7 +238,9 @@ nav.tabs .in{width:100%;max-width:640px;min-height:64px;margin:0 auto;display:gr
 .draft-save-status[data-state="localOnly"],.draft-save-status[data-state="error"]{color:var(--warn)}
 .workout-finish{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:4;padding:10px 0;background:linear-gradient(transparent,var(--bg) 18%)}
 .workout-finish .row{padding-top:8px}
-.rest-timer{position:sticky;top:66px;z-index:3;box-shadow:0 6px 16px rgba(0,0,0,.08)}
+.rest-timer{position:sticky;top:66px;z-index:3;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+.rest-timer .row{gap:6px;margin-left:auto}
+.rest-timer .btn{min-height:38px;padding:0 10px}
 .goal-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .goal-state-line{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid rgba(145,174,255,.2);border-radius:10px;background:linear-gradient(180deg,rgba(72,106,222,.12),rgba(255,255,255,.02));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
 .goal-state-copy{display:flex;align-items:center;gap:8px;min-width:0}
@@ -702,7 +704,11 @@ nav.tabs .in{min-height:66px}
   nav.tabs{min-height:78px}nav.tabs .in{min-height:74px}.tab{min-height:72px}
   .history-tools{grid-template-columns:1fr}
   .workout-finish{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
-  .rest-timer{top:58px}
+  .rest-timer{top:58px;padding:8px 10px;gap:8px;border-radius:10px}
+  .rest-timer strong{font-size:23px}
+  .rest-timer .lab{font-size:11px}
+  .rest-timer .row{flex:1 1 auto;justify-content:flex-end}
+  .rest-timer .btn{min-height:38px;font-size:12px;padding:0 8px}
   .workout-screen{margin:0 -12px;padding:12px 12px 22px}
   .workout-overview{padding:12px 8px}
   .workout-overview-stats strong{font-size:18px}
@@ -1087,6 +1093,12 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 .workout-screen .workout-card.is-collapsed{border-color:color-mix(in srgb,var(--go) 42%,var(--line))}
 .workout-screen .workout-card.is-collapsed .workout-card-summary{display:block}
 .workout-screen .workout-card.is-collapsed .workout-muscle-summary{display:none}
+.workout-screen .workout-card.is-collapsed{
+  background:color-mix(in srgb,var(--surface) 88%,var(--surface-2));
+  box-shadow:none;
+}
+.workout-screen .workout-card.is-collapsed .workout-card-toggle{min-height:44px}
+.workout-screen .workout-card.is-collapsed .workout-card-name{font-size:20px}
 .workout-heading-actions [aria-pressed="true"]{border-color:color-mix(in srgb,var(--go) 48%,var(--line));color:var(--go)}
 .library-search{margin:0}
 .library-search .txt{width:100%}
@@ -1207,6 +1219,7 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
 @media (max-width:520px){
   .workout-heading-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
   .workout-heading-actions .btn{min-width:0;padding:0 8px;font-size:13px}
+  .workout-heading-actions .btn:first-child{grid-column:1/-1}
   .history-session-summary{min-height:80px;padding:12px}
   .history-session-content{padding:0 12px 12px}
   .home-dashboard::after{right:-120px}
@@ -1252,7 +1265,11 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
   .workout-screen .workout-card{gap:11px;border-radius:13px;box-shadow:none}
   .workout-screen .workout-card:focus-within{box-shadow:0 5px 16px rgba(0,0,0,.12)}
   .workout-screen .workout-card::before{width:3px}
-  .workout-card-head{padding-bottom:0}
+  .workout-card-head{padding-bottom:0    .workout-screen>.workout-card{margin-block:0}
+    .workout-screen>.workout-card.is-collapsed + .workout-card{margin-top:-4px}
+    .workout-screen>.workout-card:not(.is-collapsed) + .workout-card{margin-top:2px}
+    .workout-screen .workout-card.is-collapsed + .workout-card:not(.is-collapsed){margin-top:6px}
+  }
   .workout-card-toggle{min-height:46px}
   .workout-card-name{font-size:21px}
   .workout-muscle-summary{font-size:11px}
