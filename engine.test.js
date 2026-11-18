@@ -1922,4 +1922,8 @@ test('la interfaz prioriza el siguiente paso y compacta controles secundarios', 
   assert.match(routineViews,/index===0\?' open':''/);
   assert.match(routineViews,/routine-editor-summary-meta/);
   assert.match(styles,/\.routine-editor-item>summary/);
+  assert.match(styles,/\.workout-overview\{gap:7px;padding:8px 10px\}/);
+  assert.match(styles,/\.workout-overview-stats strong\{font-size:16px\}/);
+  assert.match(styles,/\.workout-card-toggle\{min-height:42px\}/);
+  assert.match(styles,/\.set \.in\{height:48px/);
 });

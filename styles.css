@@ -1322,6 +1322,15 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
   .workout-heading-actions{display:flex;justify-content:flex-start;flex-wrap:nowrap;width:calc(100vw - 24px);overflow-x:auto;padding:2px 0 5px;scrollbar-width:none}
   .workout-heading-actions::-webkit-scrollbar{display:none}
   .workout-heading-actions .btn{flex:0 0 auto;min-height:38px;padding:0 11px;font-size:12px}
+  .workout-eyebrow{margin-bottom:3px;font-size:10px}
+  .workout-heading h2{font-size:24px}
+  .workout-overview{gap:7px;padding:8px 10px}
+  .workout-overview-stats strong{font-size:16px}
+  .workout-overview-stats span{font-size:11px}
+  .workout-overview-progress{gap:7px}
+  .workout-overview-progress .progress{height:5px}
+  .workout-overview-progress>span{font-size:10px}
+  .draft-save-status{padding:3px 7px;font-size:11px}
   .workout-screen .workout-card{gap:11px;border-radius:13px;box-shadow:none}
   .workout-screen .workout-card:focus-within{box-shadow:0 5px 16px rgba(0,0,0,.12)}
   .workout-screen .workout-card::before{width:3px}
@@ -1330,10 +1339,10 @@ body{background:radial-gradient(ellipse at 50% -18%,color-mix(in srgb,var(--acce
     .workout-screen>.workout-card:not(.is-collapsed) + .workout-card{margin-top:2px}
     .workout-screen .workout-card.is-collapsed + .workout-card:not(.is-collapsed){margin-top:6px}
   }
-  .workout-card-toggle{min-height:46px}
-  .workout-card-name{font-size:21px}
-  .workout-muscle-summary{font-size:11px}
-  .workout-card-body{gap:10px}
+  .workout-card-toggle{min-height:42px}
+  .workout-card-name{font-size:19px}
+  .workout-muscle-summary{font-size:10px}
+  .workout-card-body{gap:8px}
   .goal{padding:11px;border-radius:10px}
   .workout-calculator-trigger{min-height:50px;padding:8px 10px}
   .rest-timer{padding:9px 10px;border-radius:11px;box-shadow:none}
