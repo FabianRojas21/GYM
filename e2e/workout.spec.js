@@ -40,6 +40,8 @@ test('registra y termina un entrenamiento desde el flujo móvil',async({page})=>
   await expect(savedWorkout).not.toHaveAttribute('open','');
   await savedWorkout.locator('summary').click();
   await expect(savedWorkout).toContainText('Press banca');
+  await expect(savedWorkout.locator('.history-session-metrics')).toContainText('Volumen');
+  await expect(savedWorkout.locator('.history-session-metrics')).toContainText('efectivas');
   const viewport=await page.evaluate(()=>({width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth}));
   expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width);
 });
@@ -158,8 +160,10 @@ test('inicia con ejercicios compactos y avanza al siguiente bloque',async({page}
   await page.getByLabel('Añadir ejercicio').fill('Sentadilla');
   await page.locator('[data-act="pick"][data-lib="Sentadilla"]').click();
 
-  await expect(page.locator('.workout-card[data-ei="0"]')).not.toHaveClass(/is-collapsed/);
+  await expect(page.locator('.workout-card[data-ei="0"]')).toHaveClass(/is-collapsed/);
   await expect(page.locator('.workout-card[data-ei="1"]')).toHaveClass(/is-collapsed/);
+  await page.locator('.workout-card[data-ei="0"] .workout-card-toggle').click();
+  await expect(page.locator('.workout-card[data-ei="0"]')).not.toHaveClass(/is-collapsed/);
 
   const firstSet=page.locator('.workout-card[data-ei="0"] .set[data-ri="0"]');
   await firstSet.locator('[data-f="w"]').fill('40');
@@ -234,7 +238,7 @@ test('crea y abre una rutina desde la biblioteca',async({page})=>{
 
   await expect(page.getByRole('heading',{name:'Rutina E2E'})).toBeVisible();
   await expect(page.locator('.library-exercise-row')).toContainText('Press banca');
-  await page.locator('[data-act="rut-edit"]').click();
+  await page.locator('[data-act="rut-edit"][aria-label="Editar rutina"]').click();
   await expect(page.getByRole('heading',{name:'Editar rutina'})).toBeVisible();
   await page.locator('[data-act="rut-cancel"]').click();
   const search=page.locator('[data-library-search]');
@@ -270,11 +274,12 @@ test('guarda un top set y back-off ordenables en una rutina y los carga al entre
   await expect(page.getByRole('heading',{name:'Rutina con back-off'})).toBeVisible();
   await expect(page.locator('.library-exercise-row')).toContainText('Top set');
   await expect(page.locator('.library-exercise-row')).toContainText('Back-off');
-  await page.locator('[data-act="rut-edit"]').click();
+  await page.locator('[data-act="rut-edit"][aria-label="Editar rutina"]').click();
   await expect(page.locator('[data-plan-field="loadPercent"][data-i="0"][data-slot="1"]')).toHaveValue('90');
   await page.locator('[data-act="rut-cancel"]').click();
   await page.locator('[data-act="rut-start"]').click();
 
+  await page.locator('.workout-card[data-ei="0"] .workout-card-toggle').click();
   const setTypes=page.locator('.workout-card[data-ei="0"] .set-type');
   await expect(setTypes).toHaveCount(2);
   await expect(setTypes.nth(0)).toHaveValue('topset');

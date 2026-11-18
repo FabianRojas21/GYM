@@ -1951,7 +1951,7 @@ function addEntry(exId){
   syncAutoWarmupWeights({rows:rows}, ex);
   var newEntry={uiId:uid('entry_'), exId:exId, baseExId:exId, rows:rows};
   S.draft.entries.push(newEntry);
-  if(S.draft.entries.length>1) S.collapsedEntries.add(newEntry.uiId);
+  if(S.draft.entries.length>1) S.draft.entries.forEach(function(entry){ S.collapsedEntries.add(entry.uiId); });
   S.draft.collapsedEntryIds=Array.from(S.collapsedEntries);
   saveDraft();
 }
@@ -3731,6 +3731,15 @@ function historyCardHtml(s){
       if(e.unilateral) total += Object.keys(e.sets.reduce(function(pairs, set){ if(set.pair !== undefined) pairs[set.pair] = true; return pairs; }, {})).length;
       else total += e.sets.length;
     });
+    var sessionStatsValue=sessionStats(s), peakWeight=null;
+    s.entries.forEach(function(entry){
+      entry.sets.forEach(function(set){
+        if(!validWeight(set.w)) return;
+        var value=Number(set.w);
+        if(peakWeight===null||value>peakWeight) peakWeight=value;
+      });
+    });
+    var quickMetrics='<small class="history-session-metrics"><span>Máx. '+(peakWeight===null?'—':esc(weightText(peakWeight)))+'</span><span>Volumen '+esc(volumeText(sessionStatsValue.volume))+' '+weightUnitLabel()+'·reps</span><span>'+sessionStatsValue.effectiveSets+' efectivas</span></small>';
     var body = s.entries.map(function(e){
       var rests=e.sets.map(function(set){ return set.restMs; }).filter(function(value){ return Number(value)>0; });
       var avg=rests.length ? Math.round(rests.reduce(function(sum,value){ return sum+Number(value); },0)/rests.length/1000) : 0;
@@ -3739,7 +3748,7 @@ function historyCardHtml(s){
     var editing = S.sessionEdit && S.sessionEdit.id === s.id;
     var duration = Number(s.durationMs) > 0 ? humanDuration(s.durationMs) : 'Sin duración';
     return '<details class="card history-session-card" data-history-session="'+esc(s.id)+'"'+(editing||S.confirm==='sess:'+s.id?' open':'')+'><summary class="history-session-summary"><span><strong>' + esc(dFmt(s.date, {weekday:'long', day:'numeric', month:'long'})) + '</strong>' +
-      '<small class="history-session-meta"><span>' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + '</span><span>' + total + ' series</span><span>' + duration + '</span>' + (s.routineName ? '<span>' + esc(s.routineName) + '</span>' : '') + (s.demo ? '<span>ejemplo</span>' : '') + '</small></span><span class="history-session-chevron" aria-hidden="true">⌄</span></summary><div class="history-session-content">' +
+      '<small class="history-session-meta"><span>' + s.entries.length + ' ejercicio' + (s.entries.length === 1 ? '' : 's') + '</span><span>' + total + ' series</span><span>' + duration + '</span>' + (s.routineName ? '<span>' + esc(s.routineName) + '</span>' : '') + (s.demo ? '<span>ejemplo</span>' : '') + '</small>'+quickMetrics+'</span><span class="history-session-chevron" aria-hidden="true">⌄</span></summary><div class="history-session-content">' +
       '<div class="list history-exercises">' + body + '</div>' +
       (editing ? sessionEditorHtml(s) : '<div class="row history-actions"><button class="btn ghost sm" data-act="session-edit" data-id="' + esc(s.id) + '">Editar entrenamiento</button>' +
         (!s.demo ? '<button class="btn ghost sm" data-act="session-make-routine" data-id="' + esc(s.id) + '">Guardar como rutina</button>' : '') +
@@ -4120,7 +4129,7 @@ function startRoutine(id){
     entries.push({uiId:uid('entry_'), exId:it.exId, baseExId:it.exId, cfg:cfg, routineItemIndex:index, routineCfg:clone(cfg), rows:rows});
   });
   if(!entries.length){ toast(skipped ? 'La rutina solo tiene ejercicios archivados' : 'La rutina no tiene ejercicios'); return; }
-  var collapsedEntryIds=entries.slice(1).map(function(entry){return entry.uiId;});
+  var collapsedEntryIds=entries.map(function(entry){return entry.uiId;});
   S.draft = {date:iso(new Date()), startedAt:Date.now(), routineId:id,
     programId:r.programId && S.profile.programs[r.programId] ? r.programId : null,
     entries:entries, collapsedEntryIds:collapsedEntryIds};

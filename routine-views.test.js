@@ -43,6 +43,7 @@ test('routine detail shows exercise configuration and actions',()=>{
   assert.match(html,/ejercicio archivado/);
   assert.match(html,/Rutina activa/);
   assert.match(html,/data-act="rut-export"/);
+  assert.match(html,/Editar ejercicios y cargas/);
   assert.match(html,/Back-off/);
 });
 
