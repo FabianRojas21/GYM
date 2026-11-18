@@ -12,10 +12,13 @@
     return '<div class="library-card"><button class="library-open routine-open" data-act="rut-detail" data-id="'+helpers.esc(routine.id)+'"><span class="library-cover routine-cover">'+helpers.esc(routine.name.trim().charAt(0).toUpperCase()||'R')+'</span><span><strong>'+helpers.esc(routine.name)+'</strong><small class="routine-card-volume">'+count+' ejercicio'+(count===1?'':'s')+' · '+summary.workingSets+' series efectivas</small><small class="routine-card-plan">'+(summary.warmupSets?summary.warmupSets+' aproximación'+(summary.warmupSets===1?'':'es')+' · ':'')+helpers.esc(helpers.routineMuscleLabel(summary))+'</small><small class="routine-card-meta">'+helpers.esc(summary.lastSession?helpers.dFmt(summary.lastSession.date):'Aún no entrenada')+'</small></span></button>'+
       '<div class="library-card-actions">'+
       (programOrder?'<button class="mini program-routine-move" data-act="program-routine-move" data-program="'+helpers.esc(programOrder.programId)+'" data-id="'+helpers.esc(routine.id)+'" data-direction="-1"'+(programOrder.index===0?' disabled':'')+' aria-label="Mover '+helpers.esc(routine.name)+' antes">↑</button><button class="mini program-routine-move" data-act="program-routine-move" data-program="'+helpers.esc(programOrder.programId)+'" data-id="'+helpers.esc(routine.id)+'" data-direction="1"'+(programOrder.index===programOrder.count-1?' disabled':'')+' aria-label="Mover '+helpers.esc(routine.name)+' después">↓</button>':'')+
-      '<button class="btn sm" data-act="rut-start" data-id="'+helpers.esc(routine.id)+'">'+(replacing?'Reemplazar':'Entrenar')+'</button><button class="mini" data-act="rut-edit" data-id="'+helpers.esc(routine.id)+'" aria-label="Editar '+helpers.esc(routine.name)+'">✎</button><button class="mini" data-act="rut-duplicate" data-id="'+helpers.esc(routine.id)+'" aria-label="Duplicar '+helpers.esc(routine.name)+'">⧉</button>'+
+      '<button class="btn sm routine-primary-action" data-act="rut-start" data-id="'+helpers.esc(routine.id)+'">'+(replacing?'Reemplazar':'Entrenar')+'</button>'+
+      '<details class="routine-card-menu"><summary class="mini" aria-label="Más acciones para '+helpers.esc(routine.name)+'">⋮</summary><div class="routine-card-menu-panel">'+
+      '<button class="btn ghost sm" data-act="rut-edit" data-id="'+helpers.esc(routine.id)+'">Editar rutina</button><button class="btn ghost sm" data-act="rut-duplicate" data-id="'+helpers.esc(routine.id)+'">Duplicar rutina</button>'+
       (state.confirm==='delr:'+routine.id
-        ? '<button class="mini danger" data-act="rut-del-ok" data-id="'+helpers.esc(routine.id)+'" aria-label="Confirmar borrar rutina">✓</button>'
-        : '<button class="mini" data-act="rut-del" data-id="'+helpers.esc(routine.id)+'" aria-label="Borrar '+helpers.esc(routine.name)+'">×</button>')+'</div></div>';
+        ? '<button class="btn danger sm" data-act="rut-del-ok" data-id="'+helpers.esc(routine.id)+'">Confirmar borrar</button>'
+        : '<button class="btn ghost sm routine-delete-action" data-act="rut-del" data-id="'+helpers.esc(routine.id)+'">Borrar rutina</button>')+
+      '</div></details></div></div>';
   }
 
   function render(state,helpers){

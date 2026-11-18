@@ -1889,3 +1889,37 @@ test('los filtros de sustitución acotan por equipo y grupo, y el cambio unilate
   assert.equal(context.substitutionNeedsConfirmationForTest({hasData:false,exercise:{unilateral:false}},'dumbbellPress'),false);
   assert.equal(context.substitutionNeedsConfirmationForTest({hasData:true,exercise:{unilateral:false}},'dumbbellPress'),true);
 });
+
+test('protege el borrador al cambiar rutina y crea respaldos después de cambios importantes', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  assert.match(app,/typeof S\.confirm==='string' && S\.confirm\.indexOf\('start:'\)===0/);
+  assert.match(app,/data-act="start-routine-confirm"/);
+  assert.match(app,/case 'start-routine-confirm'/);
+  assert.match(app,/case 'start-routine-cancel'/);
+  assert.match(app,/createAutoBackup\(\);[\s\S]*?return true/);
+  assert.match(app,/Store\.saveSession\(session\)\.then\(function\(\)[\s\S]*?updateRoutineFromDraft\(\)/);
+  assert.ok(!/if\(updateRoutine && !updateRoutineFromDraft\(\)\{[\s\S]*?\n\s*S\.finishSaving = true/.test(app));
+});
+
+test('la interfaz prioriza el siguiente paso y compacta controles secundarios', () => {
+  const app=fs.readFileSync('./app.js','utf8');
+  const styles=fs.readFileSync('./styles.css','utf8');
+  const library=fs.readFileSync('./library.js','utf8');
+  const routineViews=fs.readFileSync('./routine-views.js','utf8');
+  assert.match(app,/class="card history-tools"/);
+  assert.match(app,/history-tools-chevron/);
+  assert.match(app,/if\(!latest\) out \+= routineQuick\(\) \+ suggestHtml\(\)/);
+  assert.match(styles,/\.workout-overview\{position:sticky;top:8px;z-index:4;box-shadow/);
+  assert.match(styles,/\.history-tools>summary/);
+  assert.match(styles,/\.history-tools-fields/);
+  assert.match(library,/routine-card-menu/);
+  assert.match(library,/routine-primary-action/);
+  assert.match(routineViews,/routine-detail-actions/);
+  assert.match(routineViews,/routine-editor-actions/);
+  assert.match(styles,/\.routine-card-menu-panel/);
+  assert.match(styles,/\.routine-editor-actions\{position:sticky/);
+  assert.match(routineViews,/details class="card routine-editor-item"/);
+  assert.match(routineViews,/index===0\?' open':''/);
+  assert.match(routineViews,/routine-editor-summary-meta/);
+  assert.match(styles,/\.routine-editor-item>summary/);
+});

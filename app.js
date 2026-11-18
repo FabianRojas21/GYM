@@ -977,6 +977,7 @@ var Store = {
   saveLocal:function(){
     try {
       localStorage.setItem(LK, JSON.stringify({profile:S.profile, sessions:S.sessions}));
+      if(typeof createAutoBackup==='function') createAutoBackup();
       return true;
     } catch(e){
       toast('No se pudo guardar en este navegador');
@@ -2985,6 +2986,12 @@ function saveSessionEdit(){
     saved=saved || updated;
     var index = S.sessions.findIndex(function(item){ return item.id === updated.id; });
     if(index >= 0) S.sessions[index] = saved;
+    try {
+      localStorage.setItem(LK, JSON.stringify({profile:S.profile,sessions:S.sessions}));
+    } catch(error){
+      toast('El entreno se actualizó en la cuenta, pero no se pudo guardar la copia local');
+    }
+    createAutoBackup();
     S.sessionEdit = null; render(); toast('Entrenamiento actualizado');
   }).catch(function(error){
     if(!isCurrentStorageScope(editScope)) return;
@@ -3082,7 +3089,7 @@ function homeDashboard(){
   }
   out += '</section>';
   if(!latest && !routineList().length) out += '<section class="card home-first"><div class="home-first-intro"><span class="home-first-icon" aria-hidden="true">✦</span><div><p class="sec-title">Tu entrenamiento, a tu manera</p><p>Empieza con un ejemplo o prepara tu propia rutina. La app te ayudará a registrar cada sesión y a decidir qué buscar la próxima vez.</p></div></div><div class="home-first-steps"><div><strong>1</strong><span>Elige una rutina o empieza con ejercicios sugeridos.</span></div><div><strong>2</strong><span>Anota peso, repeticiones y esfuerzo en cada serie.</span></div></div><div class="row"><button class="btn sm" data-act="library-open-section" data-section="rutinas">Crear rutina</button><button class="btn ghost sm" data-act="demo-load">Probar con ejemplo</button></div></section>';
-  out += routineQuick() + suggestHtml();
+  if(!latest) out += routineQuick() + suggestHtml();
   if(S.picker) out += pickerHtml('day');
   return out;
 }
@@ -3151,7 +3158,12 @@ function viewHoy(){
   else out += '<button class="btn ' + (S.draft.entries.length ? 'ghost' : '') + ' block" data-act="start">+ Añadir ejercicio</button>';
   if(!S.draft.entries.length && !S.picker) out += suggestHtml();
   if(S.draft.entries.length){
-    if(S.confirm === 'finish-routine'){
+    if(typeof S.confirm==='string' && S.confirm.indexOf('start:')===0){
+      var replaceRoutineId=S.confirm.slice('start:'.length);
+      var replaceRoutine=S.profile.routines[replaceRoutineId];
+      out += '<section class="card workout-replace-confirm"><p class="sec-title">Hay un entreno en curso</p><p class="small">Si empiezas '+esc(replaceRoutine?replaceRoutine.name:'otra rutina')+', se reemplazarán los datos aún no guardados del entreno actual. Termina el entreno o descarta el borrador si no quieres conservarlo.</p>'+
+        '<div class="row"><button class="btn danger" data-act="start-routine-confirm" data-id="'+esc(replaceRoutineId)+'">Reemplazar entreno</button><button class="btn ghost" data-act="start-routine-cancel">Cancelar</button></div></section>';
+    } else if(S.confirm === 'finish-routine'){
       out += '<section class="card"><p class="sec-title">¿Actualizar la rutina?</p><p class="small">Cambiaste el orden o la configuración de este entreno. Puedes guardar esos cambios para la próxima vez o dejar la rutina como estaba antes de entrenar.</p>' +
         routineUpdatePreviewHtml()+
         '<div class="row"><button class="btn" data-act="finish-update"' + (done && !S.finishSaving ? '' : ' disabled') + '>Actualizar rutina y terminar</button><button class="btn ghost" data-act="finish-keep"' + (done && !S.finishSaving ? '' : ' disabled') + '>Terminar sin cambiarla</button><button class="btn ghost" data-act="finish-cancel">Volver al entreno</button></div></section>';
@@ -3267,6 +3279,7 @@ function routineEditor(){
     esc:esc,
     warmupSettings:warmupSettings,
     setPlanEditorHtml:function(item,index){return setPlanEditorHtml(item,'routine',index);},
+    routineItemPlanSummary:routineItemPlanSummary,
     weightInput:weightInput,
     effInputVal:effInputVal,
     exName:exName,
@@ -3564,8 +3577,8 @@ function viewHist(){
   var ss=filteredHistorySessions();
   var out = '<div class="head-row"><h2>Historial</h2><span class="num muted" id="history-count">' + ss.length + ' de ' + total + ' entreno' + (total === 1 ? '' : 's') + '</span></div>';
   if(!total) return out + '<div class="card"><p>Cuando termines tu primer entreno aparecerá aquí.</p><button class="btn" data-act="tab" data-tab="hoy">Empezar un entreno</button></div>';
-  return out + '<section class="card history-tools"><label class="field"><span class="lab">Buscar entreno, ejercicio o rutina</span><input class="txt" data-history-search type="search" autocomplete="off" placeholder="Ej. Press banca" value="' + esc(S.historyQuery) + '"></label>' +
-    '<label class="field"><span class="lab">Periodo</span><select class="txt" data-history-range><option value="all"' + (S.historyRange==='all'?' selected':'') + '>Todo el historial</option><option value="90"' + (S.historyRange==='90'?' selected':'') + '>Últimos 90 días</option><option value="30"' + (S.historyRange==='30'?' selected':'') + '>Últimos 30 días</option><option value="7"' + (S.historyRange==='7'?' selected':'') + '>Últimos 7 días</option></select></label></section>' +
+  return out + '<details class="card history-tools"'+(S.historyQuery||S.historyRange!=='all'?' open':'')+'><summary><span><strong>Buscar y filtrar</strong><small>'+esc(S.historyQuery|| (S.historyRange==='all'?'Todo el historial':S.historyRange+' días'))+'</small></span><span class="history-tools-chevron" aria-hidden="true">⌄</span></summary><div class="history-tools-fields"><label class="field"><span class="lab">Buscar entreno, ejercicio o rutina</span><input class="txt" data-history-search type="search" autocomplete="off" placeholder="Ej. Press banca" value="' + esc(S.historyQuery) + '"></label>' +
+    '<label class="field"><span class="lab">Periodo</span><select class="txt" data-history-range><option value="all"' + (S.historyRange==='all'?' selected':'') + '>Todo el historial</option><option value="90"' + (S.historyRange==='90'?' selected':'') + '>Últimos 90 días</option><option value="30"' + (S.historyRange==='30'?' selected':'') + '>Últimos 30 días</option><option value="7"' + (S.historyRange==='7'?' selected':'') + '>Últimos 7 días</option></select></label></div></details>' +
     '<div id="history-summary">' + historySummaryHtml(ss) + '</div>' +
     '<div id="history-list">' + historyListHtml(ss) + '</div>';
 }
@@ -3967,6 +3980,7 @@ function deleteSession(id){
       S.sessions=previous;
       return false;
     }
+    createAutoBackup();
     return true;
   });
 }
@@ -4288,7 +4302,6 @@ function finish(updateRoutine){
   if(updateRoutine === undefined && routineNeedsUpdate()){
     S.confirm = 'finish-routine'; render(); return;
   }
-  if(updateRoutine && !updateRoutineFromDraft()){ toast('No se encontró la rutina para actualizar'); return; }
   S.finishSaving = true; render();
   var entries = [], saved = [];
   S.draft.entries.forEach(function(en){
@@ -4317,11 +4330,13 @@ function finish(updateRoutine){
   Store.saveSession(session).then(function(){
     if(!isCurrentStorageScope(finishScope)) return;
     S.finishSaving = false;
+    if(updateRoutine && !updateRoutineFromDraft()){ toast('No se encontró la rutina para actualizar'); }
     S.sessions=S.sessions.filter(function(item){return item.id!==session.id;}).concat([session]);
     S.justSaved = {session:session, next:saved};
     S.draft = blankDraft(); S.loadingCalc=null; saveDraft(); S.restEndsAt = null; saveRestEnd(); S.confirm = null;
     S.screenAwake=false;
     releaseScreenWakeLock();
+    createAutoBackup();
     render(); window.scrollTo(0, 0);
     var summaryHeading=$('[data-workout-summary-heading]');
     if(summaryHeading) summaryHeading.focus({preventScroll:true});
@@ -4726,8 +4741,16 @@ function onClick(ev){
       if(jj >= 0 && jj < its.length){ var tmp = its[ii]; its[ii] = its[jj]; its[jj] = tmp; render(); }
       break;
     case 'rut-start':
-      if(S.draft.entries.length && S.confirm !== 'start:' + t.dataset.id){ S.confirm = 'start:' + t.dataset.id; render(); }
+      if(S.draft.entries.length && S.confirm !== 'start:' + t.dataset.id){ S.confirm = 'start:' + t.dataset.id; S.tab='hoy'; render(); window.scrollTo(0,0); }
       else startRoutine(t.dataset.id);
+      break;
+    case 'start-routine-confirm':
+      var replaceRoutineId=t.dataset.id;
+      S.confirm=null;
+      startRoutine(replaceRoutineId);
+      break;
+    case 'start-routine-cancel':
+      S.confirm=null; render();
       break;
     case 'rut-del': S.confirm = 'delr:' + t.dataset.id; render(); break;
     case 'rut-del-ok':
